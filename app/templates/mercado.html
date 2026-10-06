@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Bien seleccionado{% endblock %}
+{% block paso %}{% with paso=3, nombre_paso="mercado del bien" %}{% include "_paso.html" %}{% endwith %}{% endblock %}
+{% block contenido %}
+{# Pantalla provisional: el rango de precios y la competencia se agregan en HU-002 y HU-003 #}
+<h1>Bien seleccionado</h1>
+<div class="ficha ficha-fija">
+    <span class="ficha-codigo">
+        <span class="ficha-codigo-etiqueta">Código CUBSO</span>
+        <span class="ficha-codigo-numero">{{ bien.codigo }}</span>
+    </span>
+    <span class="ficha-detalle">
+        <span class="ficha-nombre">{{ bien.nombre }}</span>
+        <span class="ficha-unidad">Unidad de medida: {{ bien.unidad }}</span>
+    </span>
+</div>
+<p class="aviso">En la próxima versión, aquí verás el rango de precios que pagó el Estado por este bien y cuánta
+    competencia hubo.</p>
+<div class="acciones">
+    <a class="boton-secundario" href="{{ url_for('describir') }}">Buscar otro bien</a>
+</div>
+{% endblock %}

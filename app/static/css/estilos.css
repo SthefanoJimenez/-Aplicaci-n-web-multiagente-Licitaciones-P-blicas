@@ -1,0 +1,375 @@
+/* ============================================================
+   Tokens de diseño. Para adaptar la interfaz al prototipo (EN-002),
+   basta con cambiar estos valores.
+   ============================================================ */
+:root {
+    --fondo: #f1f4f6;
+    /* gris azulado claro */
+    --superficie: #ffffff;
+    --tinta: #17232d;
+    /* texto principal */
+    --tinta-suave: #52616e;
+    /* texto secundario */
+    --borde: #d3dbe1;
+    --acento: #0e6655;
+    /* verde institucional: acciones y selección */
+    --acento-oscuro: #0a4f42;
+    --acento-tenue: #e4f1ed;
+    --error: #b42318;
+    --error-tenue: #fdecea;
+
+    --fuente: "Public Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --texto-base: 1.0625rem;
+    /* 17 px */
+    --texto-chico: 0.9375rem;
+    /* 15 px */
+    --titulo: 2rem;
+    --radio: 6px;
+    --ancho-lectura: 40rem;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--tinta);
+    font-family: var(--fuente);
+    font-size: var(--texto-base);
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Estructura */
+.cabecera {
+    background: var(--superficie);
+    border-bottom: 1px solid var(--borde);
+    padding: 1rem 1.25rem;
+}
+
+.cabecera-interior {
+    max-width: var(--ancho-lectura);
+    margin: 0 auto;
+}
+
+.marca {
+    color: var(--tinta);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.contenido {
+    flex: 1;
+    width: 100%;
+    max-width: var(--ancho-lectura);
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+}
+
+.pie {
+    max-width: var(--ancho-lectura);
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 2rem;
+    color: var(--tinta-suave);
+    font-size: var(--texto-chico);
+}
+
+/* Avance del flujo */
+.avance {
+    margin-bottom: 1.5rem;
+}
+
+.avance-barra {
+    display: flex;
+    gap: 0.375rem;
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+}
+
+.avance-barra li {
+    flex: 1;
+    height: 0.3125rem;
+    border-radius: 3px;
+    background: var(--borde);
+}
+
+.avance-barra li.hecho {
+    background: var(--acento);
+}
+
+.avance-texto {
+    margin: 0;
+    color: var(--tinta-suave);
+    font-size: var(--texto-chico);
+}
+
+/* Texto */
+h1 {
+    font-size: var(--titulo);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.75rem;
+}
+
+.intro {
+    margin: 0 0 1.5rem;
+}
+
+.aviso {
+    margin: 0 0 1.5rem;
+    padding: 0.875rem 1rem;
+    background: var(--acento-tenue);
+    border-radius: var(--radio);
+}
+
+/* Formulario */
+.etiqueta {
+    display: block;
+    font-weight: 600;
+}
+
+.ayuda {
+    margin: 0.125rem 0 0.5rem;
+    color: var(--tinta-suave);
+    font-size: var(--texto-chico);
+}
+
+textarea {
+    width: 100%;
+    padding: 0.75rem;
+    font: inherit;
+    color: inherit;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    resize: vertical;
+}
+
+textarea[aria-invalid="true"] {
+    border-color: var(--error);
+}
+
+.error {
+    margin: 0.5rem 0 0;
+    padding: 0.625rem 0.875rem;
+    color: var(--error);
+    background: var(--error-tenue);
+    border-radius: var(--radio);
+    font-size: var(--texto-chico);
+}
+
+/* Acciones */
+.acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+    margin-top: 1.5rem;
+}
+
+.boton-principal,
+.boton-secundario {
+    font: inherit;
+    font-weight: 600;
+    border-radius: var(--radio);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.boton-principal {
+    display: inline-block;
+    padding: 0.75rem 1.375rem;
+    color: #fff;
+    background: var(--acento);
+    border: 0;
+}
+
+.boton-principal:hover {
+    background: var(--acento-oscuro);
+}
+
+.boton-principal[disabled] {
+    opacity: 0.7;
+    cursor: progress;
+}
+
+.boton-secundario {
+    color: var(--acento-oscuro);
+    background: none;
+    border: 0;
+    padding: 0.75rem 0;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
+.estado-carga {
+    margin: 0.75rem 0 0;
+    color: var(--tinta-suave);
+    font-size: var(--texto-chico);
+}
+
+/* Fichas del catálogo: el elemento distintivo de la interfaz */
+.fichas {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.ficha {
+    position: relative;
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.ficha input {
+    position: absolute;
+    opacity: 0;
+}
+
+.ficha-codigo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--fondo);
+    border-right: 1px solid var(--borde);
+}
+
+.ficha-codigo-etiqueta {
+    color: var(--tinta-suave);
+    font-size: 0.8125rem;
+}
+
+.ficha-codigo-numero {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+}
+
+.ficha-detalle {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.125rem;
+}
+
+.ficha-nombre {
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.ficha-unidad,
+.ficha-nota {
+    color: var(--tinta-suave);
+    font-size: var(--texto-chico);
+}
+
+.ficha-nota {
+    color: var(--acento-oscuro);
+    font-weight: 600;
+}
+
+/* Ficha seleccionada */
+.ficha:has(input:checked) {
+    border-color: var(--acento);
+    box-shadow: inset 4px 0 0 var(--acento);
+}
+
+.ficha:has(input:checked) .ficha-codigo {
+    background: var(--acento-tenue);
+    border-right-color: var(--acento);
+}
+
+.ficha:has(input:focus-visible) {
+    outline: 3px solid var(--acento);
+    outline-offset: 2px;
+}
+
+.ficha-fija {
+    cursor: default;
+    margin-bottom: 1.5rem;
+}
+
+/* Resultados */
+.resultado {
+    padding: 1.5rem;
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-left: 6px solid var(--tinta-suave);
+    border-radius: var(--radio);
+}
+
+.resultado p:last-child {
+    margin-bottom: 0;
+}
+
+.resultado-error {
+    border-left-color: var(--error);
+}
+
+/* Accesibilidad */
+:focus-visible {
+    outline: 3px solid var(--acento);
+    outline-offset: 2px;
+}
+
+.solo-lectores {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* Pantallas pequeñas */
+@media (max-width: 30rem) {
+    :root {
+        --titulo: 1.625rem;
+    }
+
+    .ficha {
+        grid-template-columns: 1fr;
+    }
+
+    .ficha-codigo {
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: baseline;
+        gap: 0.5rem;
+        border-right: 0;
+        border-bottom: 1px solid var(--borde);
+        padding: 0.625rem 1rem;
+    }
+
+    .ficha:has(input:checked) .ficha-codigo {
+        border-bottom-color: var(--acento);
+    }
+
+    .ficha-codigo-numero {
+        font-size: 1.25rem;
+    }
+}

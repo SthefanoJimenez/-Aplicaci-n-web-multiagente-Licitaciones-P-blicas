@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Elige el bien{% endblock %}
+{% block paso %}{% with paso=2, nombre_paso="elige el bien del catálogo" %}{% include "_paso.html" %}{% endwith %}{%
+endblock %}
+{% block contenido %}
+<h1>Elige el bien que corresponde</h1>
+<p class="intro">Estos son los bienes del catálogo del Estado más parecidos a «{{ descripcion }}», ordenados del más al
+    menos probable.</p>
+
+<form method="post" action="{{ url_for('confirmar') }}" class="formulario">
+    <fieldset class="fichas">
+        <legend class="solo-lectores">Bienes del catálogo</legend>
+        {% for c in candidatos %}
+        <label class="ficha">
+            <input type="radio" name="codigo" value="{{ c.codigo }}" {% if loop.first %}checked{% endif %}>
+            <span class="ficha-codigo">
+                <span class="ficha-codigo-etiqueta">Código CUBSO</span>
+                <span class="ficha-codigo-numero">{{ c.codigo }}</span>
+            </span>
+            <span class="ficha-detalle">
+                <span class="ficha-nombre">{{ c.nombre }}</span>
+                <span class="ficha-unidad">Unidad de medida: {{ c.unidad }}</span>
+                {% if loop.first and candidatos|length > 1 %}<span class="ficha-nota">El más probable</span>{% endif %}
+            </span>
+        </label>
+        {% endfor %}
+    </fieldset>
+
+    <div class="acciones">
+        <button type="submit" class="boton-principal">Continuar con este bien</button>
+        <a class="boton-secundario" href="{{ url_for('describir', reintentar=1) }}">Ninguno corresponde</a>
+    </div>
+</form>
+{% endblock %}

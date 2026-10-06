@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}No pudimos buscar en el catálogo{% endblock %}
+{% block contenido %}
+<div class="resultado resultado-error">
+    <h1>No pudimos buscar en el catálogo</h1>
+    <p class="intro">El servicio que interpreta tu descripción no respondió. Tu descripción se conservó: intenta de
+        nuevo en unos segundos.</p>
+</div>
+<form method="post" action="{{ url_for('candidatos') }}" data-cargando>
+    <input type="hidden" name="descripcion" value="{{ descripcion }}">
+    <div class="acciones">
+        <button type="submit" class="boton-principal" data-texto-cargando="Buscando en el catálogo…">Intentar de nuevo</button>
+        <a class="boton-secundario" href="{{ url_for('describir') }}">Volver al inicio</a>
+    </div>
+    <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+</form>
+{% endblock %}

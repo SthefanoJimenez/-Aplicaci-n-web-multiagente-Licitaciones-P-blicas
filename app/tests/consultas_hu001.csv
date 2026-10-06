@@ -1,0 +1,31 @@
+id,tipo,descripcion,esperado,codigo_referencia
+1,Directa,huevos de gallina de primera,candidatos,342333
+2,Directa,pollo entero refrigerado sin menudencia,candidatos,133836
+3,Directa,lentejas calidad superior,candidatos,330416
+4,Directa,arena gruesa para construcción,candidatos,147541
+5,Directa,oxígeno medicinal en balón de 1 m3,candidatos,323264
+6,Directa,amoxicilina con ácido clavulánico 500 mg en tabletas,candidatos,196255
+7,Directa,ibuprofeno de 400 mg en tabletas,candidatos,58826
+8,Directa,gasa estéril de 10 x 10 cm,candidatos,392138
+9,Directa,escoba de paja,candidatos,388811
+10,Directa,filtro de aceite para motor de camioneta,candidatos,132389
+11,Coloquial o con medidas,calamina galvanizada para techo,candidatos,280464
+12,Coloquial o con medidas,cloro granulado para piscinas,candidatos,24862
+13,Coloquial o con medidas,alcohol de 70 para desinfectar en botella de un litro,candidatos,24225
+14,Coloquial o con medidas,pañales para adulto talla M,candidatos,6896
+15,Coloquial o con medidas,jabón antibacterial en barra,candidatos,385294
+16,Coloquial o con medidas,casco de seguridad para obra,candidatos,79648
+17,Coloquial o con medidas,fideos largos para tallarines,candidatos,389780
+18,Con errores de ortografía,botas de cuero con punta reforsada para caballero,candidatos,211539
+19,Con errores de ortografía,pollo bibo por kilo,candidatos,94988
+20,Con errores de ortografía,harina fortificada de sereales y legumbres,candidatos,4274
+21,Con errores de ortografía,semilla de frejol ucayalino,candidatos,369565
+22,Con errores de ortografía,casco para motosiclista con visor,candidatos,325870
+23,Con errores de ortografía,ibuprofeno en jarave para niños,candidatos,58823
+24,Bien fuera del catálogo,papel bond A4 de 80 gramos,sin_evidencia,
+25,Bien fuera del catálogo,cuaderno cuadriculado de 100 hojas,sin_evidencia,
+26,Bien fuera del catálogo,llantas para camioneta aro 16,sin_evidencia,
+27,Servicio,servicio de limpieza de oficinas,sin_evidencia,
+28,Servicio,alquiler de retroexcavadora por horas,sin_evidencia,
+29,Servicio,mantenimiento de aire acondicionado,sin_evidencia,
+30,Servicio,consultoría para implementar un sistema contable,sin_evidencia,

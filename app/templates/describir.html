@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Describe tu bien{% endblock %}
+{% block paso %}{% with paso=1, nombre_paso="describe tu bien" %}{% include "_paso.html" %}{% endwith %}{% endblock %}
+{% block contenido %}
+<h1>¿Qué bien quieres vender al Estado?</h1>
+<p class="intro">Descríbelo con tus palabras, como se lo explicarías a un cliente: qué es, de qué material y en qué
+    medida o presentación.</p>
+
+{% if reintentar %}
+<p class="aviso">Prueba describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</p>
+{% endif %}
+
+<form method="post" action="{{ url_for('candidatos') }}" class="formulario" data-cargando novalidate>
+    <label for="descripcion" class="etiqueta">Descripción del bien</label>
+    <p id="ayuda-descripcion" class="ayuda">Por ejemplo: bolsa de cemento portland tipo I de 42.5 kg</p>
+    <textarea id="descripcion" name="descripcion" rows="3" maxlength="{{ largo_maximo }}"
+        aria-describedby="ayuda-descripcion{% if error %} error-descripcion{% endif %}" {% if error
+        %}aria-invalid="true" {% endif %} data-requerido>{{ descripcion }}</textarea>
+    <p id="error-descripcion" class="error" role="alert" {% if not error %}hidden{% endif %}>{{ error or "Escribe una descripción del bien para buscarlo en el catálogo." }}</p>
+
+    <div class="acciones">
+        <button type="submit" class="boton-principal" data-texto-cargando="Buscando en el catálogo…">Buscar en el
+            catálogo</button>
+    </div>
+    <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+</form>
+{% endblock %}

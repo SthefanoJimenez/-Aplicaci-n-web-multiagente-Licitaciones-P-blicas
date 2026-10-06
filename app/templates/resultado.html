@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block titulo %}Sin evidencia para evaluar{% endblock %}
+{% block paso %}{% with paso=5, nombre_paso="resultado" %}{% include "_paso.html" %}{% endwith %}{% endblock %}
+{% block contenido %}
+<div class="resultado resultado-sin-evidencia">
+  <h1>Sin evidencia para evaluar</h1>
+  <p class="intro">No encontramos en el catálogo un bien con compras suficientes que corresponda a «{{ descripcion }}».</p>
+  <p>El sistema evalúa los bienes que el Estado compró al menos {{ minimo_catalogo }} veces mediante procedimientos de selección entre 2023 y 2025. No incluye servicios, obras ni bienes que se compran por otras vías.</p>
+</div>
+<div class="acciones">
+  <a class="boton-principal" href="{{ url_for('describir', reintentar=1) }}">Describir con otras palabras</a>
+  <a class="boton-secundario" href="{{ url_for('describir') }}">Buscar otro bien</a>
+</div>
+{% endblock %}
