@@ -1,34 +1,49 @@
 {% extends "base.html" %}
-{% block titulo %}Elige el bien{% endblock %}
-{% block paso %}{% with paso=2, nombre_paso="elige el bien del catálogo" %}{% include "_paso.html" %}{% endwith %}{%
-endblock %}
+{% block titulo %}Seleccione el código{% endblock %}
 {% block contenido %}
-<h1>Elige el bien que corresponde</h1>
-<p class="intro">Estos son los bienes del catálogo del Estado más parecidos a «{{ descripcion }}», ordenados del más al
-    menos probable.</p>
+{% with paso=2, nombre_paso="" %}{% include "_paso.html" %}{% endwith %}
+<h1 class="titulo-pagina">Seleccione el código del bien</h1>
+<p class="subtitulo">Según su descripción, el sistema encontró estos bienes del catálogo CUBSO, ordenados del más al
+    menos probable. Confirme el que mejor represente lo que vende.</p>
+
+<div class="ficha-descripcion">
+    <div class="ficha-descripcion-texto">
+        <p class="ficha-descripcion-etiqueta">Su descripción</p>
+        <p class="ficha-descripcion-valor">«{{ descripcion }}»</p>
+    </div>
+    <a class="enlace" href="{{ url_for('describir', reintentar=1) }}">Editar</a>
+</div>
 
 <form method="post" action="{{ url_for('confirmar') }}" class="formulario">
-    <fieldset class="fichas">
+    <fieldset class="candidatos">
         <legend class="solo-lectores">Bienes del catálogo</legend>
         {% for c in candidatos %}
-        <label class="ficha">
+        <label class="candidato" style="animation-delay: {{ loop.index0 * 80 }}ms">
             <input type="radio" name="codigo" value="{{ c.codigo }}" {% if loop.first %}checked{% endif %}>
-            <span class="ficha-codigo">
-                <span class="ficha-codigo-etiqueta">Código CUBSO</span>
-                <span class="ficha-codigo-numero">{{ c.codigo }}</span>
+            <span class="candidato-orden" aria-hidden="true">{{ loop.index }}</span>
+            <span class="candidato-detalle">
+                <span class="candidato-encabezado">
+                    <span class="codigo">CUBSO {{ c.codigo }}</span>
+                    {% if loop.first and candidatos|length > 1 %}<span class="insignia insignia-exito">Más
+                        probable</span>{% endif %}
+                </span>
+                <span class="candidato-nombre">{{ c.nombre }}</span>
+                <span class="candidato-unidad">Unidad de medida: {{ c.unidad }}</span>
             </span>
-            <span class="ficha-detalle">
-                <span class="ficha-nombre">{{ c.nombre }}</span>
-                <span class="ficha-unidad">Unidad de medida: {{ c.unidad }}</span>
-                {% if loop.first and candidatos|length > 1 %}<span class="ficha-nota">El más probable</span>{% endif %}
-            </span>
+            <span class="candidato-marca" aria-hidden="true"></span>
         </label>
         {% endfor %}
     </fieldset>
 
-    <div class="acciones">
-        <button type="submit" class="boton-principal">Continuar con este bien</button>
-        <a class="boton-secundario" href="{{ url_for('describir', reintentar=1) }}">Ninguno corresponde</a>
+    <div class="acciones acciones-pares">
+        <a class="boton-secundario" href="{{ url_for('describir', reintentar=1) }}">Ninguno me corresponde</a>
+        <button type="submit" class="boton-principal">
+            Confirmar y ver mercado
+            <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+        </button>
     </div>
 </form>
 {% endblock %}

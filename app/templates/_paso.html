@@ -1,7 +1,8 @@
-{# Indicador de avance: el flujo tiene 5 pasos #}
-<div class="avance" aria-label="Paso {{ paso }} de 5">
-    <ol class="avance-barra" aria-hidden="true">
-        {% for i in range(1, 6) %}<li class="{{ 'hecho' if i <= paso else '' }}"></li>{% endfor %}
-    </ol>
-    <p class="avance-texto">Paso {{ paso }} de 5: {{ nombre_paso }}</p>
+{# Avance del flujo: el proceso tiene 5 pasos #}
+<div class="avance">
+    <p class="etiqueta-seccion">Paso {{ paso }} de 5{% if nombre_paso %} · {{ nombre_paso }}{% endif %}</p>
+    <div class="avance-barra" role="progressbar" aria-valuemin="1" aria-valuemax="5" aria-valuenow="{{ paso }}"
+        aria-label="Paso {{ paso }} de 5">
+        <div class="avance-relleno" style="width: {{ paso * 20 }}%"></div>
+    </div>
 </div>

@@ -22,11 +22,11 @@ def identificar_bien(descripcion):
     """
     descripcion = (descripcion or "").strip()
     if not descripcion:
-        raise DescripcionInvalida("Escribe una descripción del bien para buscarlo en el catálogo.")
+        raise DescripcionInvalida("Escriba una descripción del bien para buscarlo en el catálogo.")
     if len(descripcion) > config.LARGO_MAXIMO_DESCRIPCION:
         raise DescripcionInvalida(
             f"La descripción puede tener hasta {config.LARGO_MAXIMO_DESCRIPCION} caracteres. "
-            "Describe solo el bien: qué es, su material y su medida o presentación."
+            "Describa solo el bien: qué es, su material y su medida o presentación."
         )
 
     resultado = clasificador.clasificar(descripcion)

@@ -103,13 +103,13 @@ def simular_candidatos(monkeypatch, codigos):
 
 def test_pantalla_de_descripcion(cliente):
     html = cliente.get("/").get_data(as_text=True)
-    assert "¿Qué bien quieres vender al Estado?" in html
+    assert "¿Qué bien vende su empresa?" in html
 
 
 def test_descripcion_vacia_muestra_mensaje(cliente):
     respuesta = cliente.post("/candidatos", data={"descripcion": "   "})
     assert respuesta.status_code == 400
-    assert "Escribe una descripción del bien" in respuesta.get_data(as_text=True)
+    assert "Escriba una descripción del bien" in respuesta.get_data(as_text=True)
 
 
 def test_muestra_candidatos_con_el_primero_preseleccionado(cliente, monkeypatch):
@@ -140,7 +140,7 @@ def test_ninguno_corresponde_vuelve_a_la_descripcion_con_el_texto_anterior(clien
     simular_candidatos(monkeypatch, [CEMENTO_I])
     cliente.post("/candidatos", data={"descripcion": "cemento en bolsa"})
     html = cliente.get("/?reintentar=1").get_data(as_text=True)
-    assert "Prueba describirlo de otra forma" in html
+    assert "Pruebe describirlo de otra forma" in html
     assert "cemento en bolsa" in html
 
 
@@ -157,4 +157,4 @@ def test_si_el_modelo_no_responde_se_conserva_la_descripcion(cliente, monkeypatc
     respuesta = cliente.post("/candidatos", data={"descripcion": "cemento en bolsa"})
     html = respuesta.get_data(as_text=True)
     assert respuesta.status_code == 503
-    assert 'value="cemento en bolsa"' in html and "Intentar de nuevo" in html
+    assert 'value="cemento en bolsa"' in html and "Reintentar búsqueda" in html

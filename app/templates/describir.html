@@ -1,27 +1,88 @@
 {% extends "base.html" %}
-{% block titulo %}Describe tu bien{% endblock %}
-{% block paso %}{% with paso=1, nombre_paso="describe tu bien" %}{% include "_paso.html" %}{% endwith %}{% endblock %}
+{% block titulo %}Describa su bien{% endblock %}
+{% block clase_main %}contenido-completo{% endblock %}
 {% block contenido %}
-<h1>¿Qué bien quieres vender al Estado?</h1>
-<p class="intro">Descríbelo con tus palabras, como se lo explicarías a un cliente: qué es, de qué material y en qué
-    medida o presentación.</p>
+<div class="dividido">
 
-{% if reintentar %}
-<p class="aviso">Prueba describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</p>
-{% endif %}
+    {# Panel izquierdo: imagen y presentación #}
+    <section class="portada"
+        style="--imagen-portada: url('{{ url_for('static', filename='img/licitacion-hero.jpg') }}')">
+        <div class="portada-texto">
+            <span class="portada-insignia">Mercado de licitaciones · Perú</span>
+            <h2 class="portada-titulo">¿Es rentable vender al Estado?</h2>
+            <p class="portada-descripcion">Analice el mercado de adjudicaciones públicas y reciba un veredicto basado en
+                datos reales del OECE (2023-2025).</p>
+            <dl class="portada-cifras">
+                <div>
+                    <dt>adjudicaciones de bienes</dt>
+                    <dd>60,024</dd>
+                </div>
+                <div>
+                    <dt>bienes en el catálogo</dt>
+                    <dd>2,023</dd>
+                </div>
+                <div>
+                    <dt>agentes</dt>
+                    <dd>4</dd>
+                </div>
+            </dl>
+        </div>
+    </section>
 
-<form method="post" action="{{ url_for('candidatos') }}" class="formulario" data-cargando novalidate>
-    <label for="descripcion" class="etiqueta">Descripción del bien</label>
-    <p id="ayuda-descripcion" class="ayuda">Por ejemplo: bolsa de cemento portland tipo I de 42.5 kg</p>
-    <textarea id="descripcion" name="descripcion" rows="3" maxlength="{{ largo_maximo }}"
-        aria-describedby="ayuda-descripcion{% if error %} error-descripcion{% endif %}" {% if error
-        %}aria-invalid="true" {% endif %} data-requerido>{{ descripcion }}</textarea>
-    <p id="error-descripcion" class="error" role="alert" {% if not error %}hidden{% endif %}>{{ error or "Escribe una descripción del bien para buscarlo en el catálogo." }}</p>
+    {# Panel derecho: formulario #}
+    <section class="dividido-formulario">
+        <div class="dividido-interior">
+            {% with paso=1, nombre_paso="" %}{% include "_paso.html" %}{% endwith %}
+            <h1 class="titulo-pagina">¿Qué bien vende su empresa?</h1>
+            <p class="subtitulo">Descríbalo con sus propias palabras. Cuanto más detallada sea la descripción, más
+                precisa será la clasificación en el catálogo estatal.</p>
 
-    <div class="acciones">
-        <button type="submit" class="boton-principal" data-texto-cargando="Buscando en el catálogo…">Buscar en el
-            catálogo</button>
-    </div>
-    <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
-</form>
+            {% if reintentar %}
+            <div class="aviso aviso-info">Pruebe describirlo de otra forma. Agregar el material, la medida o la
+                presentación suele ayudar.</div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('candidatos') }}" class="formulario" data-cargando novalidate>
+                <div class="campo">
+                    <label for="descripcion" class="etiqueta">Descripción del bien <span class="obligatorio"
+                            aria-hidden="true">*</span></label>
+                    <textarea id="descripcion" name="descripcion" rows="5" maxlength="{{ largo_maximo }}"
+                        placeholder="Ej.: bolsa de cemento portland tipo I de 42.5 kg"
+                        aria-describedby="consejos{% if error %} error-descripcion{% endif %}" {% if error
+                        %}aria-invalid="true" {% endif %} data-requerido>{{ descripcion }}</textarea>
+                    <p id="error-descripcion" class="error" role="alert" {% if not error %}hidden{% endif %}>
+                        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span>{{ error or "Escriba una descripción del bien para buscarlo en el catálogo." }}</span>
+                    </p>
+                </div>
+
+                <div id="consejos" class="consejos">
+                    <p class="consejos-titulo">¿Qué incluir en la descripción?</p>
+                    <ul>
+                        <li>Nombre del producto o bien</li>
+                        <li>Material o composición (por ejemplo: acero, PVC, algodón)</li>
+                        <li>Medida, peso o presentación</li>
+                        <li>Uso típico del bien</li>
+                    </ul>
+                </div>
+
+                <button type="submit" class="boton-principal boton-ancho"
+                    data-texto-cargando="Buscando en el catálogo…">
+                    Buscar código CUBSO
+                    <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+                <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+                <p class="nota-privacidad">No guardamos su descripción. Se procesa con un modelo de lenguaje solo para
+                    identificar el bien en el catálogo.</p>
+            </form>
+        </div>
+    </section>
+</div>
 {% endblock %}

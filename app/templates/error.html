@@ -1,17 +1,26 @@
 {% extends "base.html" %}
-{% block titulo %}No pudimos buscar en el catálogo{% endblock %}
+{% block titulo %}Error de servicio{% endblock %}
+{% block clase_main %}contenido contenido-centrado{% endblock %}
 {% block contenido %}
-<div class="resultado resultado-error">
-    <h1>No pudimos buscar en el catálogo</h1>
-    <p class="intro">El servicio que interpreta tu descripción no respondió. Tu descripción se conservó: intenta de
-        nuevo en unos segundos.</p>
-</div>
-<form method="post" action="{{ url_for('candidatos') }}" data-cargando>
-    <input type="hidden" name="descripcion" value="{{ descripcion }}">
-    <div class="acciones">
-        <button type="submit" class="boton-principal" data-texto-cargando="Buscando en el catálogo…">Intentar de nuevo</button>
-        <a class="boton-secundario" href="{{ url_for('describir') }}">Volver al inicio</a>
+<div class="error-servicio">
+    <div class="error-servicio-icono" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
     </div>
-    <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
-</form>
+    <h1 class="titulo-pagina">Error de servicio</h1>
+    <p class="subtitulo">El servicio que interpreta su descripción no está disponible en este momento, posiblemente por
+        los límites de uso de la API. Puede reintentar la búsqueda.</p>
+    <div class="aviso aviso-info aviso-izquierda">Su descripción se conservó: no necesita volver a escribirla.</div>
+
+    <form method="post" action="{{ url_for('candidatos') }}" data-cargando>
+        <input type="hidden" name="descripcion" value="{{ descripcion }}">
+        <div class="acciones acciones-centradas">
+            <button type="submit" class="boton-principal" data-texto-cargando="Buscando en el catálogo…">Reintentar búsqueda</button>
+            <a class="boton-secundario" href="{{ url_for('describir') }}">Volver al inicio</a>
+        </div>
+        <p class="estado-carga" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+    </form>
+</div>
 {% endblock %}

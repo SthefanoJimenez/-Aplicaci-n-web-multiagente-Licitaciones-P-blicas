@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_NOMBRE = "Evaluador de licitaciones"
+APP_NOMBRE = "LicitaFácil"
 
 # Claves: en local, desde el archivo .env; en Railway, desde sus variables de entorno
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
