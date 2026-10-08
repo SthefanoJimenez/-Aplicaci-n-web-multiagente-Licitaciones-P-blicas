@@ -1,7 +1,3 @@
-"""Orquestador: coordina a los agentes en el orden del pipeline (SP-003).
-
-En el Sprint 1 cubre el primer tramo del flujo: identificar el bien (HU-001).
-"""
 import config
 from agentes import clasificador
 
@@ -15,11 +11,7 @@ CANDIDATOS = "candidatos"
 
 
 def identificar_bien(descripcion):
-    """Paso 1 del pipeline: de la descripción del usuario a los candidatos del catálogo.
 
-    Devuelve {"resultado": CANDIDATOS o SIN_EVIDENCIA_PARA_EVALUAR, "candidatos": [...]}.
-    Lanza DescripcionInvalida o llm.ErrorModelo.
-    """
     descripcion = (descripcion or "").strip()
     if not descripcion:
         raise DescripcionInvalida("Escriba una descripción del bien para buscarlo en el catálogo.")

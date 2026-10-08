@@ -46,8 +46,7 @@
                 <div class="campo">
                     <label for="descripcion" class="etiqueta">Descripción del bien <span class="obligatorio"
                             aria-hidden="true">*</span></label>
-                    <textarea id="descripcion" name="descripcion" rows="5" maxlength="{{ largo_maximo }}"
-                        placeholder="Ej.: bolsa de cemento portland tipo I de 42.5 kg"
+                    <textarea id="descripcion" name="descripcion" rows="5" maxlength="{{ largo_maximo }}" placeholder=""
                         aria-describedby="consejos{% if error %} error-descripcion{% endif %}" {% if error
                         %}aria-invalid="true" {% endif %} data-requerido>{{ descripcion }}</textarea>
                     <p id="error-descripcion" class="error" role="alert" {% if not error %}hidden{% endif %}>

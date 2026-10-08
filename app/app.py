@@ -1,4 +1,3 @@
-"""Rutas de la aplicación: una por paso del flujo (SP-003)."""
 from flask import Flask, redirect, render_template, request, session, url_for
 
 import config
@@ -18,7 +17,6 @@ def datos_comunes():
 
 @app.get("/")
 def describir():
-    """Pantalla 1: descripción del bien."""
     return render_template(
         "describir.html",
         descripcion=session.get("descripcion", "") if request.args.get("reintentar") else "",
@@ -28,7 +26,6 @@ def describir():
 
 @app.post("/candidatos")
 def candidatos():
-    """Pantalla 2: selección del código, o resultado sin evidencia."""
     descripcion = request.form.get("descripcion", "")
     try:
         respuesta = orquestador.identificar_bien(descripcion)
@@ -50,7 +47,6 @@ def candidatos():
 
 @app.post("/confirmar")
 def confirmar():
-    """Guarda el código confirmado. Solo acepta uno de los candidatos ofrecidos."""
     codigo = request.form.get("codigo", type=int)
     if codigo not in session.get("candidatos", []) or codigo not in datos.CODIGOS_VALIDOS:
         return redirect(url_for("describir"))
@@ -60,7 +56,6 @@ def confirmar():
 
 @app.get("/mercado")
 def mercado():
-    """Pantalla 3. Provisional hasta HU-002: muestra el bien confirmado."""
     codigo = session.get("codigo")
     if codigo not in datos.BIENES:
         return redirect(url_for("describir"))

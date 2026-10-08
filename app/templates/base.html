@@ -1,42 +1,35 @@
 <!doctype html>
 <html lang="es">
-
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block titulo %}{% endblock %} | {{ app_nombre }}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}{% endblock %} | {{ app_nombre }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
 </head>
-
 <body>
-    <header class="cabecera">
-        <div class="cabecera-interior">
-            <a class="marca" href="{{ url_for('describir') }}">
-                <span class="marca-logo" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path
-                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                </span>
-                {{ app_nombre }}
-            </a>
-        </div>
-    </header>
+  <header class="cabecera">
+    <div class="cabecera-interior">
+      <a class="marca" href="{{ url_for('describir') }}">
+        <span class="marca-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+        </span>
+        {{ app_nombre }}
+      </a>
+    </div>
+  </header>
 
-    <main class="{% block clase_main %}contenido{% endblock %}">
-        {% block contenido %}{% endblock %}
-    </main>
+  <main class="{% block clase_main %}contenido{% endblock %}">
+    {% block contenido %}{% endblock %}
+  </main>
 
-    <footer class="pie">
-        Resultados referenciales, calculados con las adjudicaciones de bienes registradas por el OECE entre 2023 y 2025.
-    </footer>
-    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  <footer class="pie">
+    Resultados referenciales, calculados con las adjudicaciones de bienes registradas por el OECE entre 2023 y 2025.
+  </footer>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </body>
-
 </html>

@@ -1,5 +1,4 @@
-// JavaScript mínimo (SP-003): validación del campo vacío e indicador de carga.
-// Si el navegador no ejecuta JavaScript, el servidor hace la misma validación.
+
 
 document.querySelectorAll("form[data-cargando]").forEach((formulario) => {
     formulario.addEventListener("submit", (evento) => {

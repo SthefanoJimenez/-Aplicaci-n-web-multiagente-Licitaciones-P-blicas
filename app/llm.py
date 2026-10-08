@@ -1,4 +1,3 @@
-"""Conexión con el modelo de lenguaje (Gemini)."""
 import json
 import re
 import time
@@ -24,7 +23,6 @@ def _obtener_cliente():
 
 
 def generar_json(prompt, modelo=None):
-    """Envía el prompt al modelo y devuelve su respuesta JSON como diccionario."""
     for intento in range(1, config.REINTENTOS + 2):
         try:
             respuesta = _obtener_cliente().models.generate_content(
@@ -39,7 +37,6 @@ def generar_json(prompt, modelo=None):
             texto = re.sub(r"^```(?:json)?|```$", "", (respuesta.text or "").strip()).strip()
             return json.loads(texto)
         except errors.APIError as e:
-            # 429: límite de uso; 500 y 503: servidor saturado. Se reintenta brevemente.
             if e.code in (429, 500, 503) and intento <= config.REINTENTOS:
                 time.sleep(config.ESPERA_REINTENTO_SEGUNDOS * intento)
                 continue
