@@ -4,6 +4,13 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorador(func):
+            return func
+        return decorador
 from sklearn.metrics.pairwise import cosine_similarity
 
 import datos
@@ -14,7 +21,7 @@ PROMPT_REFORMULAR = (CARPETA_PROMPTS / "clasificador_reformular.txt").read_text(
 PROMPT_ELEGIR = (CARPETA_PROMPTS / "clasificador_elegir.txt").read_text(encoding="utf-8")
 
 MAX_CANDIDATOS = 3
-CANDIDATOS_POR_BUSQUEDA = 30   
+CANDIDATOS_POR_BUSQUEDA = 30
 
 
 def normalizar(texto):
@@ -29,6 +36,7 @@ _matriz = _vectorizador.fit_transform(
 _codigos_catalogo = datos.CATALOGO["codigoitem"].astype(int).tolist()
 
 
+@traceable(run_type="tool", name="Preseleccionar candidatos")
 def preseleccionar(*textos):
     """Une los bienes más parecidos a cada texto, sin repetir, en orden de parecido."""
     codigos = []
@@ -42,6 +50,7 @@ def preseleccionar(*textos):
     return codigos
 
 
+@traceable(run_type="tool", name="Validar contra el catálogo")
 def validar(codigos_propuestos):
     """Conserva solo los códigos que existen en el catálogo, sin repetir, hasta 3."""
     validos, descartados = [], []
@@ -58,6 +67,8 @@ def validar(codigos_propuestos):
     return validos[:MAX_CANDIDATOS], descartados
 
 
+@traceable(run_type="chain", name="Agente clasificador",
+           process_inputs=lambda entradas: {"descripcion": entradas.get("descripcion")})
 def clasificar(descripcion, llamar_modelo=llm.generar_json):
     """Devuelve los candidatos para la descripción.
 

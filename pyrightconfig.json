@@ -1,0 +1,11 @@
+{
+  "pythonPath": ".venv/bin/python",
+  "venvPath": "/Users/bensonhilario/Documents/App Licitaciones/-Aplicaci-n-web-multiagente-Licitaciones-P-blicas",
+  "venv": ".venv",
+  "extraPaths": [
+    "app",
+    ".venv/lib/python3.14/site-packages"
+  ],
+  "reportArgumentType": "none",
+  "reportGeneralTypeIssues": "none"
+}

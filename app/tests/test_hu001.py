@@ -158,3 +158,22 @@ def test_si_el_modelo_no_responde_se_conserva_la_descripcion(cliente, monkeypatc
     html = respuesta.get_data(as_text=True)
     assert respuesta.status_code == 503
     assert 'value="cemento en bolsa"' in html and "Reintentar búsqueda" in html
+
+
+# --- Orquestador con LangGraph ---------------------------------------------------
+
+def test_el_tramo_1_tiene_los_nodos_del_pipeline():
+    nodos = set(orquestador.TRAMO_IDENTIFICACION.get_graph().nodes)
+    assert {"agente_clasificador", "mostrar_candidatos", "sin_evidencia_para_evaluar"} <= nodos
+
+
+def test_el_grafo_decide_la_salida_segun_los_candidatos(monkeypatch):
+    monkeypatch.setattr(clasificador, "clasificar", lambda d: {
+        "candidatos": [datos.BIENES[CEMENTO_I]], "descripcion_reformulada": "cemento", "descartados": []})
+    estado = orquestador.TRAMO_IDENTIFICACION.invoke({"descripcion": "cemento"})
+    assert estado["resultado"] == orquestador.CANDIDATOS
+
+    monkeypatch.setattr(clasificador, "clasificar", lambda d: {
+        "candidatos": [], "descripcion_reformulada": None, "descartados": []})
+    estado = orquestador.TRAMO_IDENTIFICACION.invoke({"descripcion": "servicio de limpieza"})
+    assert estado["resultado"] == orquestador.SIN_EVIDENCIA_PARA_EVALUAR
