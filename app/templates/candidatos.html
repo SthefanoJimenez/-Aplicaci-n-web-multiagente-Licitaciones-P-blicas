@@ -19,7 +19,8 @@
         <legend class="solo-lectores">Bienes del catálogo</legend>
         {% for c in candidatos %}
         <label class="candidato" style="animation-delay: {{ loop.index0 * 80 }}ms">
-            <input type="radio" name="codigo" value="{{ c.codigo }}" {% if loop.first %}checked{% endif %}>
+            <input type="radio" name="codigo" value="{{ c.codigo }}" {% if c.codigo==seleccionado or (not seleccionado
+                and loop.first) %}checked{% endif %}>
             <span class="candidato-orden" aria-hidden="true">{{ loop.index }}</span>
             <span class="candidato-detalle">
                 <span class="candidato-encabezado">

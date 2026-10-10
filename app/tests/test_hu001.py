@@ -27,7 +27,7 @@ def modelo_simulado(reformulacion="", codigos=(), falla_reformular=False, falla_
     return llamar
 
 
-# --- Agente clasificador -----------------------------------------------------
+#
 
 def test_valida_y_descarta_codigos_inexistentes_y_repetidos():
     validos, descartados = clasificador.validar([CEMENTO_I, INEXISTENTE, CEMENTO_I, "texto", CEMENTO_IP])

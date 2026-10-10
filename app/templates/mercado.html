@@ -1,25 +1,105 @@
 {% extends "base.html" %}
 {% block titulo %}Análisis de mercado{% endblock %}
 {% block contenido %}
-{# Pantalla provisional: el rango de precios y la competencia se agregan en HU-002 y HU-003 #}
 {% with paso=3, nombre_paso="" %}{% include "_paso.html" %}{% endwith %}
+{% set periodo = m.anio_desde ~ "" if m.anio_desde == m.anio_hasta else m.anio_desde ~ "–" ~ m.anio_hasta %}
+{% set por_unidad = "por " ~ (m.unidad|unidad) %}
+
 <h1 class="titulo-pagina">Análisis de mercado</h1>
 <p class="bien-elegido">
-    <span class="codigo">CUBSO {{ bien.codigo }}</span>
-    <span class="bien-elegido-nombre">{{ bien.nombre }}</span>
+    <span class="codigo">CUBSO {{ m.codigo }}</span>
+    <span class="bien-elegido-nombre">{{ m.nombre }}</span>
 </p>
-<p class="bien-elegido-unidad">Unidad de medida: {{ bien.unidad }}</p>
+<p class="bien-elegido-unidad">Unidad de medida: {{ m.unidad }}</p>
 
-<div class="aviso aviso-info">En la próxima versión, aquí verá el rango de precios que pagó el Estado por este bien y
-    cuánta competencia hubo.</div>
+{% if not con_evidencia %}
+<div class="aviso aviso-advertencia" role="status">
+    <strong>Sin evidencia suficiente para un veredicto.</strong>
+    Este bien tiene {{ m.n_adjudicaciones }} adjudicaciones en {{ periodo }} y se necesitan al menos {{ minimo_veredicto
+    }}.
+    El rango se muestra solo como referencia; con tan pocas compras, el sistema no compara su costo.
+</div>
+{% endif %}
 
-<div class="acciones">
-    <a class="boton-secundario" href="{{ url_for('describir') }}">
+<section class="seccion" aria-labelledby="titulo-rango">
+    <h2 class="etiqueta-seccion" id="titulo-rango">Rango de precios unitarios</h2>
+
+    <div class="metricas">
+        <div class="metrica">
+            <p class="metrica-etiqueta">P25</p>
+            <p class="metrica-valor">{{ m.p25|soles }}</p>
+            <p class="metrica-detalle">{{ por_unidad }}</p>
+        </div>
+        <div class="metrica metrica-destacada">
+            <p class="metrica-etiqueta">Mediana</p>
+            <p class="metrica-valor">{{ m.mediana|soles }}</p>
+            <p class="metrica-detalle">{{ por_unidad }}</p>
+        </div>
+        <div class="metrica">
+            <p class="metrica-etiqueta">P75</p>
+            <p class="metrica-valor">{{ m.p75|soles }}</p>
+            <p class="metrica-detalle">{{ por_unidad }}</p>
+        </div>
+    </div>
+
+    {# Posición de la mediana dentro de la zona central de la barra #}
+    {% set posicion = ((m.mediana - m.p25) / (m.p75 - m.p25) * 100) if m.p75 > m.p25 else 50 %}
+    <div class="rango{% if not con_evidencia %} rango-referencial{% endif %}">
+        <p class="rango-titulo">
+            {% if con_evidencia %}Zonas para comparar su costo unitario{% else %}Cómo se reparten los precios
+            adjudicados{% endif %}
+        </p>
+        <div class="rango-barra">
+            <div class="rango-zona rango-zona-baja">{% if con_evidencia %}Competitivo{% else %}Debajo del P25{% endif %}
+            </div>
+            <div class="rango-zona rango-zona-media">
+                {% if con_evidencia %}Con cautela{% else %}Mitad central{% endif %}
+                <span class="rango-mediana" style="left: {{ '%.1f'|format(posicion) }}%"
+                    title="Mediana: {{ m.mediana|soles }}"></span>
+            </div>
+            <div class="rango-zona rango-zona-alta">{% if con_evidencia %}Alto costo{% else %}Encima del P75{% endif %}
+            </div>
+        </div>
+        <div class="rango-valores">
+            <span>&lt; {{ m.p25|soles }}</span>
+            <span>{{ m.p25|soles }} – {{ m.p75|soles }}</span>
+            <span>&gt; {{ m.p75|soles }}</span>
+        </div>
+        <p class="rango-ayuda">
+            El 25% de las adjudicaciones tuvo un precio unitario igual o menor al P25; la mitad, igual o menor a la
+            mediana
+            (marca vertical); y el 75%, igual o menor al P75.
+        </p>
+    </div>
+
+    <p class="nota-fuente">
+        {{ "{:,}".format(m.n_adjudicaciones) }} adjudicaciones · {{ periodo }} · procedimientos de selección (OECE)
+    </p>
+</section>
+
+{# La sección de competencia en el mercado se agrega en HU-003 #}
+
+<div class="acciones acciones-pares">
+    <a class="boton-secundario" href="{{ url_for('volver_a_candidatos') }}">
         <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
-        Buscar otro bien
+        Cambiar código
     </a>
+    {% if con_evidencia %}
+    <button type="button" class="boton-principal" disabled aria-describedby="nota-costo">
+        Ingresar mi costo
+        <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+    </button>
+    {% else %}
+    <a class="boton-principal" href="{{ url_for('describir') }}">Buscar otro bien</a>
+    {% endif %}
 </div>
+{% if con_evidencia %}
+<p class="nota-privacidad" id="nota-costo">El ingreso del costo estará disponible en la siguiente versión.</p>
+{% endif %}
 {% endblock %}
