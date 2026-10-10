@@ -7,97 +7,130 @@
 
 <h1 class="titulo-pagina">Análisis de mercado</h1>
 <p class="bien-elegido">
-    <span class="codigo">CUBSO {{ m.codigo }}</span>
-    <span class="bien-elegido-nombre">{{ m.nombre }}</span>
+  <span class="codigo">CUBSO {{ m.codigo }}</span>
+  <span class="bien-elegido-nombre">{{ m.nombre }}</span>
 </p>
 <p class="bien-elegido-unidad">Unidad de medida: {{ m.unidad }}</p>
 
 {% if not con_evidencia %}
 <div class="aviso aviso-advertencia" role="status">
-    <strong>Sin evidencia suficiente para un veredicto.</strong>
-    Este bien tiene {{ m.n_adjudicaciones }} adjudicaciones en {{ periodo }} y se necesitan al menos {{ minimo_veredicto
-    }}.
-    El rango se muestra solo como referencia; con tan pocas compras, el sistema no compara su costo.
+  <strong>Sin evidencia suficiente para un veredicto.</strong>
+  Este bien tiene {{ m.n_adjudicaciones }} adjudicaciones en {{ periodo }} y se necesitan al menos {{ minimo_veredicto }}.
+  El rango se muestra solo como referencia; con tan pocas compras, el sistema no compara su costo.
 </div>
 {% endif %}
 
 <section class="seccion" aria-labelledby="titulo-rango">
-    <h2 class="etiqueta-seccion" id="titulo-rango">Rango de precios unitarios</h2>
+  <h2 class="etiqueta-seccion" id="titulo-rango">Rango de precios unitarios</h2>
 
-    <div class="metricas">
-        <div class="metrica">
-            <p class="metrica-etiqueta">P25</p>
-            <p class="metrica-valor">{{ m.p25|soles }}</p>
-            <p class="metrica-detalle">{{ por_unidad }}</p>
-        </div>
-        <div class="metrica metrica-destacada">
-            <p class="metrica-etiqueta">Mediana</p>
-            <p class="metrica-valor">{{ m.mediana|soles }}</p>
-            <p class="metrica-detalle">{{ por_unidad }}</p>
-        </div>
-        <div class="metrica">
-            <p class="metrica-etiqueta">P75</p>
-            <p class="metrica-valor">{{ m.p75|soles }}</p>
-            <p class="metrica-detalle">{{ por_unidad }}</p>
-        </div>
+  <div class="metricas">
+    <div class="metrica">
+      <p class="metrica-etiqueta">P25</p>
+      <p class="metrica-valor">{{ m.p25|soles }}</p>
+      <p class="metrica-detalle">{{ por_unidad }}</p>
     </div>
-
-    {# Posición de la mediana dentro de la zona central de la barra #}
-    {% set posicion = ((m.mediana - m.p25) / (m.p75 - m.p25) * 100) if m.p75 > m.p25 else 50 %}
-    <div class="rango{% if not con_evidencia %} rango-referencial{% endif %}">
-        <p class="rango-titulo">
-            {% if con_evidencia %}Zonas para comparar su costo unitario{% else %}Cómo se reparten los precios
-            adjudicados{% endif %}
-        </p>
-        <div class="rango-barra">
-            <div class="rango-zona rango-zona-baja">{% if con_evidencia %}Competitivo{% else %}Debajo del P25{% endif %}
-            </div>
-            <div class="rango-zona rango-zona-media">
-                {% if con_evidencia %}Con cautela{% else %}Mitad central{% endif %}
-                <span class="rango-mediana" style="left: {{ '%.1f'|format(posicion) }}%"
-                    title="Mediana: {{ m.mediana|soles }}"></span>
-            </div>
-            <div class="rango-zona rango-zona-alta">{% if con_evidencia %}Alto costo{% else %}Encima del P75{% endif %}
-            </div>
-        </div>
-        <div class="rango-valores">
-            <span>&lt; {{ m.p25|soles }}</span>
-            <span>{{ m.p25|soles }} – {{ m.p75|soles }}</span>
-            <span>&gt; {{ m.p75|soles }}</span>
-        </div>
-        <p class="rango-ayuda">
-            El 25% de las adjudicaciones tuvo un precio unitario igual o menor al P25; la mitad, igual o menor a la
-            mediana
-            (marca vertical); y el 75%, igual o menor al P75.
-        </p>
+    <div class="metrica metrica-destacada">
+      <p class="metrica-etiqueta">Mediana</p>
+      <p class="metrica-valor">{{ m.mediana|soles }}</p>
+      <p class="metrica-detalle">{{ por_unidad }}</p>
     </div>
+    <div class="metrica">
+      <p class="metrica-etiqueta">P75</p>
+      <p class="metrica-valor">{{ m.p75|soles }}</p>
+      <p class="metrica-detalle">{{ por_unidad }}</p>
+    </div>
+  </div>
 
-    <p class="nota-fuente">
-        {{ "{:,}".format(m.n_adjudicaciones) }} adjudicaciones · {{ periodo }} · procedimientos de selección (OECE)
+  {# Posición de la mediana dentro de la zona central de la barra #}
+  {% set posicion = ((m.mediana - m.p25) / (m.p75 - m.p25) * 100) if m.p75 > m.p25 else 50 %}
+  <div class="rango{% if not con_evidencia %} rango-referencial{% endif %}">
+    <p class="rango-titulo">
+      {% if con_evidencia %}Zonas para comparar su costo unitario{% else %}Cómo se reparten los precios adjudicados{% endif %}
     </p>
+    <div class="rango-barra">
+      <div class="rango-zona rango-zona-baja">{% if con_evidencia %}Competitivo{% else %}Debajo del P25{% endif %}</div>
+      <div class="rango-zona rango-zona-media">
+        {% if con_evidencia %}Con cautela{% else %}Mitad central{% endif %}
+        <span class="rango-mediana" style="left: {{ '%.1f'|format(posicion) }}%" title="Mediana: {{ m.mediana|soles }}"></span>
+      </div>
+      <div class="rango-zona rango-zona-alta">{% if con_evidencia %}Alto costo{% else %}Encima del P75{% endif %}</div>
+    </div>
+    <div class="rango-valores">
+      <span>&lt; {{ m.p25|soles }}</span>
+      <span>{{ m.p25|soles }} – {{ m.p75|soles }}</span>
+      <span>&gt; {{ m.p75|soles }}</span>
+    </div>
+    <p class="rango-ayuda">
+      El 25% de las adjudicaciones tuvo un precio unitario igual o menor al P25; la mitad, igual o menor a la mediana
+      (marca vertical); y el 75%, igual o menor al P75.
+    </p>
+  </div>
+
+  <p class="nota-fuente">
+    {{ "{:,}".format(m.n_adjudicaciones) }} adjudicaciones · {{ periodo }} · procedimientos de selección (OECE)
+  </p>
 </section>
 
-{# La sección de competencia en el mercado se agrega en HU-003 #}
+<section class="seccion" aria-labelledby="titulo-competencia">
+  <h2 class="etiqueta-seccion" id="titulo-competencia">Competencia en el mercado</h2>
+
+  <div class="metricas">
+    <div class="metrica">
+      <p class="metrica-etiqueta">Postores (mediana)</p>
+      <p class="metrica-valor">{{ m.mediana_postores|numero if m.n_con_postores else "—" }}</p>
+      <p class="metrica-detalle">{{ "por proceso" if m.n_con_postores else "sin datos" }}</p>
+    </div>
+    <div class="metrica">
+      <p class="metrica-etiqueta">Postor único</p>
+      <p class="metrica-valor">{{ m.pct_postor_unico|porcentaje if m.n_con_postores else "—" }}</p>
+      <p class="metrica-detalle">{{ "de los procesos" if m.n_con_postores else "sin datos" }}</p>
+    </div>
+    <div class="metrica">
+      <p class="metrica-etiqueta">La Libertad</p>
+      <p class="metrica-valor">{{ "{:,}".format(m.n_la_libertad) }}</p>
+      <p class="metrica-detalle">{{ "adjudicación" if m.n_la_libertad == 1 else "adjudicaciones" }}</p>
+    </div>
+  </div>
+
+  {% set total = "{:,}".format(m.n_adjudicaciones) %}
+  <div class="aviso aviso-info aviso-izquierda competencia-resumen">
+    {% if not m.n_con_postores %}
+    Las adjudicaciones de este bien no tienen registro de postores, por eso no se muestra la competencia.
+    {% elif m.n_postor_unico == 0 %}
+    En ninguno de los {{ "{:,}".format(m.n_con_postores) }} procesos se presentó un solo postor;
+    en la mitad de ellos compitieron {{ m.mediana_postores|numero }} postores o menos.
+    {% else %}
+    En {{ "{:,}".format(m.n_postor_unico) }} de {{ "{:,}".format(m.n_con_postores) }} procesos
+    ({{ m.pct_postor_unico|porcentaje }}) se presentó un solo postor; en la mitad de ellos
+    compitieron {{ m.mediana_postores|numero }} postores o menos.
+    {% endif %}
+    {% if m.n_la_libertad == 0 %}
+    Ninguna de las {{ total }} adjudicaciones fue de entidades de La Libertad.
+    {% elif m.n_la_libertad == 1 %}
+    De las {{ total }} adjudicaciones, 1 fue de una entidad de La Libertad.
+    {% else %}
+    De las {{ total }} adjudicaciones, {{ "{:,}".format(m.n_la_libertad) }} fueron de entidades de La Libertad.
+    {% endif %}
+    {% if m.n_con_postores and m.n_con_postores < m.n_adjudicaciones %}
+    {% set sin_dato = m.n_adjudicaciones - m.n_con_postores %}
+    <span class="competencia-nota">{{ sin_dato }} {{ "adjudicación no tiene" if sin_dato == 1 else "adjudicaciones no tienen" }} registro de postores y no se {{ "incluye" if sin_dato == 1 else "incluyen" }} en la mediana ni en el porcentaje.</span>
+    {% endif %}
+  </div>
+</section>
 
 <div class="acciones acciones-pares">
-    <a class="boton-secundario" href="{{ url_for('volver_a_candidatos') }}">
-        <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Cambiar código
-    </a>
-    {% if con_evidencia %}
-    <button type="button" class="boton-principal" disabled aria-describedby="nota-costo">
-        Ingresar mi costo
-        <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-    </button>
-    {% else %}
-    <a class="boton-principal" href="{{ url_for('describir') }}">Buscar otro bien</a>
-    {% endif %}
+  <a class="boton-secundario" href="{{ url_for('volver_a_candidatos') }}">
+    <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    Cambiar código
+  </a>
+  {% if con_evidencia %}
+  <button type="button" class="boton-principal" disabled aria-describedby="nota-costo">
+    Ingresar mi costo
+    <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+  </button>
+  {% else %}
+  <a class="boton-principal" href="{{ url_for('describir') }}">Buscar otro bien</a>
+  {% endif %}
 </div>
 {% if con_evidencia %}
 <p class="nota-privacidad" id="nota-costo">El ingreso del costo estará disponible en la siguiente versión.</p>

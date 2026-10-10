@@ -1,4 +1,3 @@
-"""Rutas de la aplicación: una por paso del flujo (SP-003)."""
 from flask import Flask, redirect, render_template, request, session, url_for
 
 import config
@@ -21,6 +20,18 @@ def formato_soles(valor):
     """S/ 1,234.56. Los precios menores a S/ 0.10 se muestran con 4 decimales."""
     decimales = 2 if valor >= 0.1 else 4
     return f"S/ {valor:,.{decimales}f}"
+
+
+@app.template_filter("numero")
+def formato_numero(valor):
+    """Entero si no tiene decimales (5); si los tiene, con uno (2.5)."""
+    return f"{valor:,.0f}" if float(valor).is_integer() else f"{valor:,.1f}"
+
+
+@app.template_filter("porcentaje")
+def formato_porcentaje(valor):
+    """Porcentaje con un decimal: 0.4%, 23.2%."""
+    return f"{valor:.1f}%"
 
 
 UNIDADES_EN_TEXTO = {"M3": "m³", "M2": "m²", "Pie 2": "pie²", "Galon": "galón"}
@@ -91,7 +102,7 @@ def confirmar():
 
 @app.get("/mercado")
 def mercado():
-    """Pantalla 3: rango de precios del bien confirmado (HU-002)."""
+    """Pantalla 3: rango de precios (HU-002) y competencia (HU-003) del bien confirmado."""
     codigo = session.get("codigo")
     if codigo not in datos.BIENES:
         return redirect(url_for("describir"))
