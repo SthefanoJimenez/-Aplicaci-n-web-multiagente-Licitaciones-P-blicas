@@ -12,8 +12,6 @@ BIENES = {
     for r in CATALOGO.itertuples()
 }
 
-# Adjudicaciones de los bienes del catálogo. "round_trip" lee cada precio
-# exactamente como está escrito en el archivo, sin redondear el último decimal.
 ADJUDICACIONES = pd.read_csv(
     CARPETA / "adjudicaciones.csv",
     dtype={"n_postores": "Int64"},

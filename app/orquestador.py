@@ -11,16 +11,11 @@ class DescripcionInvalida(ValueError):
     """La descripción está vacía o es demasiado larga."""
 
 
-# Resultados posibles de los tramos
 SIN_EVIDENCIA_PARA_EVALUAR = "sin_evidencia_para_evaluar"
 CANDIDATOS = "candidatos"
-RANGO_CON_EVIDENCIA = "rango_con_evidencia"            # 10 o más adjudicaciones
-RANGO_REFERENCIAL = "sin_evidencia_suficiente"         # de 5 a 9: rango solo como referencia
+RANGO_CON_EVIDENCIA = "rango_con_evidencia"            
+RANGO_REFERENCIAL = "sin_evidencia_suficiente"        
 
-
-# ---------------------------------------------------------------------------
-# Tramo 1: identificar el bien
-# ---------------------------------------------------------------------------
 class EstadoIdentificacion(TypedDict, total=False):
     """Información que comparten los nodos del tramo 1."""
     descripcion: str
