@@ -3,164 +3,162 @@ from typing import Optional, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 import config
-import reglas
-from agentes import analista, clasificador
+import rules
+from agents import classifier, market_analyst
 
 
-class DescripcionInvalida(ValueError):
+class InvalidDescription(ValueError):
     """La descripción está vacía o es demasiado larga."""
 
 
-SIN_EVIDENCIA_PARA_EVALUAR = "sin_evidencia_para_evaluar"
-CANDIDATOS = "candidatos"
-RANGO_CON_EVIDENCIA = "rango_con_evidencia"            
-RANGO_REFERENCIAL = "sin_evidencia_suficiente"        
+NO_EVIDENCE = "no_evidence"                    
+CANDIDATES = "candidates"
+RANGE_WITH_EVIDENCE = "range_with_evidence"   
+RANGE_FOR_REFERENCE = "range_for_reference"   
 
-class EstadoIdentificacion(TypedDict, total=False):
+
+class IdentificationState(TypedDict, total=False):
     """Información que comparten los nodos del tramo 1."""
-    descripcion: str
-    descripcion_reformulada: Optional[str]
-    candidatos: list
-    resultado: str
+    description: str
+    rephrased_description: Optional[str]
+    candidates: list
+    result: str
 
 
-def nodo_clasificador(estado: EstadoIdentificacion) -> dict:
+def classifier_node(state: IdentificationState) -> dict:
     """Agente clasificador: de la descripción a hasta 3 bienes del catálogo."""
-    respuesta = clasificador.clasificar(estado["descripcion"])
+    response = classifier.classify(state["description"])
     return {
-        "candidatos": respuesta["candidatos"],
-        "descripcion_reformulada": respuesta["descripcion_reformulada"],
+        "candidates": response["candidates"],
+        "rephrased_description": response["rephrased_description"],
     }
 
 
-def hay_candidatos(estado: EstadoIdentificacion) -> str:
+def has_candidates(state: IdentificationState) -> str:
     """Arista condicional: ¿quedó algún candidato válido?"""
-    return "con_candidatos" if estado.get("candidatos") else "sin_candidatos"
+    return "with_candidates" if state.get("candidates") else "without_candidates"
 
 
-def nodo_mostrar_candidatos(estado: EstadoIdentificacion) -> dict:
-    return {"resultado": CANDIDATOS}
+def show_candidates_node(state: IdentificationState) -> dict:
+    return {"result": CANDIDATES}
 
 
-def nodo_sin_evidencia(estado: EstadoIdentificacion) -> dict:
+def no_evidence_node(state: IdentificationState) -> dict:
     """Salida temprana: el pipeline termina sin llamar a los demás agentes."""
-    return {"resultado": SIN_EVIDENCIA_PARA_EVALUAR, "candidatos": []}
+    return {"result": NO_EVIDENCE, "candidates": []}
 
 
-def construir_tramo_identificacion():
-    grafo = StateGraph(EstadoIdentificacion)
-    grafo.add_node("agente_clasificador", nodo_clasificador)
-    grafo.add_node("mostrar_candidatos", nodo_mostrar_candidatos)
-    grafo.add_node("sin_evidencia_para_evaluar", nodo_sin_evidencia)
+def build_identification_stage():
+    graph = StateGraph(IdentificationState)
+    graph.add_node("classifier_agent", classifier_node)
+    graph.add_node("show_candidates", show_candidates_node)
+    graph.add_node("no_evidence", no_evidence_node)
 
-    grafo.add_edge(START, "agente_clasificador")
-    grafo.add_conditional_edges(
-        "agente_clasificador",
-        hay_candidatos,
-        {"con_candidatos": "mostrar_candidatos", "sin_candidatos": "sin_evidencia_para_evaluar"},
+    graph.add_edge(START, "classifier_agent")
+    graph.add_conditional_edges(
+        "classifier_agent",
+        has_candidates,
+        {"with_candidates": "show_candidates", "without_candidates": "no_evidence"},
     )
-    grafo.add_edge("mostrar_candidatos", END)
-    grafo.add_edge("sin_evidencia_para_evaluar", END)
-    return grafo.compile(name="Tramo 1: identificar el bien")
+    graph.add_edge("show_candidates", END)
+    graph.add_edge("no_evidence", END)
+    return graph.compile(name="Stage 1: identify the good")
 
 
-TRAMO_IDENTIFICACION = construir_tramo_identificacion()
+IDENTIFICATION_STAGE = build_identification_stage()
 
 
-def identificar_bien(descripcion):
+def identify_good(description):
     """Tramo 1 del pipeline: de la descripción del usuario a los candidatos del catálogo.
 
-    Devuelve {"resultado": CANDIDATOS o SIN_EVIDENCIA_PARA_EVALUAR, "candidatos": [...]}.
-    Lanza DescripcionInvalida o llm.ErrorModelo.
+    Devuelve {"result": CANDIDATES o NO_EVIDENCE, "candidates": [...]}.
+    Lanza InvalidDescription o llm.ModelError.
     """
-    descripcion = (descripcion or "").strip()
-    if not descripcion:
-        raise DescripcionInvalida("Escriba una descripción del bien para buscarlo en el catálogo.")
-    if len(descripcion) > config.LARGO_MAXIMO_DESCRIPCION:
-        raise DescripcionInvalida(
-            f"La descripción puede tener hasta {config.LARGO_MAXIMO_DESCRIPCION} caracteres. "
+    description = (description or "").strip()
+    if not description:
+        raise InvalidDescription("Escriba una descripción del bien para buscarlo en el catálogo.")
+    if len(description) > config.MAX_DESCRIPTION_LENGTH:
+        raise InvalidDescription(
+            f"La descripción puede tener hasta {config.MAX_DESCRIPTION_LENGTH} caracteres. "
             "Describa solo el bien: qué es, su material y su medida o presentación."
         )
 
-    estado = TRAMO_IDENTIFICACION.invoke(
-        {"descripcion": descripcion},
-        config={"run_name": "Identificar el bien", "metadata": {"modelo": config.MODELO}},
+    state = IDENTIFICATION_STAGE.invoke(
+        {"description": description},
+        config={"run_name": "Identify the good", "metadata": {"model": config.MODEL}},
     )
-    return {"resultado": estado["resultado"], "candidatos": estado.get("candidatos", [])}
+    return {"result": state["result"], "candidates": state.get("candidates", [])}
 
 
-# ---------------------------------------------------------------------------
-# Tramo 2: analizar el mercado
-# ---------------------------------------------------------------------------
-class EstadoMercado(TypedDict, total=False):
+class MarketState(TypedDict, total=False):
     """Información que comparten los nodos del tramo 2."""
-    codigo: int
-    mercado: dict
-    resultado: str
+    code: int
+    market: dict
+    result: str
 
 
-def nodo_analista(estado: EstadoMercado) -> dict:
-    """Agente analista de mercado: rango de precios del bien (determinista)."""
-    return {"mercado": analista.analizar(estado["codigo"])}
+def market_analyst_node(state: MarketState) -> dict:
+    """Agente analista de mercado: rango de precios y competencia del bien (determinista)."""
+    return {"market": market_analyst.analyze(state["code"])}
 
 
-def nivel_de_evidencia(estado: EstadoMercado) -> str:
+def evidence_level(state: MarketState) -> str:
     """Arista condicional: qué puede mostrar el sistema según el mínimo de SP-002."""
-    evidencia = estado["mercado"]["evidencia"]
-    if evidencia == reglas.resultado_evidencia(reglas.MIN_VEREDICTO):
-        return "suficiente"
-    if evidencia == reglas.resultado_evidencia(reglas.MIN_CATALOGO):
-        return "insuficiente"
-    return "sin_evidencia"
+    evidence = state["market"]["evidence"]
+    if evidence == rules.WITH_VERDICT:
+        return "sufficient"
+    if evidence == rules.INSUFFICIENT_EVIDENCE:
+        return "insufficient"
+    return "no_evidence"
 
 
-def nodo_mostrar_rango(estado: EstadoMercado) -> dict:
-    return {"resultado": RANGO_CON_EVIDENCIA}
+def show_range_node(state: MarketState) -> dict:
+    return {"result": RANGE_WITH_EVIDENCE}
 
 
-def nodo_rango_referencial(estado: EstadoMercado) -> dict:
+def reference_range_node(state: MarketState) -> dict:
     """Pocas adjudicaciones: se muestra el rango como referencia, sin pedir el costo."""
-    return {"resultado": RANGO_REFERENCIAL}
+    return {"result": RANGE_FOR_REFERENCE}
 
 
-def nodo_mercado_sin_evidencia(estado: EstadoMercado) -> dict:
-    return {"resultado": SIN_EVIDENCIA_PARA_EVALUAR}
+def market_no_evidence_node(state: MarketState) -> dict:
+    return {"result": NO_EVIDENCE}
 
 
-def construir_tramo_mercado():
-    grafo = StateGraph(EstadoMercado)
-    grafo.add_node("agente_analista", nodo_analista)
-    grafo.add_node("mostrar_rango", nodo_mostrar_rango)
-    grafo.add_node("rango_referencial", nodo_rango_referencial)
-    grafo.add_node("sin_evidencia_para_evaluar", nodo_mercado_sin_evidencia)
+def build_market_stage():
+    graph = StateGraph(MarketState)
+    graph.add_node("market_analyst_agent", market_analyst_node)
+    graph.add_node("show_range", show_range_node)
+    graph.add_node("reference_range", reference_range_node)
+    graph.add_node("no_evidence", market_no_evidence_node)
 
-    grafo.add_edge(START, "agente_analista")
-    grafo.add_conditional_edges(
-        "agente_analista",
-        nivel_de_evidencia,
+    graph.add_edge(START, "market_analyst_agent")
+    graph.add_conditional_edges(
+        "market_analyst_agent",
+        evidence_level,
         {
-            "suficiente": "mostrar_rango",
-            "insuficiente": "rango_referencial",
-            "sin_evidencia": "sin_evidencia_para_evaluar",
+            "sufficient": "show_range",
+            "insufficient": "reference_range",
+            "no_evidence": "no_evidence",
         },
     )
-    for nodo in ("mostrar_rango", "rango_referencial", "sin_evidencia_para_evaluar"):
-        grafo.add_edge(nodo, END)
-    return grafo.compile(name="Tramo 2: analizar el mercado")
+    for node in ("show_range", "reference_range", "no_evidence"):
+        graph.add_edge(node, END)
+    return graph.compile(name="Stage 2: analyze the market")
 
 
-TRAMO_MERCADO = construir_tramo_mercado()
+MARKET_STAGE = build_market_stage()
 
 
-def analizar_mercado(codigo):
-    """Tramo 2 del pipeline: del código confirmado al rango de precios.
+def analyze_market(code):
+    """Tramo 2 del pipeline: del código confirmado al rango de precios y la competencia.
 
-    Devuelve {"resultado": RANGO_CON_EVIDENCIA, RANGO_REFERENCIAL o
-              SIN_EVIDENCIA_PARA_EVALUAR, "mercado": {...}}.
+    Devuelve {"result": RANGE_WITH_EVIDENCE, RANGE_FOR_REFERENCE o NO_EVIDENCE,
+              "market": {...}}.
     No usa el modelo de lenguaje.
     """
-    estado = TRAMO_MERCADO.invoke(
-        {"codigo": int(codigo)},
-        config={"run_name": "Analizar el mercado"},
+    state = MARKET_STAGE.invoke(
+        {"code": int(code)},
+        config={"run_name": "Analyze the market"},
     )
-    return {"resultado": estado["resultado"], "mercado": estado["mercado"]}
+    return {"result": state["result"], "market": state["market"]}

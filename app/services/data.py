@@ -1,19 +1,25 @@
-"""Carga los datos de producción en memoria al iniciar la aplicación (SP-003)."""
+"""Servicio de datos: carga los datos de producción en memoria al iniciar la aplicación (SP-003).
+
+Los nombres de las columnas de los CSV se mantienen como en la fuente del OECE
+(codigoitem, itemcubso, unidad_medida…) para conservar la trazabilidad con el análisis.
+"""
 from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path(__file__).parent / "datos"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-CATALOGO = pd.read_csv(CARPETA / "catalogo.csv")
-CODIGOS_VALIDOS = set(CATALOGO["codigoitem"])
-BIENES = {
-    int(r.codigoitem): {"codigo": int(r.codigoitem), "nombre": r.itemcubso.strip(), "unidad": r.unidad_medida}
-    for r in CATALOGO.itertuples()
+CATALOG = pd.read_csv(DATA_DIR / "catalog.csv")
+VALID_CODES = set(CATALOG["codigoitem"])
+GOODS = {
+    int(row.codigoitem): {"code": int(row.codigoitem), "name": row.itemcubso.strip(), "unit": row.unidad_medida}
+    for row in CATALOG.itertuples()
 }
 
-ADJUDICACIONES = pd.read_csv(
-    CARPETA / "adjudicaciones.csv",
+# Adjudicaciones de los bienes del catálogo. "round_trip" lee cada precio
+# exactamente como está escrito en el archivo, sin redondear el último decimal.
+AWARDS = pd.read_csv(
+    DATA_DIR / "awards.csv",
     dtype={"n_postores": "Int64"},
     float_precision="round_trip",
 )

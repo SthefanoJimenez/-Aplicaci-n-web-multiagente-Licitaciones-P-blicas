@@ -1,50 +1,44 @@
 {% extends "base.html" %}
-{% block titulo %}Seleccione el código{% endblock %}
-{% block contenido %}
-{% with paso=2, nombre_paso="" %}{% include "_paso.html" %}{% endwith %}
-<h1 class="titulo-pagina">Seleccione el código del bien</h1>
-<p class="subtitulo">Según su descripción, el sistema encontró estos bienes del catálogo CUBSO, ordenados del más al
-    menos probable. Confirme el que mejor represente lo que vende.</p>
+{% block title %}Seleccione el código{% endblock %}
+{% block content %}
+{% with step=2, step_name="" %}{% include "_step.html" %}{% endwith %}
+<h1 class="page-title">Seleccione el código del bien</h1>
+<p class="subtitle">Según su descripción, el sistema encontró estos bienes del catálogo CUBSO, ordenados del más al menos probable. Confirme el que mejor represente lo que vende.</p>
 
-<div class="ficha-descripcion">
-    <div class="ficha-descripcion-texto">
-        <p class="ficha-descripcion-etiqueta">Su descripción</p>
-        <p class="ficha-descripcion-valor">«{{ descripcion }}»</p>
-    </div>
-    <a class="enlace" href="{{ url_for('describir', reintentar=1) }}">Editar</a>
+<div class="description-card">
+  <div class="description-card-text">
+    <p class="description-card-label">Su descripción</p>
+    <p class="description-card-value">«{{ description }}»</p>
+  </div>
+  <a class="link" href="{{ url_for('describe', reintentar=1) }}">Editar</a>
 </div>
 
-<form method="post" action="{{ url_for('confirmar') }}" class="formulario">
-    <fieldset class="candidatos">
-        <legend class="solo-lectores">Bienes del catálogo</legend>
-        {% for c in candidatos %}
-        <label class="candidato" style="animation-delay: {{ loop.index0 * 80 }}ms">
-            <input type="radio" name="codigo" value="{{ c.codigo }}" {% if c.codigo==seleccionado or (not seleccionado
-                and loop.first) %}checked{% endif %}>
-            <span class="candidato-orden" aria-hidden="true">{{ loop.index }}</span>
-            <span class="candidato-detalle">
-                <span class="candidato-encabezado">
-                    <span class="codigo">CUBSO {{ c.codigo }}</span>
-                    {% if loop.first and candidatos|length > 1 %}<span class="insignia insignia-exito">Más
-                        probable</span>{% endif %}
-                </span>
-                <span class="candidato-nombre">{{ c.nombre }}</span>
-                <span class="candidato-unidad">Unidad de medida: {{ c.unidad }}</span>
-            </span>
-            <span class="candidato-marca" aria-hidden="true"></span>
-        </label>
-        {% endfor %}
-    </fieldset>
+<form method="post" action="{{ url_for('confirm') }}" class="form">
+  <fieldset class="candidates">
+    <legend class="sr-only">Bienes del catálogo</legend>
+    {% for c in candidates %}
+    <label class="candidate" style="animation-delay: {{ loop.index0 * 80 }}ms">
+      <input type="radio" name="code" value="{{ c.code }}" {% if c.code == selected or (not selected and loop.first) %}checked{% endif %}>
+      <span class="candidate-rank" aria-hidden="true">{{ loop.index }}</span>
+      <span class="candidate-detail">
+        <span class="candidate-heading">
+          <span class="code-chip">CUBSO {{ c.code }}</span>
+          {% if loop.first and candidates|length > 1 %}<span class="badge badge-success">Más probable</span>{% endif %}
+        </span>
+        <span class="candidate-name">{{ c.name }}</span>
+        <span class="candidate-unit">Unidad de medida: {{ c.unit }}</span>
+      </span>
+      <span class="candidate-check" aria-hidden="true"></span>
+    </label>
+    {% endfor %}
+  </fieldset>
 
-    <div class="acciones acciones-pares">
-        <a class="boton-secundario" href="{{ url_for('describir', reintentar=1) }}">Ninguno me corresponde</a>
-        <button type="submit" class="boton-principal">
-            Confirmar y ver mercado
-            <svg class="icono-flecha" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-        </button>
-    </div>
+  <div class="actions actions-pair">
+    <a class="button-secondary" href="{{ url_for('describe', reintentar=1) }}">Ninguno me corresponde</a>
+    <button type="submit" class="button-primary">
+      Confirmar y ver mercado
+      <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </div>
 </form>
 {% endblock %}

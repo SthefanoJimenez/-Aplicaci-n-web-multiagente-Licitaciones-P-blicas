@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-APP_NOMBRE = "LicitaFácil"
+APP_NAME = "LicitaFácil"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 SECRET_KEY = os.environ.get("SECRET_KEY", "solo-para-desarrollo-local")
 
-MODELO = os.environ.get("MODELO_GEMINI", "gemini-3.1-flash-lite")
-REINTENTOS = 2
-ESPERA_REINTENTO_SEGUNDOS = 2
+MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
-LARGO_MAXIMO_DESCRIPCION = 300
+RETRIES = 2
+RETRY_WAIT_SECONDS = 2
+
+MAX_DESCRIPTION_LENGTH = 300

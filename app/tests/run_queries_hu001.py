@@ -1,11 +1,3 @@
-"""HU-001: ejecuta las 30 consultas de prueba con el agente clasificador real.
-
-Registra los candidatos devueltos y verifica el criterio de aceptación:
-el 100% de los candidatos mostrados existe en el catálogo.
-
-Consume la API de Gemini (2 llamadas por consulta, unos 1,500 tokens cada una).
-Ejecutar desde la carpeta app/:  python tests/ejecutar_consultas_hu001.py
-"""
 import sys
 import time
 from pathlib import Path
@@ -13,54 +5,53 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import datos  # noqa: E402
-import llm  # noqa: E402
-from agentes import clasificador  # noqa: E402
+from agents import classifier  
+from services import data, llm  
 
-PAUSA_SEGUNDOS = 8
-CARPETA = Path(__file__).parent
-consultas = pd.read_csv(CARPETA / "consultas_hu001.csv")
+PAUSE_SECONDS = 8
+TESTS_DIR = Path(__file__).parent
+queries = pd.read_csv(TESTS_DIR / "queries_hu001.csv")
 
-filas = []
-for c in consultas.itertuples():
-    fila = {"id": c.id, "tipo": c.tipo, "descripcion": c.descripcion, "esperado": c.esperado}
+rows = []
+for q in queries.itertuples():
+    row = {"id": q.id, "type": q.type, "description": q.description, "expected": q.expected}
     try:
-        r = clasificador.clasificar(c.descripcion)
-        codigos = [b["codigo"] for b in r["candidatos"]]
-        referencia = None if pd.isna(c.codigo_referencia) else int(c.codigo_referencia)
-        fila.update({
-            "resultado": "candidatos" if codigos else "sin_evidencia",
-            "candidatos": " ".join(map(str, codigos)),
-            "nombres": " | ".join(b["nombre"] for b in r["candidatos"]),
-            "descripcion_reformulada": r["descripcion_reformulada"],
-            "codigos_descartados": " ".join(map(str, r["descartados"])),
-            "todos_en_catalogo": all(cod in datos.CODIGOS_VALIDOS for cod in codigos),
-            "codigo_referencia": referencia,
-            "referencia_entre_candidatos": (referencia in codigos) if referencia else None,
+        r = classifier.classify(q.description)
+        codes = [c["code"] for c in r["candidates"]]
+        reference = None if pd.isna(q.reference_code) else int(q.reference_code)
+        row.update({
+            "result": "candidates" if codes else "no_evidence",
+            "candidates": " ".join(map(str, codes)),
+            "names": " | ".join(c["name"] for c in r["candidates"]),
+            "rephrased_description": r["rephrased_description"],
+            "discarded_codes": " ".join(map(str, r["discarded"])),
+            "all_in_catalog": all(code in data.VALID_CODES for code in codes),
+            "reference_code": reference,
+            "reference_among_candidates": (reference in codes) if reference else None,
             "error": "",
         })
-        marca = "✔" if fila["resultado"] == c.esperado else "≠"
-        print(f"{c.id:>2} {marca} {fila['resultado']:<13} {fila['candidatos']:<22} {c.descripcion}")
-    except llm.ErrorModelo as e:
-        fila.update({"resultado": "error", "error": str(e)})
-        print(f"{c.id:>2} ERROR del modelo: {e}")
-    filas.append(fila)
-    time.sleep(PAUSA_SEGUNDOS)
+        mark = "✔" if row["result"] == q.expected else "≠"
+        print(f"{q.id:>2} {mark} {row['result']:<13} {row['candidates']:<22} {q.description}")
+    except llm.ModelError as e:
+        row.update({"result": "error", "error": str(e)})
+        print(f"{q.id:>2} ERROR del modelo: {e}")
+    rows.append(row)
+    time.sleep(PAUSE_SECONDS)
 
-detalle = pd.DataFrame(filas)
-detalle.to_csv(CARPETA / "resultados_hu001.csv", index=False, encoding="utf-8-sig")
+detail = pd.DataFrame(rows)
+detail.to_csv(TESTS_DIR / "results_hu001.csv", index=False, encoding="utf-8-sig")
 
-respondidas = detalle[detalle["error"] == ""]
-con_candidatos = respondidas[respondidas["resultado"] == "candidatos"]
-con_referencia = respondidas[respondidas["codigo_referencia"].notna()]
+answered = detail[detail["error"] == ""]
+with_candidates = answered[answered["result"] == "candidates"]
+with_reference = answered[answered["reference_code"].notna()]
 print("\n### RESUMEN")
-print(f"Consultas respondidas: {len(respondidas)} de {len(detalle)}")
+print(f"Consultas respondidas: {len(answered)} de {len(detail)}")
 print(f"Candidatos que existen en el catálogo: "
-      f"{100 * con_candidatos['todos_en_catalogo'].mean() if len(con_candidatos) else 100:.0f}%  "
+      f"{100 * with_candidates['all_in_catalog'].mean() if len(with_candidates) else 100:.0f}%  "
       f"(criterio de aceptación: 100%)")
 print(f"Códigos inexistentes propuestos por el modelo y descartados por la validación: "
-      f"{(respondidas['codigos_descartados'].fillna('') != '').sum()} consultas")
-print(f"Resultado igual al esperado: {(respondidas['resultado'] == respondidas['esperado']).sum()} de {len(respondidas)}")
+      f"{(answered['discarded_codes'].fillna('') != '').sum()} consultas")
+print(f"Resultado igual al esperado: {(answered['result'] == answered['expected']).sum()} de {len(answered)}")
 print(f"Bien de referencia entre los candidatos: "
-      f"{int(con_referencia['referencia_entre_candidatos'].fillna(False).sum())} de {len(con_referencia)}")
-print(f"\nDetalle guardado en {CARPETA / 'resultados_hu001.csv'}")
+      f"{int(with_reference['reference_among_candidates'].fillna(False).sum())} de {len(with_reference)}")
+print(f"\nDetalle guardado en {TESTS_DIR / 'results_hu001.csv'}")

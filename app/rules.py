@@ -1,11 +1,31 @@
 
+MIN_CATALOG = 5           
+MIN_VERDICT = 10          
+MIN_HIGH_CONFIDENCE = 30  
 
-MIN_CATALOGO = 5      
-MIN_VEREDICTO = 10    
-MIN_CONFIANZA_ALTA = 30   
+LOW_DISPERSION_MAX = 0.25     
+MEDIUM_DISPERSION_MAX = 0.50  
+NO_EVIDENCE = "no_evidence"                    
+INSUFFICIENT_EVIDENCE = "insufficient_evidence" 
+WITH_VERDICT = "with_verdict"                  
 
-DISPERSION_BAJA_HASTA = 0.25   
-DISPERSION_MEDIA_HASTA = 0.50  
+EVIDENCE_LABELS = {
+    NO_EVIDENCE: "Sin evidencia para evaluar",
+    INSUFFICIENT_EVIDENCE: "Sin evidencia suficiente",
+    WITH_VERDICT: "Con veredicto",
+}
+
+
+PARTICIPATE = "participate"
+PARTICIPATE_WITH_CAUTION = "participate_with_caution"
+NOT_PROFITABLE = "not_profitable"
+
+VERDICT_LABELS = {
+    PARTICIPATE: "Participa",
+    PARTICIPATE_WITH_CAUTION: "Participa con cautela",
+    NOT_PROFITABLE: "No rentable",
+}
+CONFIDENCE_LABELS = {"high": "Alta", "medium": "Media", "low": "Baja"}
 
 
 def dispersion(p25, p50, p75):
@@ -13,35 +33,35 @@ def dispersion(p25, p50, p75):
     return (p75 - p25) / p50
 
 
-def nivel_dispersion(riq):
-    if riq <= DISPERSION_BAJA_HASTA:
-        return "baja"
-    if riq <= DISPERSION_MEDIA_HASTA:
-        return "media"
-    return "alta"
+def dispersion_level(iqr):
+    if iqr <= LOW_DISPERSION_MAX:
+        return "low"
+    if iqr <= MEDIUM_DISPERSION_MAX:
+        return "medium"
+    return "high"
 
 
-def resultado_evidencia(n):
-
-    if n < MIN_CATALOGO:
-        return "Sin evidencia para evaluar"      
-    if n < MIN_VEREDICTO:
-        return "Sin evidencia suficiente"        
-    return "Con veredicto"
-
-
-def nivel_confianza(n, riq):
-    """Nivel de confianza de un veredicto. Solo aplica si n >= MIN_VEREDICTO."""
-    disp = nivel_dispersion(riq)
-    if n >= MIN_CONFIANZA_ALTA:
-        return {"baja": "Alta", "media": "Media", "alta": "Baja"}[disp]
-    return {"baja": "Media", "media": "Baja", "alta": "Baja"}[disp]
+def evidence_result(n):
+    """Qué puede decir el sistema según el número de adjudicaciones."""
+    if n < MIN_CATALOG:
+        return NO_EVIDENCE
+    if n < MIN_VERDICT:
+        return INSUFFICIENT_EVIDENCE
+    return WITH_VERDICT
 
 
-def veredicto(costo, p25, p75):
+def confidence_level(n, iqr):
+    """Nivel de confianza de un veredicto. Solo aplica si n >= MIN_VERDICT."""
+    level = dispersion_level(iqr)
+    if n >= MIN_HIGH_CONFIDENCE:
+        return {"low": "high", "medium": "medium", "high": "low"}[level]
+    return {"low": "medium", "medium": "low", "high": "low"}[level]
+
+
+def verdict(cost, p25, p75):
     """Veredicto según el costo del usuario. Los límites P25 y P75 son inclusivos."""
-    if costo < p25:
-        return "Participa"
-    if costo <= p75:
-        return "Participa con cautela"
-    return "No rentable"
+    if cost < p25:
+        return PARTICIPATE
+    if cost <= p75:
+        return PARTICIPATE_WITH_CAUTION
+    return NOT_PROFITABLE

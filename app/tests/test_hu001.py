@@ -4,176 +4,168 @@ Ejecutar desde la carpeta app/:  pytest
 """
 import pytest
 
-import datos
-import llm
-import orquestador
-from agentes import clasificador
+import orchestrator
+from agents import classifier
 from app import app
+from services import data, llm
 
-CEMENTO_I, CEMENTO_IP, BARRA_MEDIA, DIESEL = 12771, 12953, 130019, 233280
-INEXISTENTE = 999999
+CEMENT_I, CEMENT_IP, HALF_INCH_BAR, DIESEL = 12771, 12953, 130019, 233280
+NONEXISTENT = 999999
 
 
-def modelo_simulado(reformulacion="", codigos=(), falla_reformular=False, falla_elegir=False):
+def fake_model(rephrasing="", codes=(), fail_rephrase=False, fail_choose=False):
     """Imita al modelo: responde distinto según sea el paso de reformular o de elegir."""
-    def llamar(prompt):
+    def call(prompt):
         if "Descripción del empresario:" in prompt:
-            if falla_reformular:
-                raise llm.ErrorModelo("simulado")
-            return {"descripcion": reformulacion}
-        if falla_elegir:
-            raise llm.ErrorModelo("simulado")
-        return {"codigos": list(codigos)}
-    return llamar
+            if fail_rephrase:
+                raise llm.ModelError("simulado")
+            return {"descripcion": rephrasing}
+        if fail_choose:
+            raise llm.ModelError("simulado")
+        return {"codigos": list(codes)}
+    return call
 
 
-#
 
-def test_valida_y_descarta_codigos_inexistentes_y_repetidos():
-    validos, descartados = clasificador.validar([CEMENTO_I, INEXISTENTE, CEMENTO_I, "texto", CEMENTO_IP])
-    assert validos == [CEMENTO_I, CEMENTO_IP]
-    assert descartados == [INEXISTENTE, "texto"]
-
-
-def test_devuelve_hasta_tres_candidatos_en_orden_con_codigo_nombre_y_unidad():
-    llamar = modelo_simulado("cemento", [DIESEL, INEXISTENTE, CEMENTO_I, CEMENTO_IP, BARRA_MEDIA])
-    resultado = clasificador.clasificar("cemento en bolsa", llamar_modelo=llamar)
-    assert [c["codigo"] for c in resultado["candidatos"]] == [DIESEL, CEMENTO_I, CEMENTO_IP]
-    assert set(resultado["candidatos"][0]) == {"codigo", "nombre", "unidad"}
-    assert resultado["descartados"] == [INEXISTENTE]
+def test_validates_and_discards_nonexistent_and_repeated_codes():
+    valid, discarded = classifier.validate([CEMENT_I, NONEXISTENT, CEMENT_I, "texto", CEMENT_IP])
+    assert valid == [CEMENT_I, CEMENT_IP]
+    assert discarded == [NONEXISTENT, "texto"]
 
 
-def test_todos_los_candidatos_existen_en_el_catalogo():
-    llamar = modelo_simulado("x", [INEXISTENTE, 1, 2, CEMENTO_I])
-    resultado = clasificador.clasificar("algo", llamar_modelo=llamar)
-    assert all(c["codigo"] in datos.CODIGOS_VALIDOS for c in resultado["candidatos"])
+def test_returns_up_to_three_candidates_in_order_with_code_name_and_unit():
+    call = fake_model("cemento", [DIESEL, NONEXISTENT, CEMENT_I, CEMENT_IP, HALF_INCH_BAR])
+    result = classifier.classify("cemento en bolsa", call_model=call)
+    assert [c["code"] for c in result["candidates"]] == [DIESEL, CEMENT_I, CEMENT_IP]
+    assert set(result["candidates"][0]) == {"code", "name", "unit"}
+    assert result["discarded"] == [NONEXISTENT]
 
 
-def test_si_falla_la_reformulacion_continua_con_la_descripcion_original():
-    llamar = modelo_simulado(codigos=[CEMENTO_I], falla_reformular=True)
-    resultado = clasificador.clasificar("cemento portland tipo I", llamar_modelo=llamar)
-    assert resultado["descripcion_reformulada"] is None
-    assert [c["codigo"] for c in resultado["candidatos"]] == [CEMENTO_I]
+def test_all_candidates_exist_in_catalog():
+    call = fake_model("x", [NONEXISTENT, 1, 2, CEMENT_I])
+    result = classifier.classify("algo", call_model=call)
+    assert all(c["code"] in data.VALID_CODES for c in result["candidates"])
 
 
-def test_si_falla_la_eleccion_se_informa_el_error():
-    with pytest.raises(llm.ErrorModelo):
-        clasificador.clasificar("cemento", llamar_modelo=modelo_simulado("cemento", falla_elegir=True))
+def test_if_rephrasing_fails_continues_with_original_description():
+    call = fake_model(codes=[CEMENT_I], fail_rephrase=True)
+    result = classifier.classify("cemento portland tipo I", call_model=call)
+    assert result["rephrased_description"] is None
+    assert [c["code"] for c in result["candidates"]] == [CEMENT_I]
 
 
-def test_la_preseleccion_recupera_descripciones_coloquiales_gracias_a_la_reformulacion():
-    # Caso de SP-004: "fierro" no comparte palabras con "barra para construcción"
-    assert BARRA_MEDIA not in clasificador.preseleccionar("fierro corrugado de media pulgada")
-    assert BARRA_MEDIA in clasificador.preseleccionar(
+def test_if_choosing_fails_the_error_is_raised():
+    with pytest.raises(llm.ModelError):
+        classifier.classify("cemento", call_model=fake_model("cemento", fail_choose=True))
+
+
+def test_preselection_recovers_colloquial_descriptions_thanks_to_rephrasing():
+    assert HALF_INCH_BAR not in classifier.preselect("fierro corrugado de media pulgada")
+    assert HALF_INCH_BAR in classifier.preselect(
         "fierro corrugado de media pulgada", "barra de acero corrugado para construccion de 1/2 in")
 
 
-# --- Orquestador --------------------------------------------------------------
 
-@pytest.mark.parametrize("descripcion", ["", "   ", None])
-def test_rechaza_descripciones_vacias(descripcion):
-    with pytest.raises(orquestador.DescripcionInvalida):
-        orquestador.identificar_bien(descripcion)
-
-
-def test_rechaza_descripciones_demasiado_largas():
-    with pytest.raises(orquestador.DescripcionInvalida):
-        orquestador.identificar_bien("a" * 301)
+@pytest.mark.parametrize("description", ["", "   ", None])
+def test_rejects_empty_descriptions(description):
+    with pytest.raises(orchestrator.InvalidDescription):
+        orchestrator.identify_good(description)
 
 
-def test_sin_candidatos_validos_da_sin_evidencia_para_evaluar(monkeypatch):
-    monkeypatch.setattr(clasificador, "clasificar",
-                        lambda d: {"candidatos": [], "descripcion_reformulada": None, "descartados": [INEXISTENTE]})
-    assert orquestador.identificar_bien("servicio de limpieza")["resultado"] == orquestador.SIN_EVIDENCIA_PARA_EVALUAR
+def test_rejects_too_long_descriptions():
+    with pytest.raises(orchestrator.InvalidDescription):
+        orchestrator.identify_good("a" * 301)
 
 
-# --- Pantallas -----------------------------------------------------------------
+def test_without_valid_candidates_returns_no_evidence(monkeypatch):
+    monkeypatch.setattr(classifier, "classify",
+                        lambda d: {"candidates": [], "rephrased_description": None, "discarded": [NONEXISTENT]})
+    assert orchestrator.identify_good("servicio de limpieza")["result"] == orchestrator.NO_EVIDENCE
+
 
 @pytest.fixture
-def cliente():
+def client():
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
 
 
-def simular_candidatos(monkeypatch, codigos):
-    monkeypatch.setattr(clasificador, "clasificar", lambda d: {
-        "candidatos": [datos.BIENES[c] for c in codigos], "descripcion_reformulada": None, "descartados": []})
+def fake_candidates(monkeypatch, codes):
+    monkeypatch.setattr(classifier, "classify", lambda d: {
+        "candidates": [data.GOODS[c] for c in codes], "rephrased_description": None, "discarded": []})
 
 
-def test_pantalla_de_descripcion(cliente):
-    html = cliente.get("/").get_data(as_text=True)
+def test_description_screen(client):
+    html = client.get("/").get_data(as_text=True)
     assert "¿Qué bien vende su empresa?" in html
 
 
-def test_descripcion_vacia_muestra_mensaje(cliente):
-    respuesta = cliente.post("/candidatos", data={"descripcion": "   "})
-    assert respuesta.status_code == 400
-    assert "Escriba una descripción del bien" in respuesta.get_data(as_text=True)
+def test_empty_description_shows_message(client):
+    response = client.post("/candidatos", data={"description": "   "})
+    assert response.status_code == 400
+    assert "Escriba una descripción del bien" in response.get_data(as_text=True)
 
 
-def test_muestra_candidatos_con_el_primero_preseleccionado(cliente, monkeypatch):
-    simular_candidatos(monkeypatch, [CEMENTO_I, CEMENTO_IP])
-    html = cliente.post("/candidatos", data={"descripcion": "cemento"}).get_data(as_text=True)
+def test_shows_candidates_with_first_one_preselected(client, monkeypatch):
+    fake_candidates(monkeypatch, [CEMENT_I, CEMENT_IP])
+    html = client.post("/candidatos", data={"description": "cemento"}).get_data(as_text=True)
     assert html.count('type="radio"') == 2
-    assert f'value="{CEMENTO_I}" checked' in html
-    assert f'value="{CEMENTO_IP}" checked' not in html
-    assert datos.BIENES[CEMENTO_I]["nombre"] in html
+    assert f'value="{CEMENT_I}" checked' in html
+    assert f'value="{CEMENT_IP}" checked' not in html
+    assert data.GOODS[CEMENT_I]["name"] in html
 
 
-def test_confirmar_un_candidato_lleva_al_mercado(cliente, monkeypatch):
-    simular_candidatos(monkeypatch, [CEMENTO_I, CEMENTO_IP])
-    cliente.post("/candidatos", data={"descripcion": "cemento"})
-    respuesta = cliente.post("/confirmar", data={"codigo": CEMENTO_IP})
-    assert respuesta.headers["Location"].endswith("/mercado")
-    assert datos.BIENES[CEMENTO_IP]["nombre"] in cliente.get("/mercado").get_data(as_text=True)
+def test_confirming_a_candidate_leads_to_market(client, monkeypatch):
+    fake_candidates(monkeypatch, [CEMENT_I, CEMENT_IP])
+    client.post("/candidatos", data={"description": "cemento"})
+    response = client.post("/confirmar", data={"code": CEMENT_IP})
+    assert response.headers["Location"].endswith("/mercado")
+    assert data.GOODS[CEMENT_IP]["name"] in client.get("/mercado").get_data(as_text=True)
 
 
-def test_no_acepta_un_codigo_que_no_fue_ofrecido(cliente, monkeypatch):
-    simular_candidatos(monkeypatch, [CEMENTO_I])
-    cliente.post("/candidatos", data={"descripcion": "cemento"})
-    respuesta = cliente.post("/confirmar", data={"codigo": DIESEL})
-    assert respuesta.headers["Location"].endswith("/")
+def test_rejects_a_code_that_was_not_offered(client, monkeypatch):
+    fake_candidates(monkeypatch, [CEMENT_I])
+    client.post("/candidatos", data={"description": "cemento"})
+    response = client.post("/confirmar", data={"code": DIESEL})
+    assert response.headers["Location"].endswith("/")
 
 
-def test_ninguno_corresponde_vuelve_a_la_descripcion_con_el_texto_anterior(cliente, monkeypatch):
-    simular_candidatos(monkeypatch, [CEMENTO_I])
-    cliente.post("/candidatos", data={"descripcion": "cemento en bolsa"})
-    html = cliente.get("/?reintentar=1").get_data(as_text=True)
+def test_none_matches_returns_to_description_with_previous_text(client, monkeypatch):
+    fake_candidates(monkeypatch, [CEMENT_I])
+    client.post("/candidatos", data={"description": "cemento en bolsa"})
+    html = client.get("/?reintentar=1").get_data(as_text=True)
     assert "Pruebe describirlo de otra forma" in html
     assert "cemento en bolsa" in html
 
 
-def test_sin_candidatos_muestra_sin_evidencia_para_evaluar(cliente, monkeypatch):
-    simular_candidatos(monkeypatch, [])
-    html = cliente.post("/candidatos", data={"descripcion": "servicio de limpieza"}).get_data(as_text=True)
+def test_without_candidates_shows_no_evidence(client, monkeypatch):
+    fake_candidates(monkeypatch, [])
+    html = client.post("/candidatos", data={"description": "servicio de limpieza"}).get_data(as_text=True)
     assert "Sin evidencia para evaluar" in html
 
 
-def test_si_el_modelo_no_responde_se_conserva_la_descripcion(cliente, monkeypatch):
-    def fallar(d):
-        raise llm.ErrorModelo("simulado")
-    monkeypatch.setattr(clasificador, "clasificar", fallar)
-    respuesta = cliente.post("/candidatos", data={"descripcion": "cemento en bolsa"})
-    html = respuesta.get_data(as_text=True)
-    assert respuesta.status_code == 503
+def test_if_model_fails_the_description_is_kept(client, monkeypatch):
+    def fail(d):
+        raise llm.ModelError("simulado")
+    monkeypatch.setattr(classifier, "classify", fail)
+    response = client.post("/candidatos", data={"description": "cemento en bolsa"})
+    html = response.get_data(as_text=True)
+    assert response.status_code == 503
     assert 'value="cemento en bolsa"' in html and "Reintentar búsqueda" in html
 
 
-# --- Orquestador con LangGraph ---------------------------------------------------
-
-def test_el_tramo_1_tiene_los_nodos_del_pipeline():
-    nodos = set(orquestador.TRAMO_IDENTIFICACION.get_graph().nodes)
-    assert {"agente_clasificador", "mostrar_candidatos", "sin_evidencia_para_evaluar"} <= nodos
+def test_stage_1_has_the_pipeline_nodes():
+    nodes = set(orchestrator.IDENTIFICATION_STAGE.get_graph().nodes)
+    assert {"classifier_agent", "show_candidates", "no_evidence"} <= nodes
 
 
-def test_el_grafo_decide_la_salida_segun_los_candidatos(monkeypatch):
-    monkeypatch.setattr(clasificador, "clasificar", lambda d: {
-        "candidatos": [datos.BIENES[CEMENTO_I]], "descripcion_reformulada": "cemento", "descartados": []})
-    estado = orquestador.TRAMO_IDENTIFICACION.invoke({"descripcion": "cemento"})
-    assert estado["resultado"] == orquestador.CANDIDATOS
+def test_graph_decides_output_by_candidates(monkeypatch):
+    monkeypatch.setattr(classifier, "classify", lambda d: {
+        "candidates": [data.GOODS[CEMENT_I]], "rephrased_description": "cemento", "discarded": []})
+    state = orchestrator.IDENTIFICATION_STAGE.invoke({"description": "cemento"})
+    assert state["result"] == orchestrator.CANDIDATES
 
-    monkeypatch.setattr(clasificador, "clasificar", lambda d: {
-        "candidatos": [], "descripcion_reformulada": None, "descartados": []})
-    estado = orquestador.TRAMO_IDENTIFICACION.invoke({"descripcion": "servicio de limpieza"})
-    assert estado["resultado"] == orquestador.SIN_EVIDENCIA_PARA_EVALUAR
+    monkeypatch.setattr(classifier, "classify", lambda d: {
+        "candidates": [], "rephrased_description": None, "discarded": []})
+    state = orchestrator.IDENTIFICATION_STAGE.invoke({"description": "servicio de limpieza"})
+    assert state["result"] == orchestrator.NO_EVIDENCE

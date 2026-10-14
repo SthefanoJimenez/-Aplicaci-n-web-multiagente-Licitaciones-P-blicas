@@ -3,97 +3,90 @@ import unicodedata
 from pathlib import Path
 
 import numpy as np
+from langsmith import traceable
 from sklearn.feature_extraction.text import TfidfVectorizer
-try:
-    from langsmith import traceable
-except ImportError:
-    def traceable(*args, **kwargs):
-        def decorador(func):
-            return func
-        return decorador
 from sklearn.metrics.pairwise import cosine_similarity
 
-import datos
-import llm
+from services import data, llm
 
-CARPETA_PROMPTS = Path(__file__).parent.parent / "prompts"
-PROMPT_REFORMULAR = (CARPETA_PROMPTS / "clasificador_reformular.txt").read_text(encoding="utf-8")
-PROMPT_ELEGIR = (CARPETA_PROMPTS / "clasificador_elegir.txt").read_text(encoding="utf-8")
+PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+PROMPT_REPHRASE = (PROMPTS_DIR / "classifier_rephrase.txt").read_text(encoding="utf-8")
+PROMPT_CHOOSE = (PROMPTS_DIR / "classifier_choose.txt").read_text(encoding="utf-8")
 
-MAX_CANDIDATOS = 3
-CANDIDATOS_POR_BUSQUEDA = 30
-
-
-def normalizar(texto):
-    texto = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode().lower()
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/. ]", " ", texto)).strip()
+MAX_CANDIDATES = 3
+CANDIDATES_PER_SEARCH = 30
 
 
-_vectorizador = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
-_matriz = _vectorizador.fit_transform(
-    (datos.CATALOGO["itemcubso"] + " " + datos.CATALOGO["unidad_medida"]).map(normalizar)
+def normalize(text):
+    text = unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/. ]", " ", text)).strip()
+
+
+_vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+_matrix = _vectorizer.fit_transform(
+    (data.CATALOG["itemcubso"] + " " + data.CATALOG["unidad_medida"]).map(normalize)
 )
-_codigos_catalogo = datos.CATALOGO["codigoitem"].astype(int).tolist()
+_catalog_codes = data.CATALOG["codigoitem"].astype(int).tolist()
 
 
-@traceable(run_type="tool", name="Preseleccionar candidatos")
-def preseleccionar(*textos):
+@traceable(run_type="tool", name="Preselect candidates")
+def preselect(*texts):
     """Une los bienes más parecidos a cada texto, sin repetir, en orden de parecido."""
-    codigos = []
-    for texto in textos:
-        if not texto:
+    codes = []
+    for text in texts:
+        if not text:
             continue
-        similitud = cosine_similarity(_vectorizador.transform([normalizar(texto)]), _matriz).ravel()
-        for i in np.argsort(-similitud, kind="stable")[:CANDIDATOS_POR_BUSQUEDA]:
-            if _codigos_catalogo[i] not in codigos:
-                codigos.append(_codigos_catalogo[i])
-    return codigos
+        similarity = cosine_similarity(_vectorizer.transform([normalize(text)]), _matrix).ravel()
+        for i in np.argsort(-similarity, kind="stable")[:CANDIDATES_PER_SEARCH]:
+            if _catalog_codes[i] not in codes:
+                codes.append(_catalog_codes[i])
+    return codes
 
 
-@traceable(run_type="tool", name="Validar contra el catálogo")
-def validar(codigos_propuestos):
+@traceable(run_type="tool", name="Validate against catalog")
+def validate(proposed_codes):
     """Conserva solo los códigos que existen en el catálogo, sin repetir, hasta 3."""
-    validos, descartados = [], []
-    for codigo in codigos_propuestos:
+    valid, discarded = [], []
+    for code in proposed_codes:
         try:
-            codigo = int(codigo)
+            code = int(code)
         except (TypeError, ValueError):
-            descartados.append(codigo)
+            discarded.append(code)
             continue
-        if codigo not in datos.CODIGOS_VALIDOS:
-            descartados.append(codigo)
-        elif codigo not in validos:
-            validos.append(codigo)
-    return validos[:MAX_CANDIDATOS], descartados
+        if code not in data.VALID_CODES:
+            discarded.append(code)
+        elif code not in valid:
+            valid.append(code)
+    return valid[:MAX_CANDIDATES], discarded
 
 
-@traceable(run_type="chain", name="Agente clasificador",
-           process_inputs=lambda entradas: {"descripcion": entradas.get("descripcion")})
-def clasificar(descripcion, llamar_modelo=llm.generar_json):
+@traceable(run_type="chain", name="Classifier agent",
+           process_inputs=lambda inputs: {"description": inputs.get("description")})
+def classify(description, call_model=llm.generate_json):
     """Devuelve los candidatos para la descripción.
 
-    Resultado: {"candidatos": [{"codigo", "nombre", "unidad"}, ...],
-                "descripcion_reformulada": str o None,
-                "descartados": códigos propuestos por el modelo que no existen}
-    Lanza llm.ErrorModelo si el modelo no responde en el paso de elección.
+    Resultado: {"candidates": [{"code", "name", "unit"}, ...],
+                "rephrased_description": str o None,
+                "discarded": códigos propuestos por el modelo que no existen}
+    Lanza llm.ModelError si el modelo no responde en el paso de elección.
     """
     try:
-        respuesta = llamar_modelo(PROMPT_REFORMULAR.replace("{{DESCRIPCION}}", descripcion))
-        reformulada = str(respuesta.get("descripcion", "")).strip() or None
-    except (llm.ErrorModelo, AttributeError):
-        reformulada = None
+        response = call_model(PROMPT_REPHRASE.replace("{{DESCRIPCION}}", description))
+        rephrased = str(response.get("descripcion", "")).strip() or None
+    except (llm.ModelError, AttributeError):
+        rephrased = None
 
-    preseleccionados = preseleccionar(descripcion, reformulada)
-    lista = "\n".join(
-        f"{c} | {datos.BIENES[c]['nombre']} | {datos.BIENES[c]['unidad']}" for c in preseleccionados
+    preselected = preselect(description, rephrased)
+    listing = "\n".join(
+        f"{c} | {data.GOODS[c]['name']} | {data.GOODS[c]['unit']}" for c in preselected
     )
 
-    respuesta = llamar_modelo(PROMPT_ELEGIR.replace("{{CATALOGO}}", lista).replace("{{DESCRIPCION}}", descripcion))
-    propuestos = respuesta.get("codigos", []) if isinstance(respuesta, dict) else []
+    response = call_model(PROMPT_CHOOSE.replace("{{CATALOGO}}", listing).replace("{{DESCRIPCION}}", description))
+    proposed = response.get("codigos", []) if isinstance(response, dict) else []
 
-    validos, descartados = validar(propuestos if isinstance(propuestos, list) else [])
+    valid, discarded = validate(proposed if isinstance(proposed, list) else [])
     return {
-        "candidatos": [datos.BIENES[c] for c in validos],
-        "descripcion_reformulada": reformulada,
-        "descartados": descartados,
+        "candidates": [data.GOODS[c] for c in valid],
+        "rephrased_description": rephrased,
+        "discarded": discarded,
     }
