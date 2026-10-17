@@ -1,7 +1,7 @@
 {# Avance del flujo: el proceso tiene 5 pasos #}
-<div class="progress">
+<div class="step-indicator mb-4">
   <p class="section-label">Paso {{ step }} de 5{% if step_name %} · {{ step_name }}{% endif %}</p>
-  <div class="progress-bar" role="progressbar" aria-valuemin="1" aria-valuemax="5" aria-valuenow="{{ step }}" aria-label="Paso {{ step }} de 5">
-    <div class="progress-fill" style="width: {{ step * 20 }}%"></div>
+  <div class="progress" role="progressbar" aria-valuemin="1" aria-valuemax="5" aria-valuenow="{{ step }}" aria-label="Paso {{ step }} de 5">
+    <div class="progress-bar" style="width: {{ step * 20 }}%"></div>
   </div>
 </div>

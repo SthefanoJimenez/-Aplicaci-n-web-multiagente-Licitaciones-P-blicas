@@ -4,15 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} | {{ app_name }}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap" rel="stylesheet">
+  <meta name="description" content="Explore precios y competencia en las compras públicas de bienes del Perú.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23142d4e'/%3E%3Cpath d='M8 24V17h4v7m2 0V12h4v12m2 0V7h4v17' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-  <header class="header">
-    <div class="header-inner">
-      <a class="brand" href="{{ url_for('describe') }}">
+  <a class="visually-hidden-focusable skip-link" href="#main-content">Saltar al contenido</a>
+  <header class="navbar header">
+    <div class="container header-inner">
+      <a class="navbar-brand brand" href="{{ url_for('describe') }}">
         <span class="brand-logo" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -23,11 +24,11 @@
     </div>
   </header>
 
-  <main class="{% block main_class %}content{% endblock %}">
+  <main id="main-content" class="container py-4 py-md-5 {% block main_class %}content{% endblock %}" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="footer">
+  <footer class="footer container py-4">
     Resultados referenciales, calculados con las adjudicaciones de bienes registradas por el OECE entre 2023 y 2025.
   </footer>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>

@@ -2,38 +2,69 @@
 {% block title %}Describa su bien{% endblock %}
 {% block main_class %}content-full{% endblock %}
 {% block content %}
-<div class="split">
+<div class="row g-0 split">
 
-  {# Panel izquierdo: imagen y presentación #}
-  <section class="hero" style="--hero-image: url('{{ url_for('static', filename='img/tender-hero.jpg') }}')">
+  {# Presentation panel; no external image dependency. #}
+  <section class="col-lg-6 hero">
     <div class="hero-text">
       <span class="hero-badge">Mercado de licitaciones · Perú</span>
-      <h2 class="hero-title">¿Es rentable vender al Estado?</h2>
-      <p class="hero-description">Analice el mercado de adjudicaciones públicas y reciba un veredicto basado en datos reales del OECE (2023-2025).</p>
+      <div class="hero-intro">
+        <h2 class="hero-title">¿Es rentable vender al Estado?</h2>
+        <p class="hero-description">Analice el mercado de adjudicaciones públicas y reciba un veredicto basado en datos reales del OECE (2023-2025).</p>
+      </div>
       <dl class="hero-figures">
-        <div><dt>adjudicaciones de bienes</dt><dd>60,024</dd></div>
-        <div><dt>bienes en el catálogo</dt><dd>2,023</dd></div>
-        <div><dt>agentes</dt><dd>4</dd></div>
+        <div>
+          <dt>adjudicaciones de bienes</dt>
+          <dd>
+            <svg class="hero-figure-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M25 42H9a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h18l12 12v10M27 4v12h12M13 24h13M13 31h7"/>
+              <circle cx="34" cy="35" r="10"/>
+              <path d="m29 35 3 3 6-6"/>
+            </svg>
+            <span>60,024</span>
+          </dd>
+        </div>
+        <div>
+          <dt>bienes en el catálogo</dt>
+          <dd>
+            <svg class="hero-figure-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="m24 3 10 5-10 5-10-5 10-5Zm-10 5v12l10 5 10-5V8M24 13v12M13 23l10 5-10 5-10-5 10-5Zm-10 5v12l10 5 10-5V28M13 33v12M35 23l10 5-10 5-10-5 10-5Zm-10 5v12l10 5 10-5V28M35 33v12"/>
+            </svg>
+            <span>2,023</span>
+          </dd>
+        </div>
+        <div>
+          <dt>agentes</dt>
+          <dd>
+            <svg class="hero-figure-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="m20 15-9 18m17-18 9 18M16 39h16"/>
+              <circle cx="24" cy="9" r="6"/>
+              <circle cx="9" cy="39" r="6"/>
+              <circle cx="39" cy="39" r="6"/>
+            </svg>
+            <span>4</span>
+          </dd>
+        </div>
       </dl>
     </div>
   </section>
 
-  {# Panel derecho: formulario #}
-  <section class="split-form">
+  {# Description form #}
+  <section class="col-lg-6 split-form">
     <div class="split-inner">
       {% with step=1, step_name="" %}{% include "_step.html" %}{% endwith %}
       <h1 class="page-title">¿Qué bien vende su empresa?</h1>
       <p class="subtitle">Descríbalo con sus propias palabras. Cuanto más detallada sea la descripción, más precisa será la clasificación en el catálogo estatal.</p>
 
       {% if retry %}
-      <div class="notice notice-info">Pruebe describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</div>
+      <div class="alert alert-info">Pruebe describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</div>
       {% endif %}
 
       <form method="post" action="{{ url_for('candidates') }}" class="form" data-loading novalidate>
         <div class="field">
-          <label for="description" class="label">Descripción del bien <span class="required" aria-hidden="true">*</span></label>
-          <textarea id="description" name="description" rows="5" maxlength="{{ max_length }}"
-                    aria-describedby="tips{% if error %} description-error{% endif %}"
+          <label for="description" class="form-label label">Descripción del bien <span class="required" aria-hidden="true">*</span></label>
+          <textarea class="form-control" required id="description" name="description" rows="5" maxlength="{{ max_length }}"
+                    aria-describedby="tips description-error"
                     {% if error %}aria-invalid="true"{% endif %} data-required>{{ description }}</textarea>
           <p id="description-error" class="error" role="alert" {% if not error %}hidden{% endif %}>
             <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
@@ -41,7 +72,7 @@
           </p>
         </div>
 
-        <div id="tips" class="tips">
+        <div id="tips" class="card tips">
           <p class="tips-title">¿Qué incluir en la descripción?</p>
           <ul>
             <li>Nombre del producto o bien</li>
@@ -51,11 +82,14 @@
           </ul>
         </div>
 
-        <button type="submit" class="button-primary button-wide" data-loading-text="Buscando en el catálogo…">
+        <button type="submit" class="btn btn-primary w-100" data-loading-text="Buscando en el catálogo…">
           Buscar código CUBSO
           <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
-        <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+        <p class="loading-status" role="status" aria-atomic="true">
+          <span class="loading-placeholder" aria-hidden="true">Esto puede tardar unos segundos.</span>
+          <span class="loading-message"></span>
+        </p>
         <p class="privacy-note">No guardamos su descripción. Se procesa con un modelo de lenguaje solo para identificar el bien en el catálogo.</p>
       </form>
     </div>
