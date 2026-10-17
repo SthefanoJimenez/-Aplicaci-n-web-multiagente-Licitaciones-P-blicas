@@ -10,8 +10,8 @@
   <p>No encontramos en el catálogo un bien con compras suficientes que corresponda a «{{ description }}».</p>
   <p class="text-muted">El sistema evalúa los bienes que el Estado compró al menos {{ min_catalog }} veces mediante procedimientos de selección entre 2023 y 2025. No incluye servicios, obras ni bienes que se compran por otras vías.</p>
   <div class="actions actions-centered">
-    <a class="button-primary" href="{{ url_for('describe', reintentar=1) }}">Describir con otras palabras</a>
-    <a class="button-secondary" href="{{ url_for('describe') }}">Buscar otro bien</a>
+    <a class="btn btn-primary" href="{{ url_for('describe', reintentar=1) }}">Describir con otras palabras</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('describe') }}">Buscar otro bien</a>
   </div>
 </div>
 {% endblock %}

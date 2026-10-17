@@ -1,6 +1,9 @@
 // JavaScript mínimo (SP-003): validación del campo vacío e indicador de carga.
 // Si el navegador no ejecuta JavaScript, el servidor hace la misma validación.
 
+// Lleva al campo con error también cuando la validación vino del servidor.
+document.querySelector('[data-required][aria-invalid="true"]')?.focus();
+
 document.querySelectorAll("form[data-loading]").forEach((form) => {
     form.addEventListener("submit", (event) => {
         const field = form.querySelector("[data-required]");
@@ -20,7 +23,7 @@ document.querySelectorAll("form[data-loading]").forEach((form) => {
             button.setAttribute("aria-busy", "true");
             button.textContent = button.dataset.loadingText;
         }
-        const status = form.querySelector(".loading-status");
-        if (status) status.hidden = false;
+        const message = form.querySelector(".loading-message");
+        if (message) message.textContent = "Esto puede tardar unos segundos.";
     });
 });

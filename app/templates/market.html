@@ -7,34 +7,34 @@
 
 <h1 class="page-title">Análisis de mercado</h1>
 <p class="chosen-good">
-  <span class="code-chip">CUBSO {{ m.code }}</span>
+  <span class="badge code-chip">CUBSO {{ m.code }}</span>
   <span class="chosen-good-name">{{ m.name }}</span>
 </p>
 <p class="chosen-good-unit">Unidad de medida: {{ m.unit }}</p>
 
 {% if not has_evidence %}
-<div class="notice notice-warning" role="status">
+<div class="alert alert-warning" role="status">
   <strong>Sin evidencia suficiente para un veredicto.</strong>
   Este bien tiene {{ m.n_awards }} adjudicaciones en {{ period }} y se necesitan al menos {{ min_verdict }}.
   El rango se muestra solo como referencia; con tan pocas compras, el sistema no compara su costo.
 </div>
 {% endif %}
 
-<section class="section" aria-labelledby="range-title-heading">
+<section class="card section" aria-labelledby="range-title-heading">
   <h2 class="section-label" id="range-title-heading">Rango de precios unitarios</h2>
 
   <div class="metrics">
-    <div class="metric">
+    <div class="card metric">
       <p class="metric-label">P25</p>
       <p class="metric-value">{{ m.p25|pen }}</p>
       <p class="metric-detail">{{ per_unit }}</p>
     </div>
-    <div class="metric metric-highlight">
+    <div class="card metric metric-highlight">
       <p class="metric-label">Mediana</p>
       <p class="metric-value">{{ m.median|pen }}</p>
       <p class="metric-detail">{{ per_unit }}</p>
     </div>
-    <div class="metric">
+    <div class="card metric">
       <p class="metric-label">P75</p>
       <p class="metric-value">{{ m.p75|pen }}</p>
       <p class="metric-detail">{{ per_unit }}</p>
@@ -71,21 +71,21 @@
   </p>
 </section>
 
-<section class="section" aria-labelledby="competition-title">
+<section class="card section" aria-labelledby="competition-title">
   <h2 class="section-label" id="competition-title">Competencia en el mercado</h2>
 
   <div class="metrics">
-    <div class="metric">
+    <div class="card metric">
       <p class="metric-label">Postores (mediana)</p>
       <p class="metric-value">{{ m.median_bidders|number if m.n_with_bidders else "—" }}</p>
       <p class="metric-detail">{{ "por proceso" if m.n_with_bidders else "sin datos" }}</p>
     </div>
-    <div class="metric">
+    <div class="card metric">
       <p class="metric-label">Postor único</p>
       <p class="metric-value">{{ m.pct_single_bidder|percent if m.n_with_bidders else "—" }}</p>
       <p class="metric-detail">{{ "de los procesos" if m.n_with_bidders else "sin datos" }}</p>
     </div>
-    <div class="metric">
+    <div class="card metric">
       <p class="metric-label">La Libertad</p>
       <p class="metric-value">{{ "{:,}".format(m.n_la_libertad) }}</p>
       <p class="metric-detail">{{ "adjudicación" if m.n_la_libertad == 1 else "adjudicaciones" }}</p>
@@ -93,7 +93,7 @@
   </div>
 
   {% set total = "{:,}".format(m.n_awards) %}
-  <div class="notice notice-info notice-left competition-summary">
+  <div class="alert alert-info notice-left competition-summary">
     {% if not m.n_with_bidders %}
     Las adjudicaciones de este bien no tienen registro de postores, por eso no se muestra la competencia.
     {% elif m.n_single_bidder == 0 %}
@@ -119,17 +119,17 @@
 </section>
 
 <div class="actions actions-pair">
-  <a class="button-secondary" href="{{ url_for('back_to_candidates') }}">
+  <a class="btn btn-outline-primary" href="{{ url_for('back_to_candidates') }}">
     <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
     Cambiar código
   </a>
   {% if has_evidence %}
-  <button type="button" class="button-primary" disabled aria-describedby="cost-note">
+  <button type="button" class="btn btn-primary" disabled aria-describedby="cost-note">
     Ingresar mi costo
     <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
   </button>
   {% else %}
-  <a class="button-primary" href="{{ url_for('describe') }}">Buscar otro bien</a>
+  <a class="btn btn-primary" href="{{ url_for('describe') }}">Buscar otro bien</a>
   {% endif %}
 </div>
 {% if has_evidence %}

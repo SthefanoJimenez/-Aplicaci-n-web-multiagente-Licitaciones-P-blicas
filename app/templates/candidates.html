@@ -5,7 +5,7 @@
 <h1 class="page-title">Seleccione el código del bien</h1>
 <p class="subtitle">Según su descripción, el sistema encontró estos bienes del catálogo CUBSO, ordenados del más al menos probable. Confirme el que mejor represente lo que vende.</p>
 
-<div class="description-card">
+<div class="card description-card">
   <div class="description-card-text">
     <p class="description-card-label">Su descripción</p>
     <p class="description-card-value">«{{ description }}»</p>
@@ -15,15 +15,15 @@
 
 <form method="post" action="{{ url_for('confirm') }}" class="form">
   <fieldset class="candidates">
-    <legend class="sr-only">Bienes del catálogo</legend>
+    <legend class="visually-hidden">Bienes del catálogo</legend>
     {% for c in candidates %}
-    <label class="candidate" style="animation-delay: {{ loop.index0 * 80 }}ms">
-      <input type="radio" name="code" value="{{ c.code }}" {% if c.code == selected or (not selected and loop.first) %}checked{% endif %}>
+    <label class="card candidate" style="animation-delay: {{ loop.index0 * 80 }}ms">
+      <input class="form-check-input" type="radio" name="code" value="{{ c.code }}" {% if c.code == selected or (not selected and loop.first) %}checked{% endif %}>
       <span class="candidate-rank" aria-hidden="true">{{ loop.index }}</span>
       <span class="candidate-detail">
         <span class="candidate-heading">
-          <span class="code-chip">CUBSO {{ c.code }}</span>
-          {% if loop.first and candidates|length > 1 %}<span class="badge badge-success">Más probable</span>{% endif %}
+          <span class="badge code-chip">CUBSO {{ c.code }}</span>
+          {% if loop.first and candidates|length > 1 %}<span class="badge text-bg-success">Más probable</span>{% endif %}
         </span>
         <span class="candidate-name">{{ c.name }}</span>
         <span class="candidate-unit">Unidad de medida: {{ c.unit }}</span>
@@ -34,8 +34,8 @@
   </fieldset>
 
   <div class="actions actions-pair">
-    <a class="button-secondary" href="{{ url_for('describe', reintentar=1) }}">Ninguno me corresponde</a>
-    <button type="submit" class="button-primary">
+    <a class="btn btn-outline-primary" href="{{ url_for('describe', reintentar=1) }}">Ninguno me corresponde</a>
+    <button type="submit" class="btn btn-primary">
       Confirmar y ver mercado
       <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
     </button>
