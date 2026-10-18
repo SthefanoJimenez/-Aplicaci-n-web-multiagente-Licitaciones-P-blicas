@@ -24,7 +24,7 @@
     <label for="f-place">Lugar de entrega</label>
     <select id="f-place" name="lugar">
       <option value="">Todo el Perú</option>
-      {% for d in departments %}<option value="{{ d }}" {% if f.department == d %}selected{% endif %}>{{ d|title }}</option>{% endfor %}
+      {% for d in departments %}<option value="{{ d }}" {% if f.department == d %}selected{% endif %}>{{ d|place }}</option>{% endfor %}
     </select>
   </div>
   <div>
@@ -53,7 +53,7 @@
 {% set active = [] %}
 {% if f.month %}{% set _ = active.append(months[f.month - 1]|capitalize) %}{% endif %}
 {% if f.year %}{% set _ = active.append(f.year|string) %}{% endif %}
-{% if f.department %}{% set _ = active.append(f.department|title) %}{% endif %}
+{% if f.department %}{% set _ = active.append(f.department|place) %}{% endif %}
 {% if f.process %}{% set _ = active.append(f.process) %}{% endif %}
 {% if f.size %}{% set _ = active.append(size_labels[f.size]) %}{% endif %}
 {% if f.entity_type %}{% set _ = active.append(entity_type_labels[f.entity_type]) %}{% endif %}
@@ -119,34 +119,92 @@
 
 <section class="section panel" aria-labelledby="places-title">
   <h2 class="panel-title" id="places-title">¿Dónde se compra?</h2>
+  {% set sp = o.special %}
+  {% if f.department == "MULTIDEPARTAMENTAL" %}
+  <div class="notice notice-info place-note" role="note">
+    <strong>¿Qué significa «multidepartamental»?</strong>
+    <p>Son compras que la entidad entrega en <b>más de un departamento</b>. El OECE las registra como «MULTIDEPARTAMENTAL» (y su provincia como «MULTIPROVINCIAL») sin indicar cuáles departamentos son. Por eso el mapa aparece rayado completo: significa «varios departamentos sin detalle», no que haya compras en cada uno.</p>
+    {% if sp.top_entity %}<p>Suelen ser compras centralizadas de entidades nacionales: {{ sp.top_entity.name|title }} hizo {{ "{:,}".format(sp.top_entity.n) }} de estas {{ "{:,}".format(o.n_awards) }} compras ({{ "%.0f"|format(sp.top_entity.pct) }}%).</p>{% endif %}
+  </div>
+  {% elif f.department == "EXTERIOR" %}
+  <div class="notice notice-info place-note" role="note">
+    <strong>¿Qué significa «exterior»?</strong>
+    <p>Son compras con entrega <b>fuera del Perú</b>, por lo general a proveedores extranjeros no domiciliados. El OECE las registra como «EXTERIOR» y no publica el país de entrega ni el del proveedor; por eso no las ubicamos en un mapa. Abajo está cada compra para que pueda revisarla.</p>
+  </div>
+  {% else %}
   <p class="panel-lead">{{ i.top_place|title }} concentra {{ "{:,}".format(i.top_place_n) }} compras.{% if not f.department %} La Libertad tiene {{ "{:,}".format(i.local) }} ({{ "%.1f"|format(i.local_share) }}%).{% endif %} Haga clic en un departamento del mapa para filtrar todo el panorama.</p>
+  {% endif %}
+
+  {% if f.department == "EXTERIOR" %}
+  <div class="table-wrap">
+    <table class="data-table recent-table">
+      <thead><tr><th>Buena pro</th><th>Entidad</th><th>Bien</th><th>Proveedor</th><th class="num">Monto</th></tr></thead>
+      <tbody>
+        {% for r in sp.exterior_rows %}
+        <tr><td class="date">{{ r.date|date_pe }}</td><td class="name">{{ r.entity }}{% if r.nomenclature %}<span class="proc-id">{{ r.nomenclature }}</span>{% endif %}</td><td class="name">{{ r.good }}</td><td class="name">{{ r.supplier or "—" }}</td><td class="num">{{ r.amount|amount }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {% set multi = f.department == "MULTIDEPARTAMENTAL" %}
   <div class="map-layout">
     <div class="map" data-chart>
-      <svg viewBox="0 0 {{ geo.width }} {{ geo.height }}" role="img" aria-label="Mapa del Perú: compras por departamento de entrega">
+      <svg viewBox="0 0 {{ geo.width }} {{ geo.height }}" role="img" aria-label="{% if multi %}Mapa del Perú rayado: compras con entrega en varios departamentos sin detalle{% else %}Mapa del Perú: compras por departamento de entrega{% endif %}">
+        <defs>
+          <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="7" height="7" fill="#cde2fb"/><line x1="0" y1="0" x2="0" y2="7" stroke="#1c5cab" stroke-width="3"/>
+          </pattern>
+        </defs>
         {% for name, shape in geo.departments.items() %}
         {% set v = o.map.departments.get(name) %}
         {% set q = dict(query, lugar=name) %}
+        {% if multi %}
+        <path d="{{ shape.d }}" style="fill: url(#hatch)" data-label="{{ name|title }}" data-value="Varios departamentos" data-extra="el OECE no detalla cuáles"><title>{{ name|title }}: entrega en varios departamentos, sin detalle</title></path>
+        {% else %}
         <a href="{{ url_for('overview', **q) }}" aria-label="{{ name|title }}: {{ '{:,}'.format(v.n) if v else 0 }} compras"
            data-label="{{ name|title }}" data-value="{{ '{:,}'.format(v.n) if v else 0 }} compras" data-extra="{{ v.amount|amount if v else 'S/ 0' }} adjudicados">
           <path d="{{ shape.d }}" {% if v %}style="fill: {{ v.color }}"{% endif %}
                 class="{% if not v %}zero{% endif %}{% if f.department == name %} selected{% elif name == 'LA LIBERTAD' %} local{% endif %}"><title>{{ name|title }}: {{ "{:,}".format(v.n) if v else 0 }} compras</title></path>
         </a>
+        {% endif %}
         {% endfor %}
       </svg>
       <div class="map-legend" aria-label="Leyenda">
+        {% if multi %}
+        <span><i class="swatch-hatch"></i>varios departamentos, sin detalle</span>
+        {% else %}
         {% for l in o.map.legend %}<span><i style="background: {{ l.color }}"></i>{{ "{:,}".format(l.low) }}{% if l.high != l.low %} a {{ "{:,}".format(l.high) }}{% endif %}</span>{% endfor %}
         <span><i style="background:#e9edf2"></i>sin compras</span>
+        {% endif %}
       </div>
-      <p class="source">Borde punteado: La Libertad. Mapa: polígonos de github.com/juaneladio/peru-geojson (MPL-2.0).</p>
+      {% if not multi and not f.department and (sp.multi or sp.exterior) %}
+      <p class="source">No aparecen en el mapa porque no tienen un solo departamento:
+        {% if sp.multi %}<a href="{{ url_for('overview', **dict(query, lugar='MULTIDEPARTAMENTAL')) }}">{{ "{:,}".format(sp.multi) }} compras multidepartamentales</a>{% endif %}{% if sp.multi and sp.exterior %} y {% endif %}{% if sp.exterior %}<a href="{{ url_for('overview', **dict(query, lugar='EXTERIOR')) }}">{{ "{:,}".format(sp.exterior) }} en el exterior</a>{% endif %}.</p>
+      {% endif %}
+      <p class="source">{% if not multi %}Borde punteado: La Libertad. {% endif %}Mapa: polígonos de github.com/juaneladio/peru-geojson (MPL-2.0).</p>
     </div>
     <div>
+      {% if multi and sp.entity_places %}
+      <p class="small muted" style="margin:0 0 6px">Departamento donde está la entidad que compra (no el de entrega):</p>
       <div class="table-wrap" style="margin-top:0">
         <table class="data-table">
-          <thead><tr><th>Departamento</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num hide-sm">Monto</th></tr></thead>
+          <thead><tr><th>Sede de la entidad</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th></tr></thead>
+          <tbody>
+            {% for p in sp.entity_places[:10] %}
+            <tr><td>{{ p.label|title }}</td><td class="num">{{ "{:,}".format(p.n) }}</td><td class="bar-cell"><div class="bar"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="table-wrap" style="margin-top:0">
+        <table class="data-table">
+          <thead><tr><th>Lugar de entrega</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num hide-sm">Monto</th></tr></thead>
           <tbody>
             {% for p in o.by_place[:10] %}
             <tr{% if p.local %} class="highlight"{% endif %}>
-              <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+              <td>{{ p.label|place }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
               <td class="num">{{ "{:,}".format(p.value) }}</td>
               <td class="bar-cell"><div class="bar{% if p.local %} bar-local{% endif %}"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td>
               <td class="num hide-sm">{{ p.amount|amount }}</td>
@@ -159,12 +217,14 @@
       <details class="table-view">
         <summary>Ver los {{ o.by_place|length }} lugares</summary>
         <div class="table-wrap"><table class="data-table"><tbody>
-          {% for p in o.by_place %}<tr><td>{{ p.label|title }}</td><td class="num">{{ "{:,}".format(p.value) }}</td><td class="num">{{ p.amount|amount }}</td></tr>{% endfor %}
+          {% for p in o.by_place %}<tr><td>{{ p.label|place }}</td><td class="num">{{ "{:,}".format(p.value) }}</td><td class="num">{{ p.amount|amount }}</td></tr>{% endfor %}
         </tbody></table></div>
       </details>
       {% endif %}
+      {% endif %}
     </div>
   </div>
+  {% endif %}
 </section>
 
 <div class="section grid-2">

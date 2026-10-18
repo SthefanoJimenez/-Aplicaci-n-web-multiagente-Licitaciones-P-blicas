@@ -2960,3 +2960,71 @@ details.table-view summary {
 .carousel-toggle[aria-pressed="true"] .icon-play {
     display: block;
 }
+
+.place-note {
+    display: block;
+    margin: 10px 0 20px;
+    background: var(--seal-tint);
+    border-color: #c9daf0;
+    color: var(--ink);
+}
+
+.place-note p {
+    margin: 6px 0 0;
+    color: var(--ink-2);
+}
+
+.swatch-hatch {
+    background: repeating-linear-gradient(45deg, #1c5cab 0 3px, #cde2fb 3px 7px);
+}
+
+/* ================================================================= Filas de tabla al pasar el cursor
+   Borde en azul claro de la misma escala del sello y fondo muy suave, para seguir una fila
+   con la vista. También se activa con el teclado (foco dentro de la fila). */
+:root {
+    --row-edge: #9ec5f4;
+    --row-fill: #f3f7fd;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+    padding-left: 10px;
+}
+
+.data-table tbody tr {
+    transition: background-color 120ms ease;
+}
+
+.data-table tbody tr:hover td,
+.data-table tbody tr:focus-within td {
+    background: var(--row-fill);
+    box-shadow: inset 0 1.5px 0 var(--row-edge), inset 0 -1.5px 0 var(--row-edge);
+}
+
+.data-table tbody tr:hover td:first-child,
+.data-table tbody tr:focus-within td:first-child {
+    box-shadow: inset 1.5px 0 0 var(--row-edge), inset 0 1.5px 0 var(--row-edge), inset 0 -1.5px 0 var(--row-edge);
+    border-radius: 6px 0 0 6px;
+}
+
+.data-table tbody tr:hover td:last-child,
+.data-table tbody tr:focus-within td:last-child {
+    box-shadow: inset -1.5px 0 0 var(--row-edge), inset 0 1.5px 0 var(--row-edge), inset 0 -1.5px 0 var(--row-edge);
+    border-radius: 0 6px 6px 0;
+}
+
+.data-table tbody tr:hover td:only-child,
+.data-table tbody tr:focus-within td:only-child {
+    box-shadow: inset 0 0 0 1.5px var(--row-edge);
+    border-radius: 6px;
+}
+
+.data-table tbody tr.highlight:hover td {
+    background: var(--seal-tint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .data-table tbody tr {
+        transition: none;
+    }
+}

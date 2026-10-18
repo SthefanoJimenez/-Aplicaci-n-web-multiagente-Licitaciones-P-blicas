@@ -140,6 +140,33 @@ def _by_month(t, year=None, month=None):
             for k, r in zip(keys, g.itertuples())]
 
 
+PLACE_LABELS = {
+    "MULTIDEPARTAMENTAL": "Multidepartamental (varios departamentos)",
+    "EXTERIOR": "Exterior (fuera del Perú)",
+}
+
+
+def place_label(value):
+    return PLACE_LABELS.get(value, str(value).title())
+
+
+def _special_places(t, department):
+    """Lugares de entrega que no son un departamento: el OECE no detalla dónde se entregan."""
+    counts = t["lugar"].value_counts()
+    out = {"multi": int(counts.get("MULTIDEPARTAMENTAL", 0)), "exterior": int(counts.get("EXTERIOR", 0))}
+    if department == "MULTIDEPARTAMENTAL" and len(t):
+        by_entity_place = t["entidad_departamento"].value_counts()
+        top = t["entidad"].value_counts()
+        out["entity_places"] = [{"label": k, "n": int(v), "pct": 100 * v / len(t)} for k, v in by_entity_place.items()]
+        out["top_entity"] = {"name": top.index[0], "n": int(top.iloc[0]), "pct": 100 * top.iloc[0] / len(t)}
+    if department == "EXTERIOR" and len(t):
+        rows = t.sort_values("fecha_buenapro", ascending=False)
+        out["exterior_rows"] = [{"date": _text(r.fecha_buenapro), "entity": _text(r.entidad), "good": _text(r.itemcubso),
+                                 "supplier": _text(r.proveedor), "amount": float(r.monto_adjudicado),
+                                 "nomenclature": _text(r.proceso)} for r in rows.itertuples()]
+    return out
+
+
 def _map_buckets(by_place):
     """Compras por departamento con su tono en el mapa (quintiles de los departamentos con compras)."""
     counts = by_place["n"]
@@ -248,6 +275,7 @@ def overview(year=None, department=None, process=None, size=None, entity_type=No
         "by_process": _bars(by_process),
         "by_entity_type": by_type,
         "by_month": by_month,
+        "special": _special_places(t, department),
         "n_without_date": int(t["fecha_buenapro"].isna().sum()),
         "map": peru_map,
         "by_year": [{"label": int(r.anio), "value": int(r.n), "amount": float(r.amount)}

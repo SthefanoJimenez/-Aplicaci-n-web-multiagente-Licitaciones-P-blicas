@@ -96,7 +96,7 @@
         <tbody>
           {% for p in d.places[:8] %}
           <tr{% if p.local %} class="highlight"{% endif %}>
-            <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+            <td>{{ p.label|place }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
             <td class="num">{{ p.n }}</td>
             <td class="bar-cell"><div class="bar{% if p.local %} bar-local{% endif %}"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td>
             <td class="num">{{ p.median|pen }}</td>
@@ -113,7 +113,7 @@
           <thead><tr><th>Departamento</th><th class="num">Compras</th><th class="num">Precio mediano</th><th class="num">Postores (mediana)</th></tr></thead>
           <tbody>
             {% for p in d.places %}
-            <tr><td>{{ p.label|title }}</td><td class="num">{{ p.n }}</td><td class="num">{{ p.median|pen }}</td><td class="num">{{ p.bidders|number if p.bidders is not none else "—" }}</td></tr>
+            <tr><td>{{ p.label|place }}</td><td class="num">{{ p.n }}</td><td class="num">{{ p.median|pen }}</td><td class="num">{{ p.bidders|number if p.bidders is not none else "—" }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -187,7 +187,7 @@
     <table class="data-table">
       <tbody>
         {% for p in d.local_provinces %}
-        <tr><td>{{ p.label|title }}</td><td class="num">{{ p.value|int }}</td><td class="bar-cell"><div class="bar bar-local"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td></tr>
+        <tr><td>{{ p.label|place }}</td><td class="num">{{ p.value|int }}</td><td class="bar-cell"><div class="bar bar-local"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td></tr>
         {% endfor %}
       </tbody>
     </table>

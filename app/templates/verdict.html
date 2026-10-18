@@ -85,7 +85,7 @@
       <tbody>
         {% for p in w.places %}
         <tr{% if p.local %} class="highlight"{% endif %}>
-          <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+          <td>{{ p.label|place }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
           <td class="num hide-sm">{{ p.n }}</td>
           <td class="num">{{ p.median|pen }}</td>
           <td class="num {{ 'margin-up' if p.margin >= 0 else 'margin-down' }}">{% if p.margin >= 0 %}{{ "%.0f"|format(p.margin) }}% más{% else %}{{ "%.0f"|format(-p.margin) }}% menos{% endif %}</td>

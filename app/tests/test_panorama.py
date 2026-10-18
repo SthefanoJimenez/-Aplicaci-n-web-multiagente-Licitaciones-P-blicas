@@ -188,3 +188,20 @@ def test_large_purchase_markets_are_flagged():
     detail = analytics.good_detail(big, data.GOODS[big]["unit"])
     assert detail["median_amount"] >= analytics.HIGH_AMOUNT_THRESHOLD
     assert not analytics.good_detail(CEMENT_I, data.GOODS[CEMENT_I]["unit"])["large"]["is_large"]
+
+
+def test_multidepartmental_is_explained_and_not_placed_in_one_department(client, no_model):
+    html = client.get("/panorama?lugar=MULTIDEPARTAMENTAL").get_data(as_text=True)
+    assert "¿Qué significa «multidepartamental»?" in html
+    assert "url(#hatch)" in html and "varios departamentos, sin detalle" in html
+    assert "Sede de la entidad" in html
+    overview = client.get("/panorama").get_data(as_text=True)
+    assert "No aparecen en el mapa porque no tienen un solo departamento" in overview
+
+
+def test_exterior_lists_each_purchase_without_inventing_a_country(client, no_model):
+    o = analytics.overview(None, "EXTERIOR")
+    html = client.get("/panorama?lugar=EXTERIOR").get_data(as_text=True)
+    assert "¿Qué significa «exterior»?" in html and "no publica el país" in html
+    assert "<path d=" not in html.split("places-title", 1)[1].split("</section>", 1)[0]
+    assert len(o["special"]["exterior_rows"]) == o["n_awards"]

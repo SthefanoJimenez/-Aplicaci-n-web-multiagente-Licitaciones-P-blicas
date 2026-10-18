@@ -21,6 +21,7 @@ def common_context():
 app.template_filter("pen")(format_pen)
 app.template_filter("amount")(format_amount)
 app.template_filter("unit_text")(unit_text)
+app.template_filter("place")(analytics.place_label)
 
 
 @app.template_filter("number")
