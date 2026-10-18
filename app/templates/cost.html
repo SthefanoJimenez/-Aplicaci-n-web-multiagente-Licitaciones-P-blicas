@@ -1,0 +1,49 @@
+{% extends "flow.html" %}
+{% set step = 4 %}
+{% block title %}Ingrese su costo{% endblock %}
+{% block flow %}
+<h1 class="page-title">¿Cuánto le cuesta a usted cada {{ m.unit|unit_text }}?</h1>
+<div class="chosen">
+  <span class="chip">CUBSO {{ m.code }}</span>
+  <span class="chosen-name">{{ m.name }}</span>
+</div>
+<p class="page-lead">Escriba su costo unitario mínimo: lo menos que puede cobrar por {{ m.unit|unit_text }} sin perder dinero, incluyendo la compra o producción, el flete, el almacenamiento y el IGV.</p>
+
+<div class="section panel">
+  <form method="post" action="{{ url_for('verdict') }}" novalidate>
+    <label for="cost" class="label">Su costo por {{ m.unit|unit_text }}</label>
+    <div class="money">
+      <span aria-hidden="true">S/</span>
+      <input id="cost" name="cost" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"
+             pattern="[0-9]+([.,][0-9]{1,4})?" maxlength="13" data-numeric
+             data-tour="1" data-tour-title="Su costo por unidad" data-tour-text="Escriba solo el número, con punto o coma para los decimales. Su costo no se guarda."
+             value="{{ cost_text or '' }}" aria-describedby="cost-hint{% if error %} cost-error{% endif %}"
+             {% if error %}aria-invalid="true"{% endif %} required>
+    </div>
+    <p class="hint" id="cost-hint">Como referencia, la mitad de las compras del Estado se pagó a {{ m.median|pen }} o menos por {{ m.unit|unit_text }}.</p>
+    {% if error %}
+    <p class="error" id="cost-error" role="alert">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+      <span>{{ error }}</span>
+    </p>
+    {% endif %}
+    <fieldset class="rnp" data-tour="2" data-tour-title="¿Tiene RNP?" data-tour-text="Responda si su empresa está inscrita en el Registro Nacional de Proveedores. No detiene la evaluación.">
+      <legend class="label">¿Su empresa tiene inscripción vigente en el RNP?</legend>
+      <p class="hint">El Registro Nacional de Proveedores. Su respuesta no detiene la evaluación y no se guarda.</p>
+      <div class="rnp-options">
+        {% for value, text in [("si", "Sí"), ("no", "No"), ("no-se", "No lo sé")] %}
+        <label class="rnp-option"><input type="radio" name="rnp" value="{{ value }}" {% if rnp == value %}checked{% endif %}> {{ text }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="actions actions-between">
+      <a class="button button-secondary" href="{{ url_for('market') }}">Volver al mercado</a>
+      <button type="submit" class="button button-primary" data-tour="3" data-tour-title="Vea su veredicto" data-tour-text="Haga clic para comparar su costo con lo que pagó el Estado." data-tour-click>Ver mi veredicto</button>
+    </div>
+    <p class="privacy">
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+      <span>Su costo no se guarda ni se envía a ningún modelo de lenguaje. Se compara con el rango de precios y se descarta.</span>
+    </p>
+  </form>
+</div>
+{% endblock %}

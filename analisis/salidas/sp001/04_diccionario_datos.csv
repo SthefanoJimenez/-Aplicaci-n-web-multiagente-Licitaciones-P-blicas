@@ -1,0 +1,18 @@
+﻿fuente,columna,tipo,pct_lleno_2023,pct_lleno_2024,pct_lleno_2025,descripcion,uso_en_el_proyecto
+ADJUDICACIONES,codigoconvocatoria,int64,100.0,100.0,100.0,Identificador de la convocatoria,Llave de cruce
+ADJUDICACIONES,n_item,int64,100.0,100.0,100.0,Número del ítem dentro de la convocatoria,Llave de cruce
+ADJUDICACIONES,objetocontractual,object,100.0,100.0,100.0,"Tipo de objeto: Bien, Servicio, Obra o Consultoría de Obra",Filtro: solo bienes
+ADJUDICACIONES,tipoprocesoseleccion,object,100.0,100.0,100.0,Tipo de procedimiento de selección,Filtro: excluir contrataciones directas
+ADJUDICACIONES,moneda,object,100.0,100.0,100.0,Moneda de la contratación,Filtro: moneda nacional
+ADJUDICACIONES,cantidad_adjudicado_item,float64,100.0,100.0,100.0,Cantidad adjudicada del ítem,Cálculo del precio unitario
+ADJUDICACIONES,monto_adjudicado_item_soles,float64,100.0,100.0,100.0,"Monto adjudicado del ítem, en soles",Cálculo del precio unitario
+ADJUDICACIONES,monto_referencial_item_soles,float64,100.0,100.0,100.0,"Valor referencial del ítem, en soles",Relación precio adjudicado / referencial
+ADJUDICACIONES,unidad_medida,object,100.0,100.0,100.0,Unidad de medida del ítem,Agrupación por código y unidad
+ADJUDICACIONES,entidad_departamento,object,100.0,100.0,100.0,Departamento de la entidad compradora,Adjudicaciones de La Libertad
+CONVOCATORIAS,codigoconvocatoria,int64,100.0,100.0,100.0,Identificador de la convocatoria,Llave de cruce
+CONVOCATORIAS,n_item,int64,100.0,100.0,100.0,Número del ítem dentro de la convocatoria,Llave de cruce
+CONVOCATORIAS,codigoitem,float64,84.3,84.3,82.8,Código CUBSO del ítem,Agrupación y catálogo del clasificador
+CONVOCATORIAS,itemcubso,object,84.3,84.3,82.8,Nombre del bien según el catálogo CUBSO,Catálogo del clasificador
+POSTOR,codigo_convocatoria,int64,100.0,100.0,100.0,Identificador de la convocatoria,Llave de cruce
+POSTOR,n_item,int64,100.0,100.0,100.0,Número del ítem dentro de la convocatoria,Llave de cruce
+POSTOR,ruc_codigo_postor,object,100.0,100.0,100.0,RUC o código del postor,Conteo de postores por ítem

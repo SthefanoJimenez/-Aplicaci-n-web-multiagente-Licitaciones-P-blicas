@@ -3,9 +3,9 @@
 venv/
 env/
 
-# Variables de entorno y secretos
+# Variables de entorno y secretos (cualquier carpeta)
 .env
-app/.env
+**/.env
 
 # Caché de Python y pruebas
 __pycache__/
@@ -15,6 +15,14 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Archivos de sistema operativo
+# Archivos de sistema operativo y editor
 .DS_Store
 Thumbs.db
+analisis/.vscode/
+
+# Análisis: datos pesados o que se regeneran con los scripts
+analisis/datos/crudos/
+analisis/datos/cache/
+analisis/datos/procesados/
+analisis/datos/produccion/
+*.log

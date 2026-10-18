@@ -1,0 +1,385 @@
+[
+  {
+    "tag": [
+      "compiled"
+    ],
+    "id": "ocds-dgv273-seacev3-1257184-2026-10-13T10:11:23.155599-05:00",
+    "date": "2026-10-13T10:11:23.155587-05:00",
+    "ocid": "ocds-dgv273-seacev3-1257184",
+    "publishedDate": "2026-10-13T10:11:23.155604-05:00",
+    "initiationType": "tender",
+    "buyer": {
+      "id": "PE-CONSUCODE-1898",
+      "name": "UNIVERSIDAD NACIONAL DEL CALLAO"
+    },
+    "planning": {
+      "budget": {
+        "description": "Fondos Públicos"
+      }
+    },
+    "tender": {
+      "id": "1257184",
+      "title": "LP-SM-2-2026-UNAC-1",
+      "description": "ADQUISICION DE UNIFORMES PARA LOS DOCENTES ORDINARIOS A T.C. y D.E; SERVIDORES ADMINISTRATIVOS DEL D.L. N° 276 y D.L. N° 1057 - CAS DE LA UNIVERSIDAD NACIONAL DEL CALLAO",
+      "procuringEntity": {
+        "id": "PE-CONSUCODE-1898",
+        "name": "UNIVERSIDAD NACIONAL DEL CALLAO"
+      },
+      "datePublished": "2026-10-12T22:03:00-05:00",
+      "procurementMethod": "open",
+      "procurementMethodDetails": "Licitación Pública",
+      "mainProcurementCategory": "goods",
+      "additionalProcurementCategories": [
+        "goods"
+      ],
+      "value": {
+        "amount": 0.0,
+        "currency": "PEN",
+        "currencyName": "Soles",
+        "amount_PEN": 0.0
+      },
+      "tenderPeriod": {
+        "startDate": "2026-10-12T00:00:00-05:00",
+        "endDate": "2026-10-12T00:00:00-05:00"
+      },
+      "enquiryPeriod": {
+        "startDate": "2026-10-13T00:01:00-05:00",
+        "endDate": "2026-10-21T23:59:00-05:00",
+        "durationInDays": 8
+      },
+      "items": [
+        {
+          "id": "21390577",
+          "position": "1",
+          "description": "ADQUISICION DE UNIFORMES PARA LOS DOCENTES ORDINARIOS A T.C. y D.E; SERVIDORES ADMINISTRATIVOS DEL D.L. N° 276 y D.L. N° 1057 - CAS DE LA UNIVERSIDAD NACIONAL DEL CALLAO",
+          "statusDetails": "CONVOCADO",
+          "status": "active",
+          "quantity": 666.0,
+          "totalValue": {
+            "amount": 0.0,
+            "currency": "PEN",
+            "currencyName": "Soles"
+          },
+          "unit": {
+            "id": "40",
+            "name": "Unidad",
+            "scheme": "PE-SEACE3-UnidadMedida"
+          }
+        }
+      ],
+      "documents": [
+        {
+          "id": "24831474986126547",
+          "url": "https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=efa19d62-709d-4502-a5c1-4f5e6106115d",
+          "datePublished": "2026-10-12T22:03:00-05:00",
+          "format": "pdf",
+          "documentType": "biddingDocuments",
+          "title": "Bases Administrativas",
+          "language": "es"
+        }
+      ],
+      "hasTenderInformationProtectedByLaw": false
+    },
+    "parties": [
+      {
+        "id": "PE-CONSUCODE-1898",
+        "name": "UNIVERSIDAD NACIONAL DEL CALLAO",
+        "identifier": {
+          "id": "1898",
+          "scheme": "PE-CONSUCODE",
+          "legalName": "UNIVERSIDAD NACIONAL DEL CALLAO"
+        },
+        "additionalIdentifiers": [
+          {
+            "id": "20138705944",
+            "scheme": "PE-RUC",
+            "legalName": "UNIVERSIDAD NACIONAL DEL CALLAO"
+          }
+        ],
+        "address": {
+          "streetAddress": "AV. SAENZ PEÑA  1060 - 1066 CALLAO",
+          "locality": "LIMA",
+          "region": "LIMA",
+          "department": "LIMA",
+          "countryName": "PERU"
+        },
+        "roles": [
+          "buyer",
+          "procuringEntity"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "seace_v3",
+        "name": "Sistema Electrónico de Contrataciones del Estado - Versión 3",
+        "url": "https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorPublico/buscadorPublico.xhtml"
+      }
+    ],
+    "dataSegmentation": {
+      "id": "2026-10",
+      "criteria": [
+        "añoInicioConvocatoria",
+        "mesInicioConvocatoria"
+      ]
+    }
+  },
+  {
+    "tag": [
+      "compiled"
+    ],
+    "id": "ocds-dgv273-seacev3-1257166-2026-10-13T10:11:23.149642-05:00",
+    "date": "2026-10-13T10:11:23.149630-05:00",
+    "ocid": "ocds-dgv273-seacev3-1257166",
+    "publishedDate": "2026-10-13T10:11:23.149648-05:00",
+    "initiationType": "tender",
+    "buyer": {
+      "id": "PE-CONSUCODE-1308",
+      "name": "MUNICIPALIDAD DISTRITAL DE ANCON"
+    },
+    "planning": {
+      "budget": {
+        "description": "Fondos Públicos"
+      }
+    },
+    "tender": {
+      "id": "1257166",
+      "title": "COMPRE-COMPRE-2-2026-OEC/MDA-2",
+      "description": "ADQUISICION DE INFRAESTRUCTURA TECNOLOGICA COMPUESTA  POR VIDEOWALL, EQUIPOS INFORMATICOS PARA SERVIDORES, UPS E INVERSOR DE BANCO DE BATERIA Y OLT GPON PARA EL PUESTO DE AUXILIO RAPIDO CLUB DE TIRO ANCON DE LA MUNICIPALIDAD DISTRITAL DE ANCON",
+      "procuringEntity": {
+        "id": "PE-CONSUCODE-1308",
+        "name": "MUNICIPALIDAD DISTRITAL DE ANCON"
+      },
+      "datePublished": "2026-10-12T20:46:00-05:00",
+      "procurementMethod": "open",
+      "procurementMethodDetails": "Comparación de Precios",
+      "mainProcurementCategory": "goods",
+      "additionalProcurementCategories": [
+        "goods"
+      ],
+      "value": {
+        "amount": 0.0,
+        "currency": "PEN",
+        "currencyName": "Nuevos Soles",
+        "amount_PEN": 0.0
+      },
+      "tenderPeriod": {
+        "startDate": "2026-10-12T00:00:00-05:00",
+        "endDate": "2026-10-12T00:00:00-05:00"
+      },
+      "items": [
+        {
+          "id": "21390294",
+          "position": "15",
+          "description": "ADQUISICION DE INFRAESTRUCTURA TECNOLOGICA COMPUESTA  POR VIDEOWALL, EQUIPOS INFORMATICOS PARA SERVIDORES, UPS E INVERSOR DE BANCO DE BATERIA Y OLT GPON PARA EL PUESTO DE AUXILIO RAPIDO CLUB DE TIRO ANCON DE LA MUNICIPALIDAD DISTRITAL DE ANCON",
+          "statusDetails": "CONVOCADO",
+          "status": "active",
+          "quantity": 49.0,
+          "totalValue": {
+            "amount": 0.0,
+            "currency": "PEN",
+            "currencyName": "Nuevos Soles"
+          },
+          "unit": {
+            "id": "40",
+            "name": "Unidad",
+            "scheme": "PE-SEACE3-UnidadMedida"
+          }
+        }
+      ],
+      "documents": [
+        {
+          "id": "24831474986126424",
+          "url": "https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=79c1ed5b-8105-4a75-9693-554f17304d1f",
+          "datePublished": "2026-10-12T20:46:00-05:00",
+          "format": "pdf",
+          "documentType": "biddingDocuments",
+          "title": "Bases Administrativas",
+          "language": "es"
+        },
+        {
+          "id": "24831474986126425",
+          "url": "https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=5a576e2a-1914-4995-b5b1-24c8d130f165",
+          "datePublished": "2026-10-12T20:46:00-05:00",
+          "format": "pdf",
+          "documentType": "evaluationReports",
+          "title": "Informe que sustenta la declaratoria de Desierto",
+          "language": "es"
+        }
+      ],
+      "hasTenderInformationProtectedByLaw": false
+    },
+    "parties": [
+      {
+        "id": "PE-CONSUCODE-1308",
+        "name": "MUNICIPALIDAD DISTRITAL DE ANCON",
+        "identifier": {
+          "id": "1308",
+          "scheme": "PE-CONSUCODE",
+          "legalName": "MUNICIPALIDAD DISTRITAL DE ANCON"
+        },
+        "additionalIdentifiers": [
+          {
+            "id": "20131378468",
+            "scheme": "PE-RUC",
+            "legalName": "MUNICIPALIDAD DISTRITAL DE ANCON"
+          }
+        ],
+        "address": {
+          "streetAddress": "MALECON FERREYROS Nº376",
+          "locality": "ANCON",
+          "region": "LIMA",
+          "department": "LIMA",
+          "countryName": "PERU"
+        },
+        "roles": [
+          "buyer",
+          "procuringEntity"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "seace_v3",
+        "name": "Sistema Electrónico de Contrataciones del Estado - Versión 3",
+        "url": "https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorPublico/buscadorPublico.xhtml"
+      }
+    ],
+    "dataSegmentation": {
+      "id": "2026-10",
+      "criteria": [
+        "añoInicioConvocatoria",
+        "mesInicioConvocatoria"
+      ]
+    }
+  },
+  {
+    "tag": [
+      "compiled"
+    ],
+    "id": "ocds-dgv273-seacev3-1257157-2026-10-13T10:11:23.143602-05:00",
+    "date": "2026-10-13T10:11:23.143589-05:00",
+    "ocid": "ocds-dgv273-seacev3-1257157",
+    "publishedDate": "2026-10-13T10:11:23.143607-05:00",
+    "initiationType": "tender",
+    "buyer": {
+      "id": "PE-CONSUCODE-1308",
+      "name": "MUNICIPALIDAD DISTRITAL DE ANCON"
+    },
+    "planning": {
+      "budget": {
+        "description": "Fondos Públicos"
+      }
+    },
+    "tender": {
+      "id": "1257157",
+      "title": "COMPRE-COMPRE-1-2026-OEC/MDA-2",
+      "description": "ADQUISICION DE EQUIPAMIENTO DE CLIMATIZACION, CAMARAS DE VIDEO VIGILANCIA IP66 TIPO 1 Y TIPO 2 Y COMPONENTES PARA SU INSTALACION PARA EL PUESTO DE AUXILIO RAPIDO DEL CLUB DE TIRO DE ANCON DE LA MUNICIPALIDAD DISTRITAL DE ANCON",
+      "procuringEntity": {
+        "id": "PE-CONSUCODE-1308",
+        "name": "MUNICIPALIDAD DISTRITAL DE ANCON"
+      },
+      "datePublished": "2026-10-12T20:47:00-05:00",
+      "procurementMethod": "open",
+      "procurementMethodDetails": "Comparación de Precios",
+      "mainProcurementCategory": "goods",
+      "additionalProcurementCategories": [
+        "goods"
+      ],
+      "value": {
+        "amount": 0.0,
+        "currency": "PEN",
+        "currencyName": "Nuevos Soles",
+        "amount_PEN": 0.0
+      },
+      "tenderPeriod": {
+        "startDate": "2026-10-12T00:00:00-05:00",
+        "endDate": "2026-10-12T00:00:00-05:00"
+      },
+      "items": [
+        {
+          "id": "21390287",
+          "position": "28",
+          "description": "ADQUISICIÓN DE EQUIPAMIENTO DE CLIMATIZACIÓN, CÁMARAS DE VIDEOVIGILANCIA IP66 TIPO 1 Y TIPO 2, Y COMPONENTES PARA SU INSTALACIÓN PARA EL PUESTO DE AUXILIO RÁPIDO CLUB DE TIRO ANCÓN",
+          "statusDetails": "CONVOCADO",
+          "status": "active",
+          "quantity": 495.0,
+          "totalValue": {
+            "amount": 0.0,
+            "currency": "PEN",
+            "currencyName": "Nuevos Soles"
+          },
+          "unit": {
+            "id": "40",
+            "name": "Unidad",
+            "scheme": "PE-SEACE3-UnidadMedida"
+          }
+        }
+      ],
+      "documents": [
+        {
+          "id": "24831474986126442",
+          "url": "https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=4f00d9b0-95ce-4fb1-945c-8cc4f3174003",
+          "datePublished": "2026-10-12T20:47:00-05:00",
+          "format": "pdf",
+          "documentType": "biddingDocuments",
+          "title": "Bases Administrativas",
+          "language": "es"
+        },
+        {
+          "id": "24831474986126443",
+          "url": "https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=53efd14b-0edf-4c99-b988-cbf5034cd184",
+          "datePublished": "2026-10-12T20:47:00-05:00",
+          "format": "pdf",
+          "documentType": "evaluationReports",
+          "title": "Informe que sustenta la declaratoria de Desierto",
+          "language": "es"
+        }
+      ],
+      "hasTenderInformationProtectedByLaw": false
+    },
+    "parties": [
+      {
+        "id": "PE-CONSUCODE-1308",
+        "name": "MUNICIPALIDAD DISTRITAL DE ANCON",
+        "identifier": {
+          "id": "1308",
+          "scheme": "PE-CONSUCODE",
+          "legalName": "MUNICIPALIDAD DISTRITAL DE ANCON"
+        },
+        "additionalIdentifiers": [
+          {
+            "id": "20131378468",
+            "scheme": "PE-RUC",
+            "legalName": "MUNICIPALIDAD DISTRITAL DE ANCON"
+          }
+        ],
+        "address": {
+          "streetAddress": "MALECON FERREYROS Nº376",
+          "locality": "ANCON",
+          "region": "LIMA",
+          "department": "LIMA",
+          "countryName": "PERU"
+        },
+        "roles": [
+          "buyer",
+          "procuringEntity"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "seace_v3",
+        "name": "Sistema Electrónico de Contrataciones del Estado - Versión 3",
+        "url": "https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorPublico/buscadorPublico.xhtml"
+      }
+    ],
+    "dataSegmentation": {
+      "id": "2026-10",
+      "criteria": [
+        "añoInicioConvocatoria",
+        "mesInicioConvocatoria"
+      ]
+    }
+  }
+]

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set active_nav = "data" %}
+{% block title %}Cómo preparamos los datos{% endblock %}
+{% block page_class %}page-narrow{% endblock %}
+{% block content %}
+{% set first = funnel[0] %}
+{% set last = funnel[-1] %}
+<h1 class="page-title">Cómo preparamos los datos</h1>
+<p class="page-lead">El OECE publica cada año tres archivos: adjudicaciones, convocatorias y postores. Los unimos, los limpiamos y nos quedamos solo con las compras que permiten comparar precios de forma justa. De {{ "{:,}".format(first.rows) }} adjudicaciones quedan {{ "{:,}".format(last.rows) }}.</p>
+
+<section class="section panel" aria-labelledby="funnel-title">
+  <h2 class="panel-title" id="funnel-title">Del dato crudo a la tabla de análisis</h2>
+  <p class="panel-lead">Cada paso quita registros que no sirven para calcular un precio unitario comparable.</p>
+  <ol class="funnel">
+    {% for s in funnel %}
+    <li>
+      <span class="step-name">{{ s.name }}<small>{{ s.help }}{% if s.removed %} · se quitan {{ "{:,}".format(s.removed) }}{% endif %}</small></span>
+      <div class="bar"><span style="width: {{ '%.1f'|format(s.pct) }}%"></span></div>
+      <span class="num">{{ "{:,}".format(s.rows) }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  <p class="source">De cada diez adjudicaciones del periodo, tres llegan a la tabla de análisis. El mayor recorte es el filtro de bienes; el segundo, la falta de código CUBSO válido.</p>
+</section>
+
+<section class="section panel" aria-labelledby="join-title">
+  <h2 class="panel-title" id="join-title">Cómo se unen los archivos</h2>
+  <p class="panel-lead">Cada compra se identifica por su código de convocatoria y su número de ítem. Con esa llave se toma de la convocatoria el código CUBSO del bien y de los postores, cuántas empresas se presentaron.</p>
+  <ul class="reasons">
+    <li>El precio unitario es el monto adjudicado dividido entre la cantidad adjudicada.</li>
+    <li>Si un mismo bien se compró en dos unidades distintas (por ejemplo, kilo y saco), se conserva la unidad más usada.</li>
+    <li>Los ganadores que son personas naturales (RUC 10) no se muestran por nombre en la aplicación.</li>
+    <li>Revisamos duplicados: en los archivos originales no hay filas repetidas. Cuando un ítem se adjudicó a varios proveedores, cada adjudicación se cuenta por separado, con su propio proveedor, cantidad y monto.</li>
+    <li>Todas las cifras usan las {{ "{:,}".format(last.rows) }} adjudicaciones completas, sin muestreo.</li>
+  </ul>
+</section>
+
+<section class="section panel" aria-labelledby="atypical-title">
+  <h2 class="panel-title" id="atypical-title">Precios atípicos</h2>
+  <p class="panel-lead">Hay precios que no son creíbles, como un galón de diésel a más de diez millones de soles: lo más probable es que sean errores de registro.</p>
+  <ul class="reasons">
+    <li>Marcamos como atípicos {{ "{:,}".format(atypical.n) }} precios ({{ "%.1f"|format(atypical.share) }}% de las compras), con el criterio de Tukey: fuera de 1.5 veces el rango intercuartílico.</li>
+    <li>No los borramos: los mostramos con la etiqueta «Atípico» para que pueda verificarlos.</li>
+    <li>No afectan al resultado porque el sistema usa la mediana y los percentiles 25 y 75, que no se mueven con valores extremos.</li>
+  </ul>
+</section>
+
+<section class="section panel" aria-labelledby="rules-title">
+  <h2 class="panel-title" id="rules-title">Reglas para dar un veredicto</h2>
+  <p class="panel-lead">Definidas en el análisis SP-002 con los mismos datos.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Regla</th><th class="num">Valor</th></tr></thead>
+      <tbody>
+        <tr><td>Compras mínimas para que un bien entre al catálogo</td><td class="num">{{ rules.MIN_CATALOG }}</td></tr>
+        <tr><td>Compras mínimas para dar un veredicto</td><td class="num">{{ rules.MIN_VERDICT }}</td></tr>
+        <tr><td>Compras mínimas para confianza alta</td><td class="num">{{ rules.MIN_HIGH_CONFIDENCE }}</td></tr>
+        <tr><td>Dispersión baja: la mitad central varía hasta</td><td class="num">{{ "%.0f"|format(rules.LOW_DISPERSION_MAX * 100) }}%</td></tr>
+        <tr><td>Dispersión media: hasta</td><td class="num">{{ "%.0f"|format(rules.MEDIUM_DISPERSION_MAX * 100) }}%</td></tr>
+        <tr><td>Participa</td><td class="num">costo menor que el P25</td></tr>
+        <tr><td>Participa con cautela</td><td class="num">entre el P25 y el P75</td></tr>
+        <tr><td>No rentable</td><td class="num">costo mayor que el P75</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="source">Con estas reglas, {{ "{:,}".format(atypical.n_catalog) }} bienes tienen al menos {{ rules.MIN_CATALOG }} compras y forman el catálogo que usa el clasificador ({{ "{:,}".format(atypical.n_catalog_awards) }} adjudicaciones).</p>
+</section>
+
+<section class="section panel verify" aria-labelledby="verify-title">
+  <h2 class="panel-title" id="verify-title">Verifique los datos usted mismo</h2>
+  <p class="panel-lead">La aplicación usa los archivos de datos abiertos del OECE: adjudicaciones, convocatorias y postores de 2023, 2024 y 2025 (nueve archivos en total, descargados del portal CONOSCE).</p>
+  <ol class="verify-steps">
+    <li><strong>Descargue la tabla de análisis</strong><span>Las {{ "{:,}".format(last.rows) }} adjudicaciones que usa la aplicación, con nomenclatura del proceso, código de convocatoria, entidad, fecha, cantidad, monto y ganador.</span></li>
+    <li><strong>Elija cualquier fila</strong><span>Con la entidad, la fecha de la buena pro y la nomenclatura, ubique el proceso en el buscador público del SEACE.</span></li>
+    <li><strong>Compare con la fuente</strong><span>Descargue los mismos archivos del <a href="https://www.gob.pe/14272-acceder-al-portal-de-datos-abiertos-del-oece" rel="noopener">portal de datos abiertos del OECE</a> y repita los filtros de esta página.</span></li>
+  </ol>
+  <div class="actions" style="margin-top:20px">
+    <a class="button button-secondary" href="{{ url_for('overview_csv') }}" download>Descargar las {{ "{:,}".format(last.rows) }} adjudicaciones (CSV)</a>
+  </div>
+  <p class="source">Los nombres de las personas naturales con negocio (RUC 10) se reemplazan por «Persona natural».</p>
+</section>
+
+<section class="section panel" aria-labelledby="quality-title">
+  <h2 class="panel-title" id="quality-title">Calidad de la fuente por año</h2>
+  <p class="panel-lead">Sobre todas las adjudicaciones publicadas, antes de filtrar.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Año</th><th class="num">Adjudicaciones</th><th class="num">De bienes</th><th class="num">Sin código CUBSO válido</th><th class="num">Sin postores registrados</th></tr></thead>
+      <tbody>
+        {% for q in quality %}
+        <tr><td>{{ q.year }}</td><td class="num">{{ "{:,}".format(q.awards) }}</td><td class="num">{{ "%.1f"|format(q.goods) }}%</td><td class="num">{{ "%.1f"|format(q.no_cubso) }}%</td><td class="num">{{ "%.1f"|format(q.no_bidders) }}%</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="source">Fuente: archivos de adjudicaciones, convocatorias y postores del portal CONOSCE del OECE, 2023-2025.</p>
+</section>
+{% endblock %}

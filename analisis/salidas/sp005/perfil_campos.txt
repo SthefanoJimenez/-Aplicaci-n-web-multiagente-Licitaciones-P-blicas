@@ -1,0 +1,137 @@
+# Perfil de 04_2026_10.zip
+Convocatorias (procesos únicos): 2050 · de bienes: 854
+
+## Categoría (tender.mainProcurementCategory)
+      854 (41.7%)  goods
+      830 (40.5%)  services
+      366 (17.9%)  works
+
+## Bienes · tender.status
+      854 (100.0%)  None
+
+## Bienes · items[].statusDetails
+      911  CONVOCADO
+       58  ADJUDICADO
+       10  DESIERTO
+        5  CONSENTIDO
+        3  CONTRATADO
+        2  NULO
+        1  CANCELADO
+
+## Bienes · items[].status
+      911  active
+       66  complete
+       12  unsuccessful
+        1  cancelled
+
+## Bienes · tag de la última entrega
+      854 (100.0%)  compiled
+
+## Bienes · tenderPeriod
+      801 (93.8%)  endDate = startDate (un día)
+       53 (6.2%)  sin endDate
+
+## Bienes · campos de fecha presentes en tender (candidatos a fecha límite)
+      854 (100.0%)  documents[].datePublished
+      854 (100.0%)  datePublished
+      801 (93.8%)  tenderPeriod.startDate
+      801 (93.8%)  tenderPeriod.endDate
+      801 (93.8%)  tenderPeriod
+      433 (50.7%)  enquiryPeriod.endDate
+      433 (50.7%)  enquiryPeriod
+      433 (50.7%)  enquiryPeriod.startDate
+      427 (50.0%)  enquiryPeriod.durationInDays
+       24 (2.8%)  documents[].dateModified
+
+## Bienes · claves del comprador en parties[]
+      854  id
+      854  name
+      854  identifier
+      854  additionalIdentifiers
+      854  address
+      854  roles
+      511  contactPoint
+
+## Bienes · claves de address del comprador
+      854  streetAddress
+      854  locality
+      854  region
+      854  department
+      854  countryName
+
+## Bienes · departamento del comprador
+      214 (25.1%)  LIMA
+      109 (12.8%)  PUNO
+       99 (11.6%)  CUSCO
+       63 (7.4%)  APURIMAC
+       37 (4.3%)  MOQUEGUA
+       33 (3.9%)  AREQUIPA
+       32 (3.7%)  AYACUCHO
+       28 (3.3%)  JUNIN
+       27 (3.2%)  LA LIBERTAD
+       24 (2.8%)  CALLAO
+       21 (2.5%)  PIURA
+       21 (2.5%)  ANCASH
+       20 (2.3%)  HUANUCO
+       20 (2.3%)  CAJAMARCA
+       17 (2.0%)  HUANCAVELICA
+       17 (2.0%)  TACNA
+       14 (1.6%)  MADRE DE DIOS
+       13 (1.5%)  LAMBAYEQUE
+       12 (1.4%)  UCAYALI
+       11 (1.3%)  SAN MARTIN
+        9 (1.1%)  LORETO
+        6 (0.7%)  TUMBES
+        3 (0.4%)  ICA
+        2 (0.2%)  PASCO
+        2 (0.2%)  AMAZONAS
+
+## Bienes · tender.value.amount
+      785 (91.9%)  0 o vacío
+       69 (8.1%)  mayor que 0
+
+## Bienes · documents[].documentType
+      986  biddingDocuments
+      171  evaluationReports
+       66  awardNotice
+       49  clarifications
+
+## Bienes · documents[].format
+      945  pdf
+      179  zip
+      105  docx
+       40  rar
+        2  7z
+        1  doc
+
+## Bienes · documents[].title
+      864  Bases Administrativas
+      168  Informe que sustenta la declaratoria de Desierto
+       66  Documentos de Otorgamiento de Buena Pro
+       56  Documentos de Presentación de Propuestas
+       48  Bases Integradas
+       26  Acta de no formulación de consultas y observaciones
+       23  Pliego de absolución de consultas y observaciones
+       18  Resumen ejecutivo
+        3  Documentos de Calificación y Evaluación
+
+## Bienes · claves de tender (busque extensiones con estado o fechas)
+      854 (100.0%)  id
+      854 (100.0%)  title
+      854 (100.0%)  description
+      854 (100.0%)  procuringEntity
+      854 (100.0%)  datePublished
+      854 (100.0%)  procurementMethodDetails
+      854 (100.0%)  mainProcurementCategory
+      854 (100.0%)  additionalProcurementCategories
+      854 (100.0%)  value
+      854 (100.0%)  items
+      854 (100.0%)  documents
+      854 (100.0%)  hasTenderInformationProtectedByLaw
+      801 (93.8%)  tenderPeriod
+      489 (57.3%)  procurementMethod
+      433 (50.7%)  enquiryPeriod
+       71 (8.3%)  tenderers
+       71 (8.3%)  numberOfTenderers
+
+Bienes con documento biddingDocuments: 854 de 854 (100.0%)

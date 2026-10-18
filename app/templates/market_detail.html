@@ -1,0 +1,220 @@
+{# Detalle del mercado de un bien: lo usan el paso 3 del flujo (market.html) y la ficha
+   del panorama (good.html). Variables: m, d, has_evidence, ficha, period, per_unit. #}
+{% if d %}
+<dl class="figures">
+  <div><dt>Compras del Estado</dt><dd>{{ "{:,}".format(m.n_awards) }}<small>{{ period }}</small></dd></div>
+  <div><dt>Entidades que lo compraron</dt><dd>{{ "{:,}".format(d.n_entities) }}<small>en {{ d.n_places }} departamentos</small></dd></div>
+  <div><dt>Monto típico de una compra</dt><dd>{{ d.median_amount|amount }}<small>mediana por adjudicación</small></dd></div>
+  <div><dt>Cantidad típica</dt><dd>{{ d.median_quantity|number }}<small>{{ m.unit|unit_text }} por compra</small></dd></div>
+</dl>
+{% endif %}
+
+{% if d and d.large.is_large %}
+<div class="section notice notice-large" role="note">
+  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.26 3.1c.77-1.33 2.7-1.33 3.47 0l6.06 10.5c.77 1.33-.19 3-1.73 3H3.94c-1.54 0-2.5-1.67-1.73-3L8.26 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  <div>
+    <strong>Mercado de compras de monto alto</strong>
+    <p>La compra típica de este bien es de {{ d.median_amount|amount }}, entre el 10% más alto del catálogo (más de {{ d.large.threshold|amount }}). El {{ "%.0f"|format(d.large.share_over_250k) }}% de las compras superó S/ 250 mil{% if d.large.share_over_1m >= 1 %} y el {{ "%.0f"|format(d.large.share_over_1m) }}% superó S/ 1 millón{% endif %}. Antes de postular, confirme que puede financiar y entregar pedidos de ese tamaño: la cantidad típica es de {{ d.median_quantity|number }} {{ m.unit|unit_text }} por compra.</p>
+  </div>
+</div>
+{% endif %}
+
+<section class="section panel" aria-labelledby="range-title"{% if not ficha %} data-tour="1" data-tour-title="Lo que pagó el Estado" data-tour-text="El rango de precios por unidad: una de cada cuatro compras se pagó al P25 o menos, la mitad a la mediana o menos y tres de cada cuatro al P75 o menos."{% endif %}>
+  <h2 class="panel-title" id="range-title">Rango de precios unitarios</h2>
+  <p class="panel-lead">Lo que pagó el Estado {{ per_unit }}.{% if not ficha %} Úselo para comparar su costo.{% endif %}</p>
+
+  <dl class="figures figures-strong" style="margin-top:0">
+    <div><dt>P25</dt><dd>{{ m.p25|pen }}<small>{{ per_unit }}</small></dd></div>
+    <div><dt>Mediana</dt><dd>{{ m.median|pen }}<small>{{ per_unit }}</small></dd></div>
+    <div><dt>P75</dt><dd>{{ m.p75|pen }}<small>{{ per_unit }}</small></dd></div>
+  </dl>
+
+  {% set position = ((m.median - m.p25) / (m.p75 - m.p25) * 100) if m.p75 > m.p25 else 50 %}
+  <div class="range range-has-median{% if not has_evidence or ficha %} range-reference{% endif %}">
+    <div class="range-bar" role="img" aria-label="Zonas de precio: menos de {{ m.p25|pen }}, entre {{ m.p25|pen }} y {{ m.p75|pen }}, más de {{ m.p75|pen }}">
+      <div class="range-zone range-zone-low">{% if has_evidence and not ficha %}Competitivo{% else %}Debajo del P25{% endif %}</div>
+      <div class="range-zone range-zone-mid" style="position:relative">
+        {% if has_evidence and not ficha %}Con cautela{% else %}Mitad central{% endif %}
+        <span class="range-median" style="left: {{ '%.1f'|format(position) }}%" title="Mediana: {{ m.median|pen }}"></span>
+      </div>
+      <div class="range-zone range-zone-high">{% if has_evidence and not ficha %}Alto costo{% else %}Encima del P75{% endif %}</div>
+    </div>
+    <div class="range-values">
+      <span>&lt; {{ m.p25|pen }}</span>
+      <span>{{ m.p25|pen }} – {{ m.p75|pen }}</span>
+      <span>&gt; {{ m.p75|pen }}</span>
+    </div>
+    <p class="range-help">Una de cada cuatro compras se pagó a {{ m.p25|pen }} o menos; la mitad, a {{ m.median|pen }} o menos (marca negra); y tres de cada cuatro, a {{ m.p75|pen }} o menos.</p>
+  </div>
+  <p class="source">{{ "{:,}".format(m.n_awards) }} adjudicaciones · {{ period }} · procedimientos de selección (OECE)
+    {% if d and d.n_atypical %} · {{ d.n_atypical }} precios atípicos incluidos, que no mueven el rango{% endif %}</p>
+</section>
+
+<section class="section panel" aria-labelledby="competition-title"{% if not ficha %} data-tour="2" data-tour-title="La competencia" data-tour-text="Cuántas empresas se presentan a cada proceso y cuántas compras fueron de entidades de La Libertad."{% endif %}>
+  <h2 class="panel-title" id="competition-title">Competencia en el mercado</h2>
+  <p class="panel-lead">Cuántas empresas se presentan a cada proceso. Con más postores, el Estado suele pagar menos.</p>
+  <dl class="figures" style="margin-top:0">
+    <div><dt>Postores (mediana)</dt><dd>{{ m.median_bidders|number if m.n_with_bidders else "—" }}<small>{{ "por proceso" if m.n_with_bidders else "sin datos" }}</small></dd></div>
+    <div><dt>Postor único</dt><dd>{{ m.pct_single_bidder|percent if m.n_with_bidders else "—" }}<small>{{ "de los procesos" if m.n_with_bidders else "sin datos" }}</small></dd></div>
+    <div><dt>La Libertad</dt><dd>{{ "{:,}".format(m.n_la_libertad) }}<small>{{ "adjudicación" if m.n_la_libertad == 1 else "adjudicaciones" }} de entidades de la región</small></dd></div>
+  </dl>
+
+  {% set total = "{:,}".format(m.n_awards) %}
+  <p class="section-lead" style="margin-top:16px">
+    {% if not m.n_with_bidders %}
+    Las adjudicaciones de este bien no tienen registro de postores, por eso no se muestra la competencia.
+    {% elif m.n_single_bidder == 0 %}
+    En ninguno de los {{ "{:,}".format(m.n_with_bidders) }} procesos se presentó un solo postor;
+    en la mitad de ellos compitieron {{ m.median_bidders|number }} postores o menos.
+    {% else %}
+    En {{ "{:,}".format(m.n_single_bidder) }} de {{ "{:,}".format(m.n_with_bidders) }} procesos
+    ({{ m.pct_single_bidder|percent }}) se presentó un solo postor; en la mitad de ellos
+    compitieron {{ m.median_bidders|number }} postores o menos.
+    {% endif %}
+    {% if m.n_la_libertad == 0 %}
+    Ninguna de las {{ total }} adjudicaciones fue de entidades de La Libertad.
+    {% elif m.n_la_libertad == 1 %}
+    De las {{ total }} adjudicaciones, 1 fue de una entidad de La Libertad.
+    {% else %}
+    De las {{ total }} adjudicaciones, {{ "{:,}".format(m.n_la_libertad) }} fueron de entidades de La Libertad.
+    {% endif %}
+    {% if m.n_with_bidders and m.n_with_bidders < m.n_awards %}
+    {% set missing = m.n_awards - m.n_with_bidders %}
+    <span class="muted">{{ missing }} {{ "adjudicación no tiene" if missing == 1 else "adjudicaciones no tienen" }} registro de postores y no se {{ "incluye" if missing == 1 else "incluyen" }} en la mediana ni en el porcentaje.</span>
+    {% endif %}
+  </p>
+</section>
+
+{% if d %}
+<div class="section grid-2 grid-market">
+  <section class="panel" aria-labelledby="places-title">
+    <h2 class="panel-title" id="places-title">¿Dónde se compra?</h2>
+    <p class="panel-lead">Departamentos de entrega con más compras de este bien.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Departamento</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num">Precio mediano</th></tr></thead>
+        <tbody>
+          {% for p in d.places[:8] %}
+          <tr{% if p.local %} class="highlight"{% endif %}>
+            <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+            <td class="num">{{ p.n }}</td>
+            <td class="bar-cell"><div class="bar{% if p.local %} bar-local{% endif %}"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td>
+            <td class="num">{{ p.median|pen }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if d.places|length > 8 %}
+    <details class="table-view">
+      <summary>Ver los {{ d.places|length }} departamentos</summary>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Departamento</th><th class="num">Compras</th><th class="num">Precio mediano</th><th class="num">Postores (mediana)</th></tr></thead>
+          <tbody>
+            {% for p in d.places %}
+            <tr><td>{{ p.label|title }}</td><td class="num">{{ p.n }}</td><td class="num">{{ p.median|pen }}</td><td class="num">{{ p.bidders|number if p.bidders is not none else "—" }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="panel" aria-labelledby="size-title">
+    <h2 class="panel-title" id="size-title">¿De qué tamaño son las compras?</h2>
+    <p class="panel-lead">Monto adjudicado en cada compra, en soles. Le ayuda a ver si el volumen está a su alcance.</p>
+    <div class="columns" role="img" aria-label="Compras por tamaño: {% for b in d.by_size %}{{ b.label }}, {{ b.value }}; {% endfor %}">
+      {% for b in d.by_size %}
+      <div class="column"><span class="column-value">{{ b.value }}</span><span class="column-bar" style="height: {{ '%.1f'|format(b.pct * 0.82) }}%"></span></div>
+      {% endfor %}
+    </div>
+    <div class="column-labels" aria-hidden="true">{% for b in d.by_size %}<span>{{ b.short }}</span>{% endfor %}</div>
+    {% set small = d.by_size[0].value + d.by_size[1].value %}
+    <p class="source">{{ "%.0f"|format(100 * small / d.n_awards) }}% de las compras fueron de hasta S/ 100 mil.</p>
+  </section>
+</div>
+
+<div class="section grid-2">
+  <section class="panel" aria-labelledby="buyers-title">
+    <h2 class="panel-title" id="buyers-title">¿Quiénes compran?</h2>
+    <p class="panel-lead">Por tipo de entidad y las entidades con más compras de este bien.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Tipo de entidad</th><th class="num">Compras</th><th class="num">Precio mediano</th></tr></thead>
+        <tbody>
+          {% for t in d.entity_types %}
+          <tr><td>{{ t.label }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.median_price|pen }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Entidad</th><th class="num">Compras</th><th class="num">Monto total</th></tr></thead>
+        <tbody>
+          {% for e in d.entities %}
+          <tr><td class="name">{{ e.name }} <span class="muted small">· {{ e.place|title }}</span></td><td class="num">{{ e.n }}</td><td class="num">{{ e.amount|amount }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="sellers-title">
+    <h2 class="panel-title" id="sellers-title">¿Quiénes ganan?</h2>
+    <p class="panel-lead">Empresas que más veces ganaron la buena pro: su competencia directa.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Proveedor</th><th class="num">Ganó</th><th class="num">Precio mediano</th></tr></thead>
+        <tbody>
+          {% for s in d.suppliers %}
+          <tr><td class="name">{{ s.name }}</td><td class="num">{{ s.n }}</td><td class="num">{{ s.median|pen }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="source">{{ d.n_suppliers }} empresas distintas ganaron al menos una vez.{% if d.n_natural %} {{ d.n_natural }} compras las ganaron personas naturales con negocio; no mostramos sus nombres.{% endif %}</p>
+  </section>
+</div>
+
+{% if d.local_n %}
+<section class="section panel" aria-labelledby="local-title">
+  <h2 class="panel-title" id="local-title">En La Libertad</h2>
+  <p class="panel-lead">{{ d.local_n }} {{ "compra se entregó" if d.local_n == 1 else "compras se entregaron" }} en la región. Provincias de entrega:</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <tbody>
+        {% for p in d.local_provinces %}
+        <tr><td>{{ p.label|title }}</td><td class="num">{{ p.value|int }}</td><td class="bar-cell"><div class="bar bar-local"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="section panel" aria-labelledby="recent-title">
+  <h2 class="panel-title" id="recent-title">Últimas adjudicaciones</h2>
+  <p class="panel-lead">Las {{ d.recent|length }} compras más recientes de este bien. Con la entidad, la fecha y la nomenclatura del proceso puede ubicar cada una en el buscador público del SEACE.</p>
+  <div class="table-wrap">
+    <table class="data-table recent-table">
+      <thead><tr><th>Buena pro</th><th>Entidad</th><th>Lugar de entrega</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Postores</th><th>Ganador</th></tr></thead>
+      <tbody>
+        {% for r in d.recent %}
+        <tr>
+          <td class="date">{{ r.date|date_pe }}</td>
+          <td class="name">{{ r.entity or "—" }}{% if r.nomenclature %}<span class="proc-id">{{ r.nomenclature }} · convocatoria {{ r.call }}, ítem {{ r.item }}</span>{% endif %}</td>
+          <td>{{ (r.province or r.place or "—")|title }}</td>
+          <td class="num">{{ r.quantity|number }}</td>
+          <td class="num">{{ r.price|pen }}{% if r.atypical %}<span class="tag tag-warn">Atípico</span>{% endif %}</td>
+          <td class="num">{{ r.bidders if r.bidders is not none else "—" }}</td>
+          <td class="name">{{ r.supplier or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}

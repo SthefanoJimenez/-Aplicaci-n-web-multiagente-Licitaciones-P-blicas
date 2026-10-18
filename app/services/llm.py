@@ -10,7 +10,17 @@ import config
 
 
 class ModelError(Exception):
-    """El modelo no respondió o respondió en un formato inesperado."""
+    """El modelo no respondió o respondió en un formato inesperado.
+
+    code: código HTTP de la API (429 límite de uso, 503 servicio saturado...) o None.
+    """
+
+    def __init__(self, message, code=None):
+        super().__init__(message)
+        self.code = code
+
+
+RETRYABLE = (429, 500, 503)
 
 
 _client = None
@@ -50,19 +60,34 @@ def _call_gemini(prompt, model):
     }
 
 
-def generate_json(prompt, model=None):
-    """Envía el prompt al modelo y devuelve su respuesta JSON como diccionario."""
-    model = model or config.MODEL
+def _generate_with(prompt, model):
+    """Llama a un modelo con reintentos ante errores temporales."""
     for attempt in range(1, config.RETRIES + 2):
         try:
             result = _call_gemini(prompt, model, langsmith_extra={"metadata": {"ls_model_name": model}})
             text = re.sub(r"^```(?:json)?|```$", "", result["text"].strip()).strip()
             return json.loads(text)
         except errors.APIError as e:
-            if e.code in (429, 500, 503) and attempt <= config.RETRIES:
+            if e.code in RETRYABLE and attempt <= config.RETRIES:
                 time.sleep(config.RETRY_WAIT_SECONDS * attempt)
                 continue
-            raise ModelError(f"El modelo respondió con el error {e.code}") from e
+            raise ModelError(f"El modelo {model} respondió con el error {e.code}", code=e.code) from e
         except (json.JSONDecodeError, TypeError) as e:
             raise ModelError("El modelo devolvió una respuesta que no es JSON") from e
     raise ModelError("El modelo no respondió")
+
+
+def generate_json(prompt, model=None):
+    """Envía el prompt al modelo y devuelve su respuesta JSON como diccionario.
+
+    Si el modelo principal sigue fallando por un error temporal y hay un modelo de
+    respaldo configurado (GEMINI_FALLBACK_MODEL), lo intenta una vez con ese modelo.
+    """
+    model = model or config.MODEL
+    try:
+        return _generate_with(prompt, model)
+    except ModelError as e:
+        fallback = config.FALLBACK_MODEL
+        if e.code in RETRYABLE and fallback and fallback != model:
+            return _generate_with(prompt, fallback)
+        raise

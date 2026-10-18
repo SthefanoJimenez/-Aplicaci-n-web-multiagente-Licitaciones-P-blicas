@@ -1,0 +1,105 @@
+{% extends "flow.html" %}
+{% set step = 5 %}
+{% block title %}Su veredicto{% endblock %}
+{% block flow %}
+{% set per_unit = "por " ~ (m.unit|unit_text) %}
+<div class="chosen" style="margin-top:0">
+  <span class="chip">CUBSO {{ m.code }}</span>
+  <span class="chosen-name">{{ m.name }}</span>
+</div>
+
+<section class="section panel" aria-labelledby="verdict-title">
+  <div class="verdict">
+    <div class="stamp stamp-{{ e.tone }}" role="img" aria-label="Veredicto: {{ e.label }}" data-tour="1" data-tour-title="Su veredicto" data-tour-text="Participa, participa con cautela o no rentable, con el nivel de confianza y las razones al lado.">
+      <div><span class="stamp-word">{{ e.label }}</span><span class="stamp-sub">Confianza {{ e.confidence_label|lower }}</span></div>
+    </div>
+    <div>
+      <h1 class="verdict-title" id="verdict-title">{{ w.title }}</h1>
+      <p class="verdict-text">{{ w.text }}</p>
+      <p class="confidence">
+        Nivel de confianza: {{ e.confidence_label }}
+        <span class="confidence-dots" aria-hidden="true">{% for i in range(3) %}<i class="{{ 'on' if i < e.confidence_dots else '' }}"></i>{% endfor %}</span>
+      </p>
+      <ul class="reasons">
+        {% if below is not none %}<li>El Estado pagó menos que su costo en el {{ "%.0f"|format(below) }}% de las compras de este bien.</li>{% endif %}
+        {% for r in w.reasons %}<li>{{ r }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+</section>
+
+{% if below is not none and below >= 90 %}
+<div class="section notice notice-bad" role="alert">
+  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.7 7.3a1 1 0 00-1.4 1.4L8.6 10l-1.3 1.3a1 1 0 101.4 1.4l1.3-1.3 1.3 1.3a1 1 0 001.4-1.4L11.4 10l1.3-1.3a1 1 0 00-1.4-1.4L10 8.6 8.7 7.3z" clip-rule="evenodd"/></svg>
+  <div>
+    <strong>Su costo está fuera del rango en que compra el Estado</strong>
+    <p>En el {{ "%.0f"|format(below) }}% de las {{ "{:,}".format(m.n_awards) }} compras, el Estado pagó menos por unidad que lo que a usted le cuesta. Con este costo es muy difícil ganar: revise si puede bajarlo o busque otro bien.</p>
+  </div>
+</div>
+{% endif %}
+{% if d and d.large.is_large %}
+<div class="section notice notice-large" role="note">
+  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.26 3.1c.77-1.33 2.7-1.33 3.47 0l6.06 10.5c.77 1.33-.19 3-1.73 3H3.94c-1.54 0-2.5-1.67-1.73-3L8.26 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  <div>
+    <strong>Compras de monto alto</strong>
+    <p>La compra típica de este bien es de {{ d.median_amount|amount }} ({{ d.median_quantity|number }} {{ m.unit|unit_text }}). Aunque su costo le permita competir, confirme que puede financiar y entregar pedidos de ese tamaño.</p>
+  </div>
+</div>
+{% endif %}
+{% if rnp in ("no", "no-se") %}
+<div class="section notice" role="note">
+  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.26 3.1c.77-1.33 2.7-1.33 3.47 0l6.06 10.5c.77 1.33-.19 3-1.73 3H3.94c-1.54 0-2.5-1.67-1.73-3L8.26 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V7a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+  <div>
+    <strong>{% if rnp == "no" %}Sin RNP vigente no puede presentar ofertas{% else %}Confirme si tiene RNP vigente{% endif %}</strong>
+    <p>Para contratar con el Estado su empresa necesita inscripción vigente en el Registro Nacional de Proveedores (RNP). Revise los requisitos en el portal del RNP antes de preparar una propuesta.</p>
+  </div>
+</div>
+{% endif %}
+
+<section class="section panel" aria-labelledby="where-title">
+  <h2 class="panel-title" id="where-title">Su costo frente a lo que pagó el Estado</h2>
+  <p class="panel-lead">La marca azul es su costo de {{ e.cost|pen }} {{ per_unit }}.</p>
+  <div class="range-wrap">
+    <div class="range-bar">
+      <div class="range-zone range-zone-low">Competitivo</div>
+      <div class="range-zone range-zone-mid">Con cautela</div>
+      <div class="range-zone range-zone-high">Alto costo</div>
+    </div>
+    <span class="range-cost{% if e.marker_pct < 15 %} range-cost-start{% elif e.marker_pct > 85 %} range-cost-end{% endif %}" style="left: {{ '%.1f'|format(e.marker_pct) }}%"><span>Su costo: {{ e.cost|pen }}</span></span>
+    <div class="range-values">
+      <span>&lt; {{ m.p25|pen }}</span>
+      <span>{{ m.p25|pen }} – {{ m.p75|pen }}</span>
+      <span>&gt; {{ m.p75|pen }}</span>
+    </div>
+  </div>
+  <p class="source">Basado en {{ "{:,}".format(m.n_awards) }} adjudicaciones de {{ m.year_from }}–{{ m.year_to }}. Precio mediano: {{ m.median|pen }} {{ per_unit }}.</p>
+</section>
+
+{% if w.places %}
+<section class="section panel" aria-labelledby="next-title" data-tour="2" data-tour-title="Dónde buscar convocatorias" data-tour-text="Los departamentos donde más se compra este bien y cuánto más (o menos) que su costo pagó el Estado. Aquí termina el recorrido." data-tour-last>
+  <h2 class="panel-title" id="next-title">Dónde buscar convocatorias</h2>
+  <p class="panel-lead">Departamentos donde más se compra este bien y su precio mediano. La última columna indica cuánto más (o menos) que su costo pagó el Estado: donde paga más, usted tiene más margen.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Departamento</th><th class="num hide-sm">Compras</th><th class="num">Precio mediano</th><th class="num">Frente a su costo</th></tr></thead>
+      <tbody>
+        {% for p in w.places %}
+        <tr{% if p.local %} class="highlight"{% endif %}>
+          <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+          <td class="num hide-sm">{{ p.n }}</td>
+          <td class="num">{{ p.median|pen }}</td>
+          <td class="num {{ 'margin-up' if p.margin >= 0 else 'margin-down' }}">{% if p.margin >= 0 %}{{ "%.0f"|format(p.margin) }}% más{% else %}{{ "%.0f"|format(-p.margin) }}% menos{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<p class="source">El veredicto es referencial: compara su costo con precios pasados y no considera los requisitos de las bases de cada convocatoria.</p>
+<div class="actions actions-between">
+  <a class="button button-secondary" href="{{ url_for('cost') }}">Probar otro costo</a>
+  <a class="button button-primary" href="{{ url_for('describe') }}">Evaluar otro bien</a>
+</div>
+{% endblock %}

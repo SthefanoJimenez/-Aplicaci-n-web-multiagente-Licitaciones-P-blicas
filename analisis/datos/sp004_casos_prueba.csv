@@ -1,0 +1,21 @@
+id,rubro,descripcion,codigo_correcto,familia,patron_familia
+1,Combustible,petróleo diésel B5 S-50 para camiones,233280,Diésel,^(?:DIESEL|PETROLEO DIESEL)
+2,Combustible,gasolina de 90 octanos,11990,Gasolina,^GASOLINA
+3,Combustible,balón de gas de 10 kilos para cocina,311339,Gas licuado de petróleo,^GAS LICUADO DE PETROLEO
+4,Construcción,bolsa de cemento portland tipo uno de 42.5 kg,12771,Cemento Portland,^CEMENTO PORTLAND
+5,Construcción,cemento puzolánico IP en volsa,12953,Cemento Portland,^CEMENTO PORTLAND
+6,Construcción,fierro corrugado de media pulgada,130019,Barra para construcción,^BARRA PARA CONSTRUCCION
+7,Construcción,varilla de acero de 3/8 para construcción,130022,Barra para construcción,^BARRA PARA CONSTRUCCION
+8,Construcción,ladrillo king kong de arcilla 9 x 13 x 24,147595,Ladrillo,^LADRILLO
+9,Alimento,leche evaporada en lata grande de 400 gramos,307453,Leche evaporada,^LECHE EVAPORADA
+10,Alimento,arroz superior por kilo,133492,Arroz,^ARROZ
+11,Alimento,aceite vejetal para cocinar,2526,Aceite vegetal,^ACEITE VEGETAL
+12,Alimento,azúcar rubia,278002,Azúcar,^AZUCAR
+13,Alimento,avena precocida en hojuelas,2693,Hojuela de avena,^HOJUELA.*AVENA
+14,Alimento,atún en lata de 170 g en aceite,3425,Conserva de atún,^CONSERVA DE (?:FILETE DE |ENTERO DE )?ATUN
+15,Alimento,bidón de agua de mesa de 20 litros,3170,Agua de mesa,^AGUA DE MESA
+16,Vehículo,camioneta doble cabina 4x4,65078,Camioneta,^CAMIONETA
+17,Oficina,tóner negro para impresora láser,355574,Tóner,^TONER
+18,Salud,guantes descartables para examen talla M,45891,Guante,^GUANTE
+19,Salud,mascarillas KN95,390558,Mascarilla,^MASCARILLA
+20,Salud,pastillas de paracetamol de 500 mg,58887,Paracetamol,^PARACETAMOL

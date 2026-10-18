@@ -1,16 +1,16 @@
-{% extends "base.html" %}
-{% block title %}Análisis de mercado{% endblock %}
-{% block content %}
-{% with step=3, step_name="" %}{% include "_step.html" %}{% endwith %}
+{% extends "flow.html" %}
+{% set step = 3 %}
+{% block title %}Mercado del bien{% endblock %}
+{% block flow %}
 {% set period = m.year_from ~ "" if m.year_from == m.year_to else m.year_from ~ "–" ~ m.year_to %}
 {% set per_unit = "por " ~ (m.unit|unit_text) %}
 
-<h1 class="page-title">Análisis de mercado</h1>
-<p class="chosen-good">
-  <span class="code-chip">CUBSO {{ m.code }}</span>
-  <span class="chosen-good-name">{{ m.name }}</span>
-</p>
-<p class="chosen-good-unit">Unidad de medida: {{ m.unit }}</p>
+<h1 class="page-title">El mercado de su bien</h1>
+<div class="chosen">
+  <span class="chip">CUBSO {{ m.code }}</span>
+  <span class="chosen-name">{{ m.name }}</span>
+  <span class="muted">Unidad de medida: {{ m.unit }}</span>
+</div>
 
 {% if not has_evidence %}
 <div class="notice notice-warning" role="status">
@@ -20,119 +20,16 @@
 </div>
 {% endif %}
 
-<section class="section" aria-labelledby="range-title-heading">
-  <h2 class="section-label" id="range-title-heading">Rango de precios unitarios</h2>
+{% set ficha = false %}
+{% include "market_detail.html" %}
+{% if has_evidence %}{% include "result_guide.html" %}{% endif %}
 
-  <div class="metrics">
-    <div class="metric">
-      <p class="metric-label">P25</p>
-      <p class="metric-value">{{ m.p25|pen }}</p>
-      <p class="metric-detail">{{ per_unit }}</p>
-    </div>
-    <div class="metric metric-highlight">
-      <p class="metric-label">Mediana</p>
-      <p class="metric-value">{{ m.median|pen }}</p>
-      <p class="metric-detail">{{ per_unit }}</p>
-    </div>
-    <div class="metric">
-      <p class="metric-label">P75</p>
-      <p class="metric-value">{{ m.p75|pen }}</p>
-      <p class="metric-detail">{{ per_unit }}</p>
-    </div>
-  </div>
-
-  {# Posición de la mediana dentro de la zona central de la barra #}
-  {% set position = ((m.median - m.p25) / (m.p75 - m.p25) * 100) if m.p75 > m.p25 else 50 %}
-  <div class="range{% if not has_evidence %} range-reference{% endif %}">
-    <p class="range-title">
-      {% if has_evidence %}Zonas para comparar su costo unitario{% else %}Cómo se reparten los precios adjudicados{% endif %}
-    </p>
-    <div class="range-bar">
-      <div class="range-zone range-zone-low">{% if has_evidence %}Competitivo{% else %}Debajo del P25{% endif %}</div>
-      <div class="range-zone range-zone-mid">
-        {% if has_evidence %}Con cautela{% else %}Mitad central{% endif %}
-        <span class="range-median" style="left: {{ '%.1f'|format(position) }}%" title="Mediana: {{ m.median|pen }}"></span>
-      </div>
-      <div class="range-zone range-zone-high">{% if has_evidence %}Alto costo{% else %}Encima del P75{% endif %}</div>
-    </div>
-    <div class="range-values">
-      <span>&lt; {{ m.p25|pen }}</span>
-      <span>{{ m.p25|pen }} – {{ m.p75|pen }}</span>
-      <span>&gt; {{ m.p75|pen }}</span>
-    </div>
-    <p class="range-help">
-      El 25% de las adjudicaciones tuvo un precio unitario igual o menor al P25; la mitad, igual o menor a la mediana
-      (marca vertical); y el 75%, igual o menor al P75.
-    </p>
-  </div>
-
-  <p class="source-note">
-    {{ "{:,}".format(m.n_awards) }} adjudicaciones · {{ period }} · procedimientos de selección (OECE)
-  </p>
-</section>
-
-<section class="section" aria-labelledby="competition-title">
-  <h2 class="section-label" id="competition-title">Competencia en el mercado</h2>
-
-  <div class="metrics">
-    <div class="metric">
-      <p class="metric-label">Postores (mediana)</p>
-      <p class="metric-value">{{ m.median_bidders|number if m.n_with_bidders else "—" }}</p>
-      <p class="metric-detail">{{ "por proceso" if m.n_with_bidders else "sin datos" }}</p>
-    </div>
-    <div class="metric">
-      <p class="metric-label">Postor único</p>
-      <p class="metric-value">{{ m.pct_single_bidder|percent if m.n_with_bidders else "—" }}</p>
-      <p class="metric-detail">{{ "de los procesos" if m.n_with_bidders else "sin datos" }}</p>
-    </div>
-    <div class="metric">
-      <p class="metric-label">La Libertad</p>
-      <p class="metric-value">{{ "{:,}".format(m.n_la_libertad) }}</p>
-      <p class="metric-detail">{{ "adjudicación" if m.n_la_libertad == 1 else "adjudicaciones" }}</p>
-    </div>
-  </div>
-
-  {% set total = "{:,}".format(m.n_awards) %}
-  <div class="notice notice-info notice-left competition-summary">
-    {% if not m.n_with_bidders %}
-    Las adjudicaciones de este bien no tienen registro de postores, por eso no se muestra la competencia.
-    {% elif m.n_single_bidder == 0 %}
-    En ninguno de los {{ "{:,}".format(m.n_with_bidders) }} procesos se presentó un solo postor;
-    en la mitad de ellos compitieron {{ m.median_bidders|number }} postores o menos.
-    {% else %}
-    En {{ "{:,}".format(m.n_single_bidder) }} de {{ "{:,}".format(m.n_with_bidders) }} procesos
-    ({{ m.pct_single_bidder|percent }}) se presentó un solo postor; en la mitad de ellos
-    compitieron {{ m.median_bidders|number }} postores o menos.
-    {% endif %}
-    {% if m.n_la_libertad == 0 %}
-    Ninguna de las {{ total }} adjudicaciones fue de entidades de La Libertad.
-    {% elif m.n_la_libertad == 1 %}
-    De las {{ total }} adjudicaciones, 1 fue de una entidad de La Libertad.
-    {% else %}
-    De las {{ total }} adjudicaciones, {{ "{:,}".format(m.n_la_libertad) }} fueron de entidades de La Libertad.
-    {% endif %}
-    {% if m.n_with_bidders and m.n_with_bidders < m.n_awards %}
-    {% set missing = m.n_awards - m.n_with_bidders %}
-    <span class="competition-note">{{ missing }} {{ "adjudicación no tiene" if missing == 1 else "adjudicaciones no tienen" }} registro de postores y no se {{ "incluye" if missing == 1 else "incluyen" }} en la mediana ni en el porcentaje.</span>
-    {% endif %}
-  </div>
-</section>
-
-<div class="actions actions-pair">
-  <a class="button-secondary" href="{{ url_for('back_to_candidates') }}">
-    <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-    Cambiar código
-  </a>
+<div class="actions actions-between">
+  <a class="button button-secondary" href="{{ url_for('back_to_candidates') }}">Cambiar código</a>
   {% if has_evidence %}
-  <button type="button" class="button-primary" disabled aria-describedby="cost-note">
-    Ingresar mi costo
-    <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-  </button>
+  <a class="button button-primary" href="{{ url_for('cost') }}" data-tour="4" data-tour-title="Ingrese su costo" data-tour-text="Cuando termine de revisar el mercado, haga clic aquí para comparar su costo." data-tour-click>Ingresar mi costo</a>
   {% else %}
-  <a class="button-primary" href="{{ url_for('describe') }}">Buscar otro bien</a>
+  <a class="button button-primary" href="{{ url_for('describe') }}">Buscar otro bien</a>
   {% endif %}
 </div>
-{% if has_evidence %}
-<p class="privacy-note" id="cost-note">El ingreso del costo estará disponible en la siguiente versión.</p>
-{% endif %}
 {% endblock %}

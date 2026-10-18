@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set active_nav = "overview" %}
+{% block title %}{{ m.name|title }}{% endblock %}
+{% block content %}
+{% set period = m.year_from ~ "" if m.year_from == m.year_to else m.year_from ~ "–" ~ m.year_to %}
+{% set per_unit = "por " ~ (m.unit|unit_text) %}
+{% set ficha = true %}
+
+<nav class="breadcrumb" aria-label="Ruta">
+  <a href="{{ url_for('overview') }}">Panorama del mercado</a> <span aria-hidden="true">/</span> <span>Ficha del bien</span>
+</nav>
+<h1 class="page-title">{{ m.name }}</h1>
+<div class="chosen">
+  <span class="chip">CUBSO {{ m.code }}</span>
+  <span class="muted">Unidad de medida: {{ m.unit }}</span>
+</div>
+<p class="page-lead">Ficha de consulta con todas las compras de este bien registradas por el OECE. Es informativa: para comparar su costo y recibir un veredicto, describa su producto en «Evaluar mi producto».</p>
+
+{% include "market_detail.html" %}
+
+<section class="section panel verify" aria-labelledby="verify-title">
+  <h2 class="panel-title" id="verify-title">Verifique estos datos</h2>
+  <p class="panel-lead">Descargue las {{ "{:,}".format(m.n_awards) }} adjudicaciones de este bien. Cada fila trae la nomenclatura del proceso, el código de convocatoria, la entidad y la fecha de la buena pro, para que pueda ubicarla en el buscador público del SEACE.</p>
+  <div class="actions" style="margin-top:12px">
+    <a class="button button-secondary" href="{{ url_for('good_csv', code=m.code) }}" download>Descargar las {{ "{:,}".format(m.n_awards) }} compras (CSV)</a>
+  </div>
+</section>
+
+<div class="actions actions-between">
+  <a class="button button-secondary" href="{{ url_for('overview') }}">Volver al panorama</a>
+  <a class="button button-primary" href="{{ url_for('describe') }}">Evaluar mi producto</a>
+</div>
+{% endblock %}

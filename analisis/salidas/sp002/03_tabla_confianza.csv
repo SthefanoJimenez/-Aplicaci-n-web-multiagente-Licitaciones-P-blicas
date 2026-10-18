@@ -1,0 +1,5 @@
+﻿adjudicaciones,Baja (≤ 0.25),Media (≤ 0.5),Alta (> 0.5)
+30 o más,Confianza alta,Confianza media,Confianza baja
+10 a 29,Confianza media,Confianza baja,Confianza baja
+5 a 9,Sin evidencia suficiente,Sin evidencia suficiente,Sin evidencia suficiente
+Menos de 5,Sin evidencia para evaluar,Sin evidencia para evaluar,Sin evidencia para evaluar

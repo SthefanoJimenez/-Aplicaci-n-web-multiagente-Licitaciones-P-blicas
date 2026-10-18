@@ -1,20 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Error de servicio{% endblock %}
-{% block main_class %}content content-centered{% endblock %}
+{% set active_nav = "evaluate" %}
+{% block title %}Servicio no disponible{% endblock %}
 {% block content %}
-<div class="service-error">
-  <div class="service-error-icon" aria-hidden="true">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-  </div>
-  <h1 class="page-title">Error de servicio</h1>
-  <p class="subtitle">El servicio que interpreta su descripción no está disponible en este momento, posiblemente por los límites de uso de la API. Puede reintentar la búsqueda.</p>
-  <div class="notice notice-info notice-left">Su descripción se conservó: no necesita volver a escribirla.</div>
-
+<div class="empty">
+  <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+  <h1 class="page-title">El buscador del catálogo no respondió</h1>
+  <p class="page-lead" style="margin-inline:auto">
+    {% if code == 429 %}Se alcanzó el límite de uso del servicio que interpreta su descripción. Espere un minuto antes de reintentar.
+    {% elif code in (500, 503) %}El servicio de Google que interpreta su descripción está saturado en este momento. Suele resolverse en unos minutos.
+    {% else %}El servicio que interpreta su descripción no respondió.{% endif %}
+    Su descripción se conservó: puede reintentar la búsqueda. Mientras tanto, puede consultar cualquier bien desde el <a href="{{ url_for('overview') }}">panorama del mercado</a>.
+  </p>
   <form method="post" action="{{ url_for('candidates') }}" data-loading>
     <input type="hidden" name="description" value="{{ description }}">
-    <div class="actions actions-centered">
-      <button type="submit" class="button-primary" data-loading-text="Buscando en el catálogo…">Reintentar búsqueda</button>
-      <a class="button-secondary" href="{{ url_for('describe') }}">Volver al inicio</a>
+    <div class="actions">
+      <button type="submit" class="button button-primary" data-loading-text="Buscando en el catálogo…">Reintentar búsqueda</button>
+      <a class="button button-secondary" href="{{ url_for('home') }}">Volver al inicio</a>
     </div>
     <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
   </form>

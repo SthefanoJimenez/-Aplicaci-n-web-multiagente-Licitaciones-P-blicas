@@ -1,0 +1,4 @@
+﻿formato,segundos,megabytes,veces_mas_rapido_que_excel
+Excel original,7.36,12.75,1.0
+Copia rápida (.pkl),0.01,12.48,736.0
+CSV,0.16,21.15,46.0

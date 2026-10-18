@@ -96,7 +96,7 @@ def fake_candidates(monkeypatch, codes):
 
 
 def test_description_screen(client):
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/evaluar").get_data(as_text=True)
     assert "¿Qué bien vende su empresa?" in html
 
 
@@ -127,13 +127,13 @@ def test_rejects_a_code_that_was_not_offered(client, monkeypatch):
     fake_candidates(monkeypatch, [CEMENT_I])
     client.post("/candidatos", data={"description": "cemento"})
     response = client.post("/confirmar", data={"code": DIESEL})
-    assert response.headers["Location"].endswith("/")
+    assert response.headers["Location"].endswith("/evaluar")
 
 
 def test_none_matches_returns_to_description_with_previous_text(client, monkeypatch):
     fake_candidates(monkeypatch, [CEMENT_I])
     client.post("/candidatos", data={"description": "cemento en bolsa"})
-    html = client.get("/?reintentar=1").get_data(as_text=True)
+    html = client.get("/evaluar?reintentar=1").get_data(as_text=True)
     assert "Pruebe describirlo de otra forma" in html
     assert "cemento en bolsa" in html
 

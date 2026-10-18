@@ -1,0 +1,32 @@
+SP-005 · pruebas B4 a B9 · 2026-10-14 00:34 (hora de Lima)
+URL base: https://contratacionesabiertas.oece.gob.pe/api/v1
+
+B4 · Archivo JSON del mes 2026-10
+   HTTP 200 · application/zip · 1,168,187 bytes → 04_2026_10.zip
+   Contenido: 2026-10_seace_v3.json
+
+B5 · Perfil de campos
+   Listo: ver salidas/sp005/perfil_campos.txt (resumen: Convocatorias (procesos únicos): 2050 · de bienes: 854)
+
+B6 · Convocatoria de la muestra
+   OCID: ocds-dgv273-seacev3-1257184
+   tender.id: 1257184
+   Título: LP-SM-2-2026-UNAC-1
+   Entidad: UNIVERSIDAD NACIONAL DEL CALLAO
+   Ítem: CONVOCADO | ADQUISICION DE UNIFORMES PARA LOS DOCENTES ORDINARIOS A T.C. y D.E; SE
+   tenderPeriod: 2026-10-12T00:00:00-05:00 → 2026-10-12T00:00:00-05:00
+   Documento: biddingDocuments | pdf | Bases Administrativas
+
+B7 · GET /record/{ocid}
+   HTTP 200 · application/json · 4,906 bytes → 07_record.json
+   Claves: compiledRelease, ocid, releases
+   Versiones: 1 · compiledRelease: sí
+
+B8 · GET /release/seace_v3/{tender.id}
+   HTTP 200 · application/json · 4,501 bytes → 08_release_tender.json
+   2026-10-13T10:11:23.155587-05:00 | ['planning', 'tender'] | ['CONVOCADO']
+
+B9 · Descarga de las bases
+   Formato declarado: pdf · URL: https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=efa19d62-709d-4502-a5c1-4f5e6106115d
+   HTTP 200 · application/octet-stream · 5,314,287 bytes → 09_bases.bin
+   Formato real: pdf

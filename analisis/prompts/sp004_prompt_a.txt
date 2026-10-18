@@ -1,0 +1,11 @@
+Eres un clasificador de bienes del catálogo de compras del Estado peruano (CUBSO).
+
+Dada la descripción de un bien, elige hasta 3 códigos del catálogo que mejor le correspondan, ordenados del más probable al menos probable.
+
+Responde únicamente con JSON, con este formato:
+{"codigos": [codigo1, codigo2, codigo3]}
+
+Catálogo (código | nombre | unidad de medida):
+{{CATALOGO}}
+
+Descripción del bien: {{DESCRIPCION}}

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% set active_nav = "overview" %}
+{% block title %}Panorama del mercado{% endblock %}
+{% block content %}
+<h1 class="page-title">Panorama del mercado de bienes del Estado</h1>
+<p class="page-lead">Qué compra el Estado, cuándo, dónde, qué tipo de entidad compra, con qué proceso y por qué montos. Los filtros se aplican a todos los gráficos, al mapa y a la descarga; el año y el mes son los de la buena pro. Las cifras usan todas las adjudicaciones, sin muestreo.</p>
+
+<form class="filters" method="get" action="{{ url_for('overview') }}" aria-label="Filtros">
+  <div>
+    <label for="f-year">Año</label>
+    <select id="f-year" name="anio">
+      <option value="">Todos</option>
+      {% for y in years %}<option value="{{ y }}" {% if f.year == y %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-month">Mes</label>
+    <select id="f-month" name="mes">
+      <option value="">Todos</option>
+      {% for name in months %}<option value="{{ loop.index }}" {% if f.month == loop.index %}selected{% endif %}>{{ name|capitalize }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-place">Lugar de entrega</label>
+    <select id="f-place" name="lugar">
+      <option value="">Todo el Perú</option>
+      {% for d in departments %}<option value="{{ d }}" {% if f.department == d %}selected{% endif %}>{{ d|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-process">Tipo de proceso</label>
+    <select id="f-process" name="proceso">
+      <option value="">Todos</option>
+      {% for p in processes %}<option value="{{ p }}" {% if f.process == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-size">Tamaño de la compra</label>
+    <select id="f-size" name="tamanio">
+      <option value="">Todos</option>
+      {% for key, label, _, _ in sizes %}<option value="{{ key }}" {% if f.size == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-entity">Tipo de entidad</label>
+    <select id="f-entity" name="entidad">
+      <option value="">Todas</option>
+      {% for key, label in entity_types %}<option value="{{ key }}" {% if f.entity_type == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="button button-primary">Aplicar</button>
+</form>
+{% set active = [] %}
+{% if f.month %}{% set _ = active.append(months[f.month - 1]|capitalize) %}{% endif %}
+{% if f.year %}{% set _ = active.append(f.year|string) %}{% endif %}
+{% if f.department %}{% set _ = active.append(f.department|title) %}{% endif %}
+{% if f.process %}{% set _ = active.append(f.process) %}{% endif %}
+{% if f.size %}{% set _ = active.append(size_labels[f.size]) %}{% endif %}
+{% if f.entity_type %}{% set _ = active.append(entity_type_labels[f.entity_type]) %}{% endif %}
+{% if active %}
+<p class="active-filters">Mostrando: {{ active|join(", ") }}. <a href="{{ url_for('overview') }}">Quitar filtros</a></p>
+{% endif %}
+
+{% if not o.n_awards %}
+<div class="empty">
+  <h2 class="section-title">No hay compras con esos filtros</h2>
+  <p class="muted">Pruebe con otro año, otro lugar o un tamaño de compra distinto.</p>
+  <div class="actions"><a class="button button-secondary" href="{{ url_for('overview') }}">Quitar filtros</a></div>
+</div>
+{% else %}
+{% set i = o.insights %}
+<dl class="figures">
+  <div><dt>Compras de bienes</dt><dd>{{ "{:,}".format(o.n_awards) }}<small>adjudicaciones</small></dd></div>
+  <div><dt>Monto adjudicado</dt><dd>{{ o.amount|amount }}<small>en total</small></dd></div>
+  <div><dt>Monto típico</dt><dd>{{ o.median_amount|amount }}<small>mediana por compra</small></dd></div>
+  <div><dt>Entidades compradoras</dt><dd>{{ "{:,}".format(o.n_entities) }}<small>{{ "{:,}".format(o.n_goods) }} bienes distintos</small></dd></div>
+  <div><dt>Postor único</dt><dd>{{ o.pct_single|percent if o.pct_single is not none else "—" }}<small>de los procesos</small></dd></div>
+</dl>
+
+<div class="download-row">
+  <p>Cada cifra se puede comprobar: descargue las compras que cumplen estos filtros, con su nomenclatura de proceso y su código de convocatoria.</p>
+  <a class="button button-secondary" href="{{ url_for('overview_csv', **query) }}" download>Descargar {{ "{:,}".format(o.n_awards) }} compras (CSV)</a>
+</div>
+
+{% if chart %}
+<section class="section panel" aria-labelledby="trend-title">
+  <h2 class="panel-title" id="trend-title">¿Cuándo se compra?</h2>
+  <p class="panel-lead">Compras por mes de la buena pro. El mes con más compras fue {{ chart.peak.point.label }}, con {{ "{:,}".format(chart.peak.point.n) }}. Algunas compras recibieron la buena pro al año siguiente de su convocatoria.</p>
+  <div class="chart" data-chart>
+    <div class="chart-scroll">
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="Compras por mes, de {{ o.by_month[0].label }} a {{ o.by_month[-1].label }}. Máximo en {{ chart.peak.point.label }} con {{ chart.peak.point.n }} compras.">
+      <g class="grid">
+        {% for t in chart.ticks %}<line x1="{{ chart.left }}" x2="{{ chart.right }}" y1="{{ t.y }}" y2="{{ t.y }}"/><text x="{{ chart.left - 8 }}" y="{{ t.y + 4 }}" text-anchor="end">{{ t.label }}</text>{% endfor %}
+      </g>
+      <g class="xaxis">
+        {% for l in chart.x_labels %}<text x="{{ l.x }}" y="{{ chart.height - 6 }}" text-anchor="middle">{{ l.label }}</text>{% endfor %}
+      </g>
+      <path class="area" d="{{ chart.area }}"/>
+      <path class="line" d="{{ chart.line }}"/>
+      <line class="hover-line" y1="12" y2="{{ chart.base }}"/>
+      <circle class="dot" r="4.5"/>
+      {% for h in chart.hits %}
+      <rect class="hit" x="{{ h.x }}" y="0" width="{{ h.w }}" height="{{ chart.base }}" tabindex="0"
+            data-cx="{{ h.cx }}" data-cy="{{ h.cy }}" data-label="{{ h.point.label }}"
+            data-value="{{ '{:,}'.format(h.point.n) }} compras" data-extra="{{ h.point.amount|amount }} adjudicados"><title>{{ h.point.label }}: {{ "{:,}".format(h.point.n) }} compras</title></rect>
+      {% endfor %}
+    </svg>
+    </div>
+  </div>
+  <details class="table-view">
+    <summary>Ver como tabla</summary>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Mes</th><th class="num">Compras</th><th class="num">Monto</th></tr></thead><tbody>
+      {% for m in o.by_month %}<tr><td>{{ m.label }}</td><td class="num">{{ "{:,}".format(m.n) }}</td><td class="num">{{ m.amount|amount }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+  {% if o.n_without_date %}<p class="source">{{ o.n_without_date }} {{ "compra no tiene" if o.n_without_date == 1 else "compras no tienen" }} fecha de buena pro y no {{ "aparece" if o.n_without_date == 1 else "aparecen" }} en el gráfico.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="section panel" aria-labelledby="places-title">
+  <h2 class="panel-title" id="places-title">¿Dónde se compra?</h2>
+  <p class="panel-lead">{{ i.top_place|title }} concentra {{ "{:,}".format(i.top_place_n) }} compras.{% if not f.department %} La Libertad tiene {{ "{:,}".format(i.local) }} ({{ "%.1f"|format(i.local_share) }}%).{% endif %} Haga clic en un departamento del mapa para filtrar todo el panorama.</p>
+  <div class="map-layout">
+    <div class="map" data-chart>
+      <svg viewBox="0 0 {{ geo.width }} {{ geo.height }}" role="img" aria-label="Mapa del Perú: compras por departamento de entrega">
+        {% for name, shape in geo.departments.items() %}
+        {% set v = o.map.departments.get(name) %}
+        {% set q = dict(query, lugar=name) %}
+        <a href="{{ url_for('overview', **q) }}" aria-label="{{ name|title }}: {{ '{:,}'.format(v.n) if v else 0 }} compras"
+           data-label="{{ name|title }}" data-value="{{ '{:,}'.format(v.n) if v else 0 }} compras" data-extra="{{ v.amount|amount if v else 'S/ 0' }} adjudicados">
+          <path d="{{ shape.d }}" {% if v %}style="fill: {{ v.color }}"{% endif %}
+                class="{% if not v %}zero{% endif %}{% if f.department == name %} selected{% elif name == 'LA LIBERTAD' %} local{% endif %}"><title>{{ name|title }}: {{ "{:,}".format(v.n) if v else 0 }} compras</title></path>
+        </a>
+        {% endfor %}
+      </svg>
+      <div class="map-legend" aria-label="Leyenda">
+        {% for l in o.map.legend %}<span><i style="background: {{ l.color }}"></i>{{ "{:,}".format(l.low) }}{% if l.high != l.low %} a {{ "{:,}".format(l.high) }}{% endif %}</span>{% endfor %}
+        <span><i style="background:#e9edf2"></i>sin compras</span>
+      </div>
+      <p class="source">Borde punteado: La Libertad. Mapa: polígonos de github.com/juaneladio/peru-geojson (MPL-2.0).</p>
+    </div>
+    <div>
+      <div class="table-wrap" style="margin-top:0">
+        <table class="data-table">
+          <thead><tr><th>Departamento</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num hide-sm">Monto</th></tr></thead>
+          <tbody>
+            {% for p in o.by_place[:10] %}
+            <tr{% if p.local %} class="highlight"{% endif %}>
+              <td>{{ p.label|title }}{% if p.local %}<span class="tag">Su región</span>{% endif %}</td>
+              <td class="num">{{ "{:,}".format(p.value) }}</td>
+              <td class="bar-cell"><div class="bar{% if p.local %} bar-local{% endif %}"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td>
+              <td class="num hide-sm">{{ p.amount|amount }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if o.by_place|length > 10 %}
+      <details class="table-view">
+        <summary>Ver los {{ o.by_place|length }} lugares</summary>
+        <div class="table-wrap"><table class="data-table"><tbody>
+          {% for p in o.by_place %}<tr><td>{{ p.label|title }}</td><td class="num">{{ "{:,}".format(p.value) }}</td><td class="num">{{ p.amount|amount }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<div class="section grid-2">
+  <section class="panel" aria-labelledby="size-title">
+    <h2 class="panel-title" id="size-title">¿De qué tamaño son las compras?</h2>
+    <p class="panel-lead">{{ "%.0f"|format(i.small_share) }}% de las compras fueron de hasta S/ 100 mil. Montos en soles por compra.</p>
+    <div class="columns" role="img" aria-label="Compras por tamaño: {% for b in o.by_size %}{{ b.label }}, {{ b.value }}; {% endfor %}">
+      {% for b in o.by_size %}
+      <div class="column" title="{{ b.label }}: {{ '{:,}'.format(b.value) }} compras"><span class="column-value">{{ "%.0f"|format(b.share) }}%</span><span class="column-bar" style="height: {{ '%.1f'|format(b.pct * 0.82) }}%"></span></div>
+      {% endfor %}
+    </div>
+    <div class="column-labels" aria-hidden="true">{% for b in o.by_size %}<span>{{ b.short }}</span>{% endfor %}</div>
+  </section>
+
+  <section class="panel" aria-labelledby="process-title">
+    <h2 class="panel-title" id="process-title">¿Con qué tipo de proceso?</h2>
+    <p class="panel-lead">La {{ i.top_process|lower }} reúne el {{ "%.0f"|format(i.top_process_share) }}% de las compras.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <tbody>
+          {% for p in o.by_process %}
+          <tr><td>{{ p.label }}</td><td class="num">{{ "{:,}".format(p.value|int) }}</td><td class="bar-cell"><div class="bar"><span style="width: {{ '%.1f'|format(p.pct) }}%"></span></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="section panel" aria-labelledby="types-title">
+  <h2 class="panel-title" id="types-title">¿Qué tipo de entidad compra?</h2>
+  <p class="panel-lead">{{ i.top_type }} hizo el {{ "%.0f"|format(i.top_type_share) }}% de las compras. El monto típico le indica el tamaño de pedido que suele hacer cada tipo de comprador.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Tipo de entidad</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num hide-sm">Monto total</th><th class="num">Monto típico</th></tr></thead>
+      <tbody>
+        {% for t in o.by_entity_type %}
+        <tr>
+          <td><a href="{{ url_for('overview', **dict(query, entidad=t.key)) }}">{{ t.label }}</a></td>
+          <td class="num">{{ "{:,}".format(t.n) }}</td>
+          <td class="bar-cell"><div class="bar"><span style="width: {{ '%.1f'|format(t.pct) }}%"></span></div></td>
+          <td class="num hide-sm">{{ t.amount|amount }}</td>
+          <td class="num">{{ t.median_amount|amount }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section panel" aria-labelledby="entities-title">
+  <h2 class="panel-title" id="entities-title">Entidades que más compran</h2>
+  <p class="panel-lead">Son los compradores a los que conviene seguir en el SEACE.</p>
+  {% set peak_entity = (o.entities|map(attribute='n')|max) if o.entities else 1 %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Entidad</th><th class="hide-sm">Departamento</th><th class="num">Compras</th><th class="bar-cell"><span class="sr-only">Barra</span></th><th class="num">Monto</th></tr></thead>
+      <tbody>
+        {% for e in o.entities %}<tr><td class="name">{{ e.name }}</td><td class="hide-sm">{{ e.department|title }}</td><td class="num">{{ "{:,}".format(e.n) }}</td><td class="bar-cell"><div class="bar"><span style="width: {{ '%.1f'|format(100 * e.n / peak_entity) }}%"></span></div></td><td class="num">{{ e.amount|amount }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section panel" aria-labelledby="goods-title">
+  <h2 class="panel-title" id="goods-title">Bienes que más compra el Estado</h2>
+  <p class="panel-lead">Con los filtros elegidos. Abra la ficha de un bien para ver quién lo compra, quién gana y a qué precio.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Bien</th><th class="num">Compras</th><th class="num">Precio mediano</th><th class="num hide-sm">Postores (mediana)</th><th><span class="sr-only">Acción</span></th></tr></thead>
+      <tbody>
+        {% for g in o.goods %}
+        <tr>
+          <td class="name">{{ g.name }} <span class="muted small">· por {{ g.unit|unit_text }}</span></td>
+          <td class="num">{{ "{:,}".format(g.n) }}</td>
+          <td class="num">{{ g.median|pen }}</td>
+          <td class="num hide-sm">{{ g.bidders|number if g.bidders is not none else "—" }}</td>
+          <td class="num">{% if g.in_catalog %}<a href="{{ url_for('good_sheet', code=g.code) }}">Ver ficha</a>{% else %}<span class="muted small">Pocas compras</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="source">Fuente: adjudicaciones de bienes del OECE 2023-2025 después de la limpieza de datos. <a href="{{ url_for('data_preparation') }}">Vea cómo preparamos los datos</a>.</p>
+{% endif %}
+{% endblock %}

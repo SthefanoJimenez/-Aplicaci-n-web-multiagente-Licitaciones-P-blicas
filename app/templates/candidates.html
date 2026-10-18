@@ -1,44 +1,38 @@
-{% extends "base.html" %}
-{% block title %}Seleccione el código{% endblock %}
-{% block content %}
-{% with step=2, step_name="" %}{% include "_step.html" %}{% endwith %}
-<h1 class="page-title">Seleccione el código del bien</h1>
-<p class="subtitle">Según su descripción, el sistema encontró estos bienes del catálogo CUBSO, ordenados del más al menos probable. Confirme el que mejor represente lo que vende.</p>
+{% extends "flow.html" %}
+{% set step = 2 %}
+{% block title %}Elija el código del bien{% endblock %}
+{% block flow %}
+<h1 class="page-title">Elija el bien que mejor representa lo que vende</h1>
+<p class="page-lead">Según su descripción, el agente clasificador encontró estos bienes del catálogo CUBSO, del más al menos parecido. Cada uno muestra cuántas veces lo compró el Estado.</p>
 
-<div class="description-card">
-  <div class="description-card-text">
-    <p class="description-card-label">Su descripción</p>
-    <p class="description-card-value">«{{ description }}»</p>
+<div class="description-box">
+  <div>
+    <p class="muted">Su descripción</p>
+    <p>«{{ description }}»</p>
   </div>
-  <a class="link" href="{{ url_for('describe', reintentar=1) }}">Editar</a>
+  <a href="{{ url_for('describe', reintentar=1) }}">Editar</a>
 </div>
 
-<form method="post" action="{{ url_for('confirm') }}" class="form">
-  <fieldset class="candidates">
+<form method="post" action="{{ url_for('confirm') }}">
+  <fieldset class="candidates" data-tour="1" data-tour-title="Elija el bien que más se parece" data-tour-text="El agente encontró estos bienes del catálogo, del más al menos parecido. Cada uno indica cuántas veces lo compró el Estado.">
     <legend class="sr-only">Bienes del catálogo</legend>
     {% for c in candidates %}
-    <label class="candidate" style="animation-delay: {{ loop.index0 * 80 }}ms">
+    <label class="candidate">
       <input type="radio" name="code" value="{{ c.code }}" {% if c.code == selected or (not selected and loop.first) %}checked{% endif %}>
-      <span class="candidate-rank" aria-hidden="true">{{ loop.index }}</span>
-      <span class="candidate-detail">
-        <span class="candidate-heading">
-          <span class="code-chip">CUBSO {{ c.code }}</span>
-          {% if loop.first and candidates|length > 1 %}<span class="badge badge-success">Más probable</span>{% endif %}
-        </span>
+      <span>
+        <span class="chip">CUBSO {{ c.code }}</span>
+        {% if loop.first and candidates|length > 1 %}<span class="chip chip-plain">Más parecido</span>{% endif %}
         <span class="candidate-name">{{ c.name }}</span>
-        <span class="candidate-unit">Unidad de medida: {{ c.unit }}</span>
+        <span class="candidate-meta">Se compra por {{ c.unit|unit_text }}</span>
       </span>
-      <span class="candidate-check" aria-hidden="true"></span>
+      <span class="candidate-count"><strong>{{ "{:,}".format(n_awards.get(c.code, 0)) }}</strong>compras del Estado</span>
     </label>
     {% endfor %}
   </fieldset>
 
-  <div class="actions actions-pair">
-    <a class="button-secondary" href="{{ url_for('describe', reintentar=1) }}">Ninguno me corresponde</a>
-    <button type="submit" class="button-primary">
-      Confirmar y ver mercado
-      <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-    </button>
+  <div class="actions actions-between">
+    <a class="button button-secondary" href="{{ url_for('describe', reintentar=1) }}">Ninguno me corresponde</a>
+    <button type="submit" class="button button-primary" data-tour="2" data-tour-title="Confirme" data-tour-text="Si ninguno corresponde, vuelva a describirlo. Si uno es correcto, confírmelo para ver su mercado." data-tour-click>Confirmar y ver el mercado</button>
   </div>
 </form>
 {% endblock %}

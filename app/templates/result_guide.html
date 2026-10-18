@@ -1,0 +1,30 @@
+{# Cómo leer el resultado: se muestra en el paso 3, antes de ingresar el costo. Variable: rules. #}
+<section class="section panel" aria-labelledby="read-title" data-tour="3" data-tour-title="Cómo leer el resultado" data-tour-text="Antes de ingresar su costo, vea qué significa cada veredicto y cuándo la confianza es alta.">
+  <h2 class="panel-title" id="read-title">Cómo leer el resultado</h2>
+  <p class="panel-lead">El veredicto compara su costo por unidad con los precios que pagó el Estado por este mismo bien.</p>
+  <div class="verdict-guide">
+      <article class="guide guide-good">
+        <span class="guide-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <h3>Participa</h3>
+        <p>Su costo es menor que el P25: más bajo que lo que pagó el Estado en tres de cada cuatro compras. Tiene margen para ofertar.</p>
+      </article>
+      <article class="guide guide-caution">
+        <span class="guide-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 7v6M12 17h.01"/></svg></span>
+        <h3>Participa con cautela</h3>
+        <p>Su costo está entre el P25 y el P75, la mitad central de los precios. Puede competir, pero hay empresas que venden más barato.</p>
+      </article>
+      <article class="guide guide-bad">
+        <span class="guide-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        <h3>No rentable</h3>
+        <p>Su costo es mayor que el P75. Para ganar tendría que vender por debajo de lo que le cuesta.</p>
+      </article>
+    </div>
+    <div class="confidence-guide">
+      <p><strong>El nivel de confianza</strong> depende de cuántas compras hay y de cuánto se parecen sus precios:</p>
+      <ul>
+        <li><strong>Alta:</strong> {{ rules.MIN_HIGH_CONFIDENCE }} compras o más y precios parecidos entre sí.</li>
+        <li><strong>Media o baja:</strong> menos compras o precios que varían mucho; conviene mirar las compras de su zona.</li>
+        <li><strong>Sin veredicto:</strong> con menos de {{ rules.MIN_VERDICT }} compras el sistema solo muestra el rango como referencia.</li>
+      </ul>
+  </div>
+</section>

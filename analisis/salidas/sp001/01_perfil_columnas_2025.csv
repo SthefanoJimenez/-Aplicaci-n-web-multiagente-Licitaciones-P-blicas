@@ -1,0 +1,60 @@
+﻿fuente,columna,tipo,pct_lleno,valores_distintos,ejemplo
+ADJUDICACIONES,codigoentidad,int64,100.0,2796,200560
+ADJUDICACIONES,entidad_ruc,int64,100.0,2796,20551239692
+ADJUDICACIONES,entidad,object,100.0,2795,SUPERINTENDENCIA NACIONAL DE MIGRACIONES
+ADJUDICACIONES,tipoentidad,object,100.0,5,GOBIERNO NACIONAL
+ADJUDICACIONES,entidad_departamento,object,100.0,25,LIMA
+ADJUDICACIONES,codigoconvocatoria,int64,100.0,58129,1169749
+ADJUDICACIONES,objetocontractual,object,100.0,4,Servicio
+ADJUDICACIONES,tipoprocesoseleccion,object,100.0,30,Concurso Público Abreviado
+ADJUDICACIONES,proceso,object,100.0,53048,CP-ABR-6-2025-MIGRACIONES-1
+ADJUDICACIONES,descripcion_proceso,object,100.0,56344,SERVICIO PARA LA SUSCRIPCIÓN RED HAT ENT
+ADJUDICACIONES,n_item,int64,100.0,305,1
+ADJUDICACIONES,descripcion_item,object,100.0,56900,SERVICIO PARA LA SUSCRIPCIÓN RED HAT ENT
+ADJUDICACIONES,estado_item,object,100.0,3,Contratado
+ADJUDICACIONES,cantidad_adjudicado_item,float64,100.0,8793,1.0
+ADJUDICACIONES,monto_referencial_item_soles,float64,100.0,48148,270000.0
+ADJUDICACIONES,monto_adjudicado_item_soles,float64,100.0,43944,240000.0
+ADJUDICACIONES,departamento_item,object,99.6,27,LIMA
+ADJUDICACIONES,moneda,object,100.0,7,Soles
+ADJUDICACIONES,unidad_medida,object,100.0,22,Servicio
+ADJUDICACIONES,ruc_proveedor,object,100.0,34509,20536504819
+ADJUDICACIONES,proveedor,object,100.0,30681,OPEN NOVA IT CONSULTING S.A.C
+ADJUDICACIONES,tipo_proveedor,object,100.0,4,Persona Juridica
+ADJUDICACIONES,fecha_convocatoria,object,100.0,276,18/11/2025
+ADJUDICACIONES,fecha_buenapro,object,100.0,497,03/12/2025
+ADJUDICACIONES,fecha_consentimiento_bp,object,98.7,551,04/12/2025
+CONVOCATORIAS,codigoentidad,int64,100.0,2796,1901
+CONVOCATORIAS,entidad_ruc,int64,100.0,2796,20174950971
+CONVOCATORIAS,entidad,object,100.0,2795,UNIVERSIDAD NACIONAL DE EDUCACION ENRIQU
+CONVOCATORIAS,tipoentidad,object,100.0,5,GOBIERNO NACIONAL
+CONVOCATORIAS,codigoconvocatoria,int64,100.0,58129,1088355
+CONVOCATORIAS,descripcion_proceso,object,100.0,56344,SERVICIO DE SEGURIDAD Y VIGILANCIA PARA 
+CONVOCATORIAS,proceso,object,100.0,53048,DIRECTA-PROC-1-2025-UNE-1
+CONVOCATORIAS,tipocompra,object,100.0,3,Por la Entidad
+CONVOCATORIAS,objetocontractual,object,100.0,4,Servicio
+CONVOCATORIAS,SECTOR / NIVEL DE GOBIERNO,object,100.0,24,EDUCACIÓN
+CONVOCATORIAS,sistema_contratacion,object,99.9,10,Suma alzada
+CONVOCATORIAS,tipoprocesoseleccion,object,100.0,30,Contratación Directa
+CONVOCATORIAS,montoreferencial,float64,100.0,44195,1386233.96
+CONVOCATORIAS,n_item,int64,100.0,305,1
+CONVOCATORIAS,descripcion_item,object,100.0,56900,SERVICIO DE SEGURIDAD Y VIGILANCIA PARA 
+CONVOCATORIAS,unidad_medida,object,100.0,22,Servicio
+CONVOCATORIAS,estadoitem,object,100.0,3,Contratado
+CONVOCATORIAS,paquete,object,100.0,2,NO
+CONVOCATORIAS,codigoitem,float64,82.8,9516,94854.0
+CONVOCATORIAS,itemcubso,object,82.8,9516,SERVICIO DE SEGURIDAD Y VIGILANCIA
+CONVOCATORIAS,monto_referencial_item,float64,100.0,47806,1386233.96
+CONVOCATORIAS,moneda,object,100.0,7,Soles
+CONVOCATORIAS,departamento_item,object,99.6,27,LIMA
+CONVOCATORIAS,provincia_item,object,99.6,198,LIMA
+CONVOCATORIAS,distrito_item,object,99.6,1699,LURIGANCHO
+CONVOCATORIAS,fecha_convocatoria,datetime64[ns],100.0,276,2025-02-05
+CONVOCATORIAS,fechaintegracionbases,datetime64[ns],58.4,324,2025-12-04
+CONVOCATORIAS,fechapresentacionpropuesta,datetime64[ns],85.4,349,2025-07-21
+POSTOR,codigo_convocatoria,int64,100.0,57433,1100582
+POSTOR,fechaconvocatoria,datetime64[ns],100.0,7602,2025-03-26 00:00:00
+POSTOR,n_item,int64,100.0,303,1
+POSTOR,ruc_codigo_postor,object,100.0,67518,20557084364
+POSTOR,postor,object,100.0,51790,URBANCAD SOCIEDAD ANONIMA CERRADA
+POSTOR,fecha_presentacion_propuesta,datetime64[ns],100.0,649,2025-04-11

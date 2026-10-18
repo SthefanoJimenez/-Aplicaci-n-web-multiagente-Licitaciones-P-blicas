@@ -1,64 +1,58 @@
 {% extends "base.html" %}
+{% set active_nav = "evaluate" %}
 {% block title %}Describa su bien{% endblock %}
-{% block main_class %}content-full{% endblock %}
 {% block content %}
-<div class="split">
-
-  {# Panel izquierdo: imagen y presentación #}
-  <section class="hero" style="--hero-image: url('{{ url_for('static', filename='img/tender-hero.jpg') }}')">
-    <div class="hero-text">
-      <span class="hero-badge">Mercado de licitaciones · Perú</span>
-      <h2 class="hero-title">¿Es rentable vender al Estado?</h2>
-      <p class="hero-description">Analice el mercado de adjudicaciones públicas y reciba un veredicto basado en datos reales del OECE (2023-2025).</p>
-      <dl class="hero-figures">
-        <div><dt>adjudicaciones de bienes</dt><dd>60,024</dd></div>
-        <div><dt>bienes en el catálogo</dt><dd>2,023</dd></div>
-        <div><dt>agentes</dt><dd>4</dd></div>
-      </dl>
-    </div>
+<div class="intro">
+  <section aria-labelledby="intro-title">
+    <h2 class="intro-title" id="intro-title">¿Le conviene vender su producto al Estado?</h2>
+    <p class="intro-lead">Compare su costo con lo que el Estado pagó por el mismo bien entre 2023 y 2025, vea dónde se compra y quiénes ganan, y reciba un veredicto antes de preparar una propuesta.</p>
+    <ol class="how" aria-label="Cómo funciona">
+      <li><div><strong>Describa su bien</strong><span>Con sus propias palabras, como lo vende.</span></div></li>
+      <li><div><strong>Elija el código del catálogo</strong><span>Un agente busca los bienes del catálogo CUBSO que más se parecen.</span></div></li>
+      <li><div><strong>Vea el mercado</strong><span>Precios pagados, competencia, lugares, entidades y proveedores.</span></div></li>
+      <li><div><strong>Ingrese su costo</strong><span>Su costo unitario no se guarda.</span></div></li>
+      <li><div><strong>Reciba el veredicto</strong><span>Participa, participa con cautela o no rentable, con su nivel de confianza.</span></div></li>
+    </ol>
+    <p class="intro-data">Basado en {{ "{:,}".format(stats.n_awards) }} adjudicaciones de bienes del OECE y {{ "{:,}".format(stats.n_catalog) }} bienes del catálogo con compras suficientes.
+      <a href="{{ url_for('data_preparation') }}">Vea cómo preparamos los datos</a>.</p>
   </section>
 
-  {# Panel derecho: formulario #}
-  <section class="split-form">
-    <div class="split-inner">
-      {% with step=1, step_name="" %}{% include "_step.html" %}{% endwith %}
-      <h1 class="page-title">¿Qué bien vende su empresa?</h1>
-      <p class="subtitle">Descríbalo con sus propias palabras. Cuanto más detallada sea la descripción, más precisa será la clasificación en el catálogo estatal.</p>
+  <section class="panel" aria-labelledby="form-title">
+    <p class="muted small" style="margin:0 0 6px">Paso 1 de 5</p>
+    <h1 class="page-title" id="form-title">¿Qué bien vende su empresa?</h1>
+    <p class="page-lead" style="font-size:16px">Descríbalo con sus propias palabras: qué es, de qué material y en qué medida o presentación.</p>
 
-      {% if retry %}
-      <div class="notice notice-info">Pruebe describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</div>
-      {% endif %}
+    {% if retry %}
+    <div class="notice notice-info">Pruebe describirlo de otra forma. Agregar el material, la medida o la presentación suele ayudar.</div>
+    {% endif %}
 
-      <form method="post" action="{{ url_for('candidates') }}" class="form" data-loading novalidate>
-        <div class="field">
-          <label for="description" class="label">Descripción del bien <span class="required" aria-hidden="true">*</span></label>
-          <textarea id="description" name="description" rows="5" maxlength="{{ max_length }}"
-                    aria-describedby="tips{% if error %} description-error{% endif %}"
-                    {% if error %}aria-invalid="true"{% endif %} data-required>{{ description }}</textarea>
-          <p id="description-error" class="error" role="alert" {% if not error %}hidden{% endif %}>
-            <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-            <span>{{ error or "Escriba una descripción del bien para buscarlo en el catálogo." }}</span>
-          </p>
+    <form method="post" action="{{ url_for('candidates') }}" data-loading novalidate>
+      <div class="field">
+        <label for="description" class="label">Descripción del bien</label>
+        <textarea data-tour="1" data-tour-title="Describa su producto" data-tour-text="Escriba con sus palabras qué vende: material, medida o presentación. Por ejemplo, «cemento portland en bolsa de 42.5 kg»." id="description" name="description" rows="4" maxlength="{{ max_length }}"
+                  aria-describedby="examples-label{% if error %} description-error{% endif %}"
+                  {% if error %}aria-invalid="true"{% endif %} data-required>{{ description }}</textarea>
+        <p id="description-error" class="error" role="alert" {% if not error %}hidden{% endif %}>
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          <span>{{ error or "Escriba una descripción del bien para buscarlo en el catálogo." }}</span>
+        </p>
+        <p class="hint" id="examples-label">Ejemplos que puede usar:</p>
+        <div data-tour="2" data-tour-title="O use un ejemplo" data-tour-text="Si prefiere, haga clic en un ejemplo y se escribirá por usted." class="examples">
+          {% for example in ["cemento portland en bolsa de 42.5 kg", "leche evaporada en tarro", "petróleo diésel B5", "camioneta pick up 4x4 doble cabina"] %}
+          <button type="button" class="example" data-example="{{ example }}">{{ example }}</button>
+          {% endfor %}
         </div>
+      </div>
 
-        <div id="tips" class="tips">
-          <p class="tips-title">¿Qué incluir en la descripción?</p>
-          <ul>
-            <li>Nombre del producto o bien</li>
-            <li>Material o composición (por ejemplo: acero, PVC, algodón)</li>
-            <li>Medida, peso o presentación</li>
-            <li>Uso típico del bien</li>
-          </ul>
-        </div>
-
-        <button type="submit" class="button-primary button-wide" data-loading-text="Buscando en el catálogo…">
-          Buscar código CUBSO
-          <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        </button>
-        <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
-        <p class="privacy-note">No guardamos su descripción. Se procesa con un modelo de lenguaje solo para identificar el bien en el catálogo.</p>
-      </form>
-    </div>
+      <div class="actions">
+        <button type="submit" class="button button-primary button-wide" data-loading-text="Buscando en el catálogo…" data-tour="3" data-tour-title="Busque en el catálogo" data-tour-text="Cuando haya escrito su producto, haga clic aquí. El agente clasificador buscará los bienes del catálogo que más se parecen." data-tour-click>Buscar en el catálogo</button>
+      </div>
+      <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+      <p class="privacy">
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1.944A11.954 11.954 0 012.166 5C2.056 5.649 2 6.319 2 7c0 5.225 3.34 9.67 8 11.317C14.66 16.67 18 12.225 18 7c0-.682-.057-1.35-.166-2.001A11.954 11.954 0 0110 1.944zM13.707 8.707a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+        <span>No guardamos su descripción. Un modelo de lenguaje la usa solo para identificar el bien en el catálogo.</span>
+      </p>
+    </form>
   </section>
 </div>
 {% endblock %}

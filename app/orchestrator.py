@@ -94,6 +94,7 @@ class MarketState(TypedDict, total=False):
     """Información que comparten los nodos del tramo 2."""
     code: int
     market: dict
+    detail: Optional[dict]
     result: str
 
 
@@ -125,12 +126,19 @@ def market_no_evidence_node(state: MarketState) -> dict:
     return {"result": NO_EVIDENCE}
 
 
+def market_detail_node(state: MarketState) -> dict:
+    """Detalle del mercado: dónde se compra, quién compra, quién gana y de qué tamaño (HU-002 y HU-003 ampliadas)."""
+    market = state["market"]
+    return {"detail": market_analyst.describe(market["code"], market["unit"])}
+
+
 def build_market_stage():
     graph = StateGraph(MarketState)
     graph.add_node("market_analyst_agent", market_analyst_node)
     graph.add_node("show_range", show_range_node)
     graph.add_node("reference_range", reference_range_node)
     graph.add_node("no_evidence", market_no_evidence_node)
+    graph.add_node("market_detail_agent", market_detail_node)
 
     graph.add_edge(START, "market_analyst_agent")
     graph.add_conditional_edges(
@@ -142,8 +150,10 @@ def build_market_stage():
             "no_evidence": "no_evidence",
         },
     )
-    for node in ("show_range", "reference_range", "no_evidence"):
-        graph.add_edge(node, END)
+    graph.add_edge("show_range", "market_detail_agent")
+    graph.add_edge("reference_range", "market_detail_agent")
+    graph.add_edge("market_detail_agent", END)
+    graph.add_edge("no_evidence", END)
     return graph.compile(name="Stage 2: analyze the market")
 
 
@@ -161,4 +171,4 @@ def analyze_market(code):
         {"code": int(code)},
         config={"run_name": "Analyze the market"},
     )
-    return {"result": state["result"], "market": state["market"]}
+    return {"result": state["result"], "market": state["market"], "detail": state.get("detail")}

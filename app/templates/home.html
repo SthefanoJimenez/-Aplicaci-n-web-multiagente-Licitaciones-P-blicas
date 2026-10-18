@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% set active_nav = "home" %}
+{% block title %}Venda al Estado con datos{% endblock %}
+{% block page_class %}page-home{% endblock %}
+{% block content %}
+{% set y0, y1 = s.years %}
+
+{# ------------------------------------------------------------------ Portada #}
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="pill">
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
+        Datos abiertos del OECE, {{ y0 }}–{{ y1 }}
+      </p>
+      <h1 class="hero-title" id="hero-title">Sepa si le conviene venderle al Estado antes de preparar su propuesta</h1>
+      <p class="hero-lead">Describa su producto y compare su costo con lo que el Estado pagó por el mismo bien. Vea dónde se compra, qué entidades lo compran, quiénes ganan y por qué montos. No necesita saber de analítica.</p>
+      <div class="hero-actions">
+        <a class="button button-primary button-lg" href="{{ url_for('describe') }}" data-tour="1" data-tour-title="Empiece aquí" data-tour-text="Haga clic en «Evaluar mi producto» para describir el bien que vende. El recorrido continuará en la siguiente pantalla." data-tour-click>Evaluar mi producto</a>
+        <a class="button button-secondary button-lg" href="{{ url_for('overview') }}">Ver el panorama del mercado</a>
+      </div>
+      <button type="button" class="tour-start" data-tour-start>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg>
+        ¿Es su primera vez? Vea un recorrido guiado
+      </button>
+      <p class="hero-note">
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+        Sin registro. Su costo no se guarda ni se envía a ningún modelo de lenguaje.
+      </p>
+    </div>
+
+    {% if ex %}
+    {% set position = ((ex.median - ex.p25) / (ex.p75 - ex.p25) * 100) if ex.p75 > ex.p25 else 50 %}
+    <figure class="showcase" aria-label="Ejemplo con datos reales: {{ ex.name }}">
+      <div class="showcase-window">
+        <div class="showcase-bar" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <em>Ejemplo con datos reales</em>
+        </div>
+        <div class="showcase-body">
+          <div class="showcase-query">
+            <span class="showcase-label">Producto</span>
+            <p>{{ ex.name }}</p>
+            <span class="showcase-code">CUBSO {{ ex.code }} · por {{ ex.unit|unit_text }}</span>
+          </div>
+
+          <div class="showcase-card">
+            <div class="showcase-card-head">
+              <span class="showcase-label">Lo que pagó el Estado</span>
+              <span class="showcase-count">{{ "{:,}".format(ex.n_awards) }} compras</span>
+            </div>
+            <div class="showcase-prices">
+              <div><small>P25</small><strong>{{ ex.p25|pen }}</strong></div>
+              <div><small>Mediana</small><strong>{{ ex.median|pen }}</strong></div>
+              <div><small>P75</small><strong>{{ ex.p75|pen }}</strong></div>
+            </div>
+            <div class="showcase-range" aria-hidden="true">
+              <span class="z z-low"></span><span class="z z-mid"><i style="left: {{ '%.0f'|format(position) }}%"></i></span><span class="z z-high"></span>
+              <b style="left: {{ '%.1f'|format(e.marker_pct) }}%"></b>
+            </div>
+          </div>
+
+          <div class="showcase-mini">
+            <div><small>Postores por proceso</small><strong>{{ ex.median_bidders|number }}</strong></div>
+            <div><small>Entidades compradoras</small><strong>{{ ex.n_entities }}</strong></div>
+            <div><small>Compras en La Libertad</small><strong>{{ ex.local_n }}</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <figcaption class="showcase-verdict">
+        <div class="stamp stamp-{{ e.tone }} stamp-mini" aria-hidden="true">
+          {% if e.tone == "bad" %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
+          {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}
+        </div>
+        <div>
+          <strong>{{ e.label }}</strong>
+          <span>con un costo de {{ ex.cost|pen }} · confianza {{ e.confidence_label|lower }}</span>
+        </div>
+      </figcaption>
+    </figure>
+    {% endif %}
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ Evidencia #}
+<section class="evidence" aria-labelledby="evidence-title">
+  <div class="wrap">
+    <h2 class="evidence-title" id="evidence-title">Calculado con todas las compras de bienes publicadas por el OECE, sin muestreo</h2>
+    <dl class="evidence-figures">
+      <div><dt>Adjudicaciones de bienes</dt><dd>{{ "{:,}".format(s.n_awards) }}</dd></div>
+      <div class="fig-wide"><dt>Soles adjudicados</dt><dd>{{ s.amount|amount|replace("S/ ", "") }}</dd></div>
+      <div><dt>Entidades compradoras</dt><dd>{{ "{:,}".format(s.n_entities) }}</dd></div>
+      <div><dt>Empresas que ganaron</dt><dd>{{ "{:,}".format(s.n_suppliers) }}</dd></div>
+      <div><dt>Regiones del país</dt><dd>{{ s.n_departments }}</dd></div>
+    </dl>
+    <p class="evidence-note">Cada resultado indica en cuántas adjudicaciones se basa. <a href="{{ url_for('data_preparation') }}">Vea cómo preparamos los datos</a>.</p>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ Qué puede ver #}
+<section class="home-section" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="home-h2" id="features-title">Lo que necesita saber para decidir, en lenguaje simple</h2>
+      <p class="home-lead">Las mismas preguntas que se hace un empresario antes de presentarse a una convocatoria.</p>
+    </div>
+    <div class="features">
+      <article class="feature">
+        <span class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18h16M7 14v4M12 8v10M17 11v7"/></svg>
+        </span>
+        <h3>¿A qué precio compra el Estado?</h3>
+        <p>El rango de precios unitarios que pagó por el mismo bien y unidad (P25, mediana y P75) y en cuántas compras se basa.</p>
+      </article>
+      <article class="feature">
+        <span class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M15 14.5c2.8 0 5 1.4 5 4"/></svg>
+        </span>
+        <h3>¿Cuánta competencia hay?</h3>
+        <p>Cuántas empresas se presentan a cada proceso, en qué porcentaje hubo un solo postor y quiénes ganan más veces.</p>
+      </article>
+      <article class="feature">
+        <span class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0112 2.5a7 7 0 017 7C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        </span>
+        <h3>¿Dónde y quién compra?</h3>
+        <p>Departamentos y provincias de entrega, tipo de entidad, entidades que más compran y el tamaño de sus compras.</p>
+      </article>
+      <article class="feature">
+        <span class="feature-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>
+        </span>
+        <h3>¿Me conviene participar?</h3>
+        <p>Un veredicto con su nivel de confianza: participa, participa con cautela o no rentable, y por qué.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ Cómo funciona (secuencia real de 5 pasos) #}
+<section class="home-section home-section-alt" aria-labelledby="steps-title">
+  <div class="wrap">
+    <div class="section-head">
+      <h2 class="home-h2" id="steps-title">Cinco pasos</h2>
+      <p class="home-lead">Cuatro agentes trabajan por usted: uno identifica su producto, otro analiza el mercado, otro compara su costo y el último le explica el resultado.</p>
+    </div>
+    <div class="carousel" data-carousel aria-roledescription="carrusel" aria-label="Los cinco pasos">
+      <div class="carousel-track" tabindex="0">
+        {% set slides = [
+          ("Describa su bien", "Escriba con sus propias palabras lo que vende, como se lo diría a un cliente.", "Ejemplo: «cemento portland en bolsa de 42.5 kg»."),
+          ("Elija el código", "El agente clasificador propone hasta tres bienes del catálogo CUBSO y le muestra cuántas veces los compró el Estado.", "Usted confirma el que corresponde o vuelve a describirlo."),
+          ("Vea el mercado", "Precios pagados, competencia, lugares, entidades que compran y empresas que ganan.", "Con el número de compras en que se basa cada cifra."),
+          ("Ingrese su costo", "Su costo mínimo por unidad: compra o producción, flete, almacenamiento e IGV.", "Solo se usa en ese momento: no se guarda ni se envía a un modelo de lenguaje."),
+          ("Reciba el veredicto", "Participa, participa con cautela o no rentable, con su nivel de confianza.", "Y en qué departamentos el Estado pagó más que su costo."),
+        ] %}
+        {% for title, text, note in slides %}
+        <article class="slide" role="group" aria-roledescription="paso" aria-label="Paso {{ loop.index }} de 5">
+          <span class="slide-number">{{ loop.index }}</span>
+          <div>
+            <h3>{{ title }}</h3>
+            <p>{{ text }}</p>
+            <p class="slide-note">{{ note }}</p>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      <div class="carousel-controls">
+        <button type="button" class="carousel-btn" data-dir="-1" aria-label="Paso anterior">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="carousel-dots" role="tablist" aria-label="Elegir paso">
+          {% for _ in range(5) %}<button type="button" role="tab" aria-label="Paso {{ loop.index }}" data-go="{{ loop.index0 }}"></button>{% endfor %}
+        </div>
+        <button type="button" class="carousel-btn" data-dir="1" aria-label="Paso siguiente">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button type="button" class="carousel-toggle" data-toggle aria-pressed="false" aria-label="Pausar el carrusel">
+          <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="6" width="3.5" height="12" rx="1"/><rect x="13.5" y="6" width="3.5" height="12" rx="1"/></svg>
+          <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 6.5v11l9-5.5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ Datos verificables #}
+<section class="home-section" aria-labelledby="real-title">
+  <div class="wrap real">
+    <div>
+      <h2 class="home-h2" id="real-title">Datos reales que usted puede comprobar</h2>
+      <p class="home-lead">Cada cifra sale de las adjudicaciones que el OECE publica como datos abiertos. Las cifras no son estimadas: cada compra tiene su entidad, su fecha y la nomenclatura de su proceso, y se puede ubicar en el SEACE.</p>
+      <ol class="verify-steps">
+        <li><strong>Descargue las compras</strong><span>Desde el panorama o la ficha de cualquier bien, en CSV, con los mismos filtros que está viendo.</span></li>
+        <li><strong>Ubique el proceso en el SEACE</strong><span>Con la entidad, la fecha de la buena pro y la nomenclatura del proceso, en el buscador público del SEACE.</span></li>
+        <li><strong>Compare con la fuente</strong><span>Los archivos de adjudicaciones, convocatorias y postores {{ y0 }}–{{ y1 }} del <a href="https://www.gob.pe/14272-acceder-al-portal-de-datos-abiertos-del-oece" rel="noopener">portal de datos abiertos del OECE</a>.</span></li>
+      </ol>
+      <div class="hero-actions" style="margin-top:24px">
+        <a class="button button-secondary" href="{{ url_for('data_preparation') }}">Cómo preparamos los datos</a>
+        {% if ex %}<a class="button button-secondary" href="{{ url_for('good_csv', code=ex.code) }}" download>Descargar las {{ "{:,}".format(ex.n_awards) }} compras del ejemplo</a>{% endif %}
+      </div>
+    </div>
+    {% if ex and ex.sample %}
+    {% set r = ex.sample %}
+    <figure class="record" aria-labelledby="record-title">
+      <figcaption id="record-title">Una de las {{ "{:,}".format(ex.n_awards) }} compras del ejemplo, tal como está en los datos</figcaption>
+      <dl>
+        <div><dt>Entidad</dt><dd>{{ r.entity }}</dd></div>
+        <div><dt>Nomenclatura del proceso</dt><dd class="mono">{{ r.nomenclature }}</dd></div>
+        <div><dt>Convocatoria e ítem</dt><dd class="mono">{{ r.call }} · ítem {{ r.item }}</dd></div>
+        <div><dt>Buena pro</dt><dd>{{ r.date|date_pe }}</dd></div>
+        <div><dt>Lugar de entrega</dt><dd>{{ (r.province or r.place or "—")|title }}</dd></div>
+        <div><dt>Ganador</dt><dd>{{ r.supplier }}</dd></div>
+        <div><dt>Cantidad y precio</dt><dd>{{ r.quantity|number }} {{ ex.unit|unit_text }} a {{ r.price|pen }}</dd></div>
+      </dl>
+    </figure>
+    {% endif %}
+  </div>
+</section>
+
+
+{% endblock %}

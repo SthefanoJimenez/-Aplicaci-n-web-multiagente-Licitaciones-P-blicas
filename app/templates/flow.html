@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{# Diseño de las pantallas del flujo de evaluación: los 5 pasos a la izquierda #}
+{% set active_nav = "evaluate" %}
+{% set step_names = ["Describa su bien", "Elija el código", "Vea el mercado", "Ingrese su costo", "Reciba el veredicto"] %}
+{% block content %}
+<div class="flow">
+  <ol class="stepper" aria-label="Pasos de la evaluación">
+    {% for name in step_names %}
+    <li class="{{ 'done' if loop.index < step else ('current' if loop.index == step else '') }}"
+        {% if loop.index == step %}aria-current="step"{% endif %}>{{ name }}</li>
+    {% endfor %}
+  </ol>
+  <div>
+    <p class="stepper-mobile">Paso {{ step }} de 5 · {{ step_names[step - 1] }}</p>
+    {% block flow %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

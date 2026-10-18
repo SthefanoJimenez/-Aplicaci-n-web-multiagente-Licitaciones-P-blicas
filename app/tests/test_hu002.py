@@ -100,7 +100,7 @@ def with_code(client, code, candidates=None):
 
 def test_without_confirmed_code_returns_to_start(client):
     response = client.get("/mercado")
-    assert response.status_code == 302 and response.headers["Location"].endswith("/")
+    assert response.status_code == 302 and response.headers["Location"].endswith("/evaluar")
 
 
 def test_screen_shows_range_unit_awards_and_period(client, no_model):

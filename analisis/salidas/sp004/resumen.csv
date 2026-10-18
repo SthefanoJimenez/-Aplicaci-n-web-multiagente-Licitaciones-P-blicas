@@ -1,0 +1,7 @@
+﻿modelo,estrategia,prompt,casos_evaluados,en_preseleccion_pct,acierto_item_pct,acierto_familia_pct,candidatos_validos_pct,segundos_mediana,tokens_entrada_mediana
+gemini-3.1-flash-lite,completo,A,20,,100.0,100.0,100.0,7.18,59463.5
+gemini-3.1-flash-lite,completo,B,20,,100.0,100.0,100.0,1.92,59662.5
+gemini-3.1-flash-lite,preseleccion,A,20,100.0,95.0,100.0,100.0,3.375,1463.0
+gemini-3.1-flash-lite,preseleccion,B,20,100.0,100.0,100.0,100.0,1.705,1451.0
+gemini-3.5-flash-lite,preseleccion,A,20,100.0,95.0,100.0,100.0,3.2,1372.0
+gemini-3.5-flash-lite,preseleccion,B,20,100.0,95.0,100.0,100.0,1.61,1362.5

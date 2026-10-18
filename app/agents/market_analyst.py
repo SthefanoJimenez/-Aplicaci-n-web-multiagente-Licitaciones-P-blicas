@@ -2,7 +2,7 @@ import pandas as pd
 from langsmith import traceable
 
 import rules
-from services import data
+from services import analytics, data
 
 LOCAL_DEPARTMENT = "LA LIBERTAD"
 
@@ -93,3 +93,10 @@ def _no_data(code, name, unit):
         "dispersion": None, "n_with_bidders": 0, "median_bidders": None, "n_single_bidder": 0,
         "pct_single_bidder": None, "n_la_libertad": 0, "evidence": rules.evidence_result(0),
     }
+
+@traceable(run_type="tool", name="Describe market",
+           process_outputs=lambda output: {"n_awards": output["n_awards"] if output else 0})
+def describe(code, unit):
+    """Detalle descriptivo del mercado del bien (HU-002 y HU-003 ampliadas): lugares, entidades, proveedores,
+    tamaño de las compras y últimas adjudicaciones. Determinista, sin modelo de lenguaje."""
+    return analytics.good_detail(code, unit)
