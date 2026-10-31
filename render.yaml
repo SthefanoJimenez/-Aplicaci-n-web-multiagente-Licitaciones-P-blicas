@@ -24,3 +24,5 @@ services:
         sync: false
       - key: LANGSMITH_PROJECT
         value: "licitafacil-prod"
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,5 @@
+﻿codigo,camino,paginas,modelo,tokens_entrada_conteo,segundos,tokens_entrada_real,tokens_salida,json_valido,requisitos_extraidos,valor_estimado,fecha_presentacion_ofertas
+1255745,pdf,62,gemini-3.1-flash-lite,34721,63.7,33137,446,True,5,,
+1253677,pdf,81,gemini-3.1-flash-lite,45361,9.2,43245,403,True,6,,
+1255745,ocr,62,gemini-3.1-flash-lite,934,14.9,1086,644,True,9,,
+1253677,ocr,81,gemini-3.1-flash-lite,2057,41.4,2209,595,True,6,,

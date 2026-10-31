@@ -1,0 +1,31 @@
+{
+ "requisitos": [
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Autorización e inscripción vigente en el Registro de Hidrocarburos del Organismo Supervisor de la Inversión en Energía y Minería – OSINERGMIN, según el D.S. N° 004-2010-EM y regulado por la R.C.D. OSINERGMIN N° 191-2011/OS-CD.",
+   "pagina": 26
+  },
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Debe contar con póliza de seguro de Responsabilidad Civil vigente, que cubra los daños a terceros en sus bienes y personas por siniestros que pudieran ocurrir en sus instalaciones.",
+   "pagina": 27
+  },
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Contar al menos 01 camión cisterna de 2000 Gl. como mínimo de capacidad, debidamente operativo, con SOAT vigente y con permisos para traslado de combustible emitido por le entidad competente.",
+   "pagina": 27
+  },
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Contar con un establecimiento dentro de la provincia de Otuzco, para abastecer con el suministro, en el mismo establecimiento cuando sea requerido, debiendo éste atender las 24 horas del día y los siete días de la semana y todos los días del mes.",
+   "pagina": 27
+  },
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "La empresa debe contar con estación (es) y/o grifo(s) que suministren combustible, materia del procedimiento de Selección dentro de la provincia de Otuzco, Departamento de La Libertad.",
+   "pagina": 27
+  }
+ ],
+ "valor_estimado": null,
+ "fecha_presentacion_ofertas": null
+}

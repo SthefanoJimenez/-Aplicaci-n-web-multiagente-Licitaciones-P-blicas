@@ -9,6 +9,7 @@ import json
 import sys
 import zipfile
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -222,17 +223,20 @@ def test_profile_script_reads_a_monthly_zip(tmp_path, monkeypatch):
     assert sample[0]["ocid"] == "ocds-dgv273-seacev3-1"
 
 
-def test_api_checks_helpers():
-    import sp005_03_api_checks as checks
+def test_run_all_helpers():
+    import sp005_00_run_all as run_all
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("Bases/bases.pdf", _text_pdf())
         z.writestr("Bases/anexos.docx", b"x")
-    assert checks.file_kind(buf.getvalue()) == "zip" and checks.file_kind(b"  <html>") == "html"
-    assert checks.list_archive(buf.getvalue(), "zip") == ["Bases/bases.pdf", "Bases/anexos.docx"]
+    assert run_all.file_kind(buf.getvalue()) == "zip" and run_all.file_kind(b"  <html>") == "html"
+    assert run_all.file_kind(_docx(["hola"])) == "docx" and run_all.file_kind(_text_pdf()) == "pdf"
+    assert run_all.list_archive(buf.getvalue(), "zip") == ["Bases/bases.pdf", "Bases/anexos.docx"]
     with pytest.raises(RuntimeError):
-        checks.list_archive(b"Rar!\x1a\x07\x00basura", "rar")
-    assert checks.first_list({"records": [1]}, "records") == [1] and checks.first_list({"a": 1}, "records") == [{"a": 1}]
+        run_all.list_archive(b"Rar!\x1a\x07\x00basura", "rar")
+    assert run_all.first_list({"records": [1]}, "records") == [1] and run_all.first_list({"a": 1}, "records") == [{"a": 1}]
+    assert run_all.api_root("https://x.pe/api/v1/") == ("https://x.pe", "https://x.pe/api/v1")
+    assert run_all.api_root("https://x.pe") == ("https://x.pe", "https://x.pe/api/v1")
 
 
 def test_prefers_integrated_bases_over_administrative():
@@ -297,3 +301,67 @@ def test_rubro_rule_prefers_volume_among_well_covered():
         {"rubro": "3011", "vigentes": 88, "vigentes_la_libertad": 0, "cobertura_catalogo_pct": 96.7},
     ])
     assert sp.choose_rubros(table) == ["1510", "2510"]
+
+
+def _free_port():
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_run_all_end_to_end_with_simulated_api(tmp_path):
+    """Partes B, C y D completas contra la API simulada, sin tocar salidas/ ni la caché reales."""
+    import os
+    import socket
+    import subprocess
+    import time
+    here = Path(__file__).resolve().parent
+    port = _free_port()
+    server = subprocess.Popen([sys.executable, str(here / "fake_ocds_server.py"), str(port)],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):  # esperar a que el servidor acepte conexiones
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        import urllib.request
+        try:
+            version = urllib.request.urlopen(f"http://127.0.0.1:{port}/__version__", timeout=5).read().decode()
+        except OSError:
+            version = ""  # un servidor anterior no tiene /__version__
+        assert version[:4].isdigit() and version >= "2026-10-17", (
+            "tests_sp005/fake_ocds_server.py está desactualizado: reemplácelo por la versión final")
+        catalog = tmp_path / "catalog.csv"
+        catalog.write_text("codigoitem,itemcubso\n1,DIESEL B5 S-50\n", encoding="utf-8")  # solo combustibles: rubro 1510
+        # PYTHONIOENCODING=cp1252 simula la consola de Windows, donde "→" no existe (error real del 17/10/2026)
+        env = os.environ | {"SP005_OUTPUT_DIR": str(tmp_path / "salidas"), "SP005_CACHE_DIR": str(tmp_path / "cache"),
+                            "PYTHONIOENCODING": "cp1252"}
+        result = subprocess.run(
+            [sys.executable, str(here.parent / "sp005_00_run_all.py"), "--partes", "B,C,D", "--sample", "6",
+             "--catalog", str(catalog), "--base-url", f"http://127.0.0.1:{port}/api/v1"],
+            capture_output=True, encoding="cp1252", errors="replace", env=env, timeout=240)
+    finally:
+        server.terminate()
+        server.wait()
+    summary = (tmp_path / "salidas" / "resumen_a_d.md").read_text(encoding="utf-8")
+    assert result.returncode == 0, result.stdout[-3000:] + result.stderr[-2000:]
+    assert "FALLÓ" not in summary, summary
+    assert "| B0 Identificación | OK | sin identificar 403 · identificado 200 |" in summary, summary
+    assert "conclusión: VIABLE" in summary
+    assert "UnicodeEncodeError" not in result.stdout + result.stderr
+    assert (tmp_path / "salidas" / "informe_sp005.md").exists() and (tmp_path / "salidas" / "demo_bases.pdf").exists()
+    docs = pd.read_csv(tmp_path / "salidas" / "documentos.csv")
+    assert {"docx", "zip", "pdf"} <= set(docs["formato_real"].dropna())
+
+
+def test_console_without_utf8_does_not_crash():
+    """En una consola cp1252 (Windows), imprimir "→" no debe detener el script."""
+    import subprocess
+    code = ("import sp005_01_tender_source as sp; sp.safe_console(); print('pdf → pdf · con texto')")
+    here = Path(__file__).resolve().parent.parent
+    result = subprocess.run([sys.executable, "-c", code], cwd=here, capture_output=True,
+                            env={**__import__("os").environ, "PYTHONIOENCODING": "cp1252"})
+    assert result.returncode == 0, result.stderr.decode(errors="replace")

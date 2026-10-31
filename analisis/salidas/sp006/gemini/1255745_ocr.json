@@ -1,0 +1,51 @@
+{
+ "requisitos": [
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Autorización e inscripción vigente en el Registro de Hidrocarburos del Organismo Supervisor de la Inversión en Energía y Minería — OSINERGMIN, según el D.S. N* 004-2010-EM y regulado por la R.C.D. OSINERGMIN N'* 191-2011/0S-CD.",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "Debe contar con póliza de seguro de Responsabilidad Civil vigente, que cubra los daños a terceros en sus bienes y personas por siniestros que pudieran ocurrir en sus instalaciones.",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "Contar con al menos 01 camión cisterna de 2000 Gl. como mínimo de capacidad, debidamente operativo, con SOAT vigente y con permisos para traslado de combustible emitido por le entidad competente.",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "Contar con un establecimiento dentro de la provincia de Otuzco, para abastecer con el suministro, en el mismo establecimiento cuando sea requerido, debiendo éste atender las 24 horas del dia y los siete días de la semana y todos los días del mes.",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "La empresa debe contar con estación (es) y/o grifo(s) que suministren combustible, materia del procedimiento de Selección dentro de la provincia de Otuzco, Departamento de La Libertad.",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "La estación de Servicio y/o grifo deberá contar con grupo electrógeno que garantice el abastecimiento permanente y oportuno de combustible, frente a eventualidades de falta de fluido eléctrico",
+   "pagina": null
+  },
+  {
+   "tipo": "Capacidad Técnica",
+   "texto": "La empresa tendrá la capacidad de abastecer la totalidad de combustible que se le solicite.",
+   "pagina": null
+  },
+  {
+   "tipo": "Participación en Consorcio",
+   "texto": "El número máximo de consorciados es de 02.",
+   "pagina": null
+  },
+  {
+   "tipo": "Participación en Consorcio",
+   "texto": "El porcentaje mínimo de participación de cada consorciado es de 50%",
+   "pagina": null
+  }
+ ],
+ "valor_estimado": null,
+ "fecha_presentacion_ofertas": null
+}

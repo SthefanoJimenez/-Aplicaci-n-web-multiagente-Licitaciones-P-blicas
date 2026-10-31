@@ -1,0 +1,36 @@
+{
+ "requisitos": [
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Autorización e Inscripción vigente en el Registro de Hidrocarburos del Organismo Supervisor de la Inversión en Energía y Minería – OSINERGMIN",
+   "pagina": 37
+  },
+  {
+   "tipo": "Experiencia del postor en la especialidad",
+   "texto": "El postor debe acreditar un monto facturado acumulado equivalente a S/ 650,000.00 para el ITEM N°01",
+   "pagina": 37
+  },
+  {
+   "tipo": "Experiencia del postor en la especialidad",
+   "texto": "El postor debe acreditar un monto facturado acumulado equivalente a S/ 350,000.00 para el ITEM N°02",
+   "pagina": 37
+  },
+  {
+   "tipo": "Participación en consorcio",
+   "texto": "El número máximo de consorciados es de dos (02).",
+   "pagina": 39
+  },
+  {
+   "tipo": "Participación en consorcio",
+   "texto": "El porcentaje mínimo de participación de cada consorciado es del 30%.",
+   "pagina": 39
+  },
+  {
+   "tipo": "Participación en consorcio",
+   "texto": "El porcentaje mínimo de participación en la ejecución del contrato, para el integrante del consorcio que acredite mayor experiencia, es de 70%.",
+   "pagina": 39
+  }
+ ],
+ "valor_estimado": null,
+ "fecha_presentacion_ofertas": null
+}

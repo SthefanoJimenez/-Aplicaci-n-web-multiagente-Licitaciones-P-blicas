@@ -1,0 +1,36 @@
+{
+ "requisitos": [
+  {
+   "tipo": "Capacidad Legal",
+   "texto": "Autorización e Inscripción vigente en el Registro de Hidrocarburos del Organismo Supervisor de la Inversión en Energía y Minería — OSINERGMIN, según el Decreto Supremo Nº004—2010—EM y regulado por la Resolución de Consejo Directivo OSINERGMIN Nº191—2011/08—CD y sus modificatorias",
+   "pagina": null
+  },
+  {
+   "tipo": "Experiencia del Postor en la Especialidad (Item 01)",
+   "texto": "El postor debe acreditar un monto facturado acumulado equivalente a S/ 650,000.00 por la venta de bienes iguales o similares al objeto de la convocatoria, durante los diez años anteriores a la fecha de la presentación de ofertas",
+   "pagina": null
+  },
+  {
+   "tipo": "Experiencia del Postor en la Especialidad (Item 01 - MYPE)",
+   "texto": "En el caso de postores que declaren en el Anexo Nº 1 tener la condición de micro y pequeña empresa, se acredita una experiencia de S/ 150,000.00",
+   "pagina": null
+  },
+  {
+   "tipo": "Experiencia del Postor en la Especialidad (Item 02)",
+   "texto": "El postor debe acreditar un monto facturado acumulado equivalente a S/ 350,000.00 por la venta de bienes iguales o similares al objeto de la convocatoria, durante los diez años anteriores a la fecha de la presentación de ofertas",
+   "pagina": null
+  },
+  {
+   "tipo": "Experiencia del Postor en la Especialidad (Item 02 - MYPE)",
+   "texto": "En el caso de postores que declaren en el Anexo Nº 1 tener la condición de micro y pequeña empresa, se acredita una experiencia de S/ 70,000.00",
+   "pagina": null
+  },
+  {
+   "tipo": "Participación en Consorcio",
+   "texto": "El número máximo de consorciados es de dos (02). El porcentaje mínimo de participación de cada consorciado es del 30%. El porcentaje mínimo de participación en la ejecución del contrato, para el integrante del consorcio que acredite mayor experiencia, es de 70%",
+   "pagina": null
+  }
+ ],
+ "valor_estimado": null,
+ "fecha_presentacion_ofertas": null
+}

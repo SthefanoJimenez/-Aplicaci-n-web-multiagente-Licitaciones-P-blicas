@@ -1,0 +1,64 @@
+{
+    "_nota": "Ejemplo del contrato de EN-007, armado con la base 1258029 del SP-006 (Municipalidad Provincial de Ilo). Entidad, departamento, procedimiento, rubro, fecha de publicación y requisitos son reales (vigentes del 17/10 y SP-006); las fechas del sistema, la ejecución y el enlace son ilustrativos. Sirve para que HU-007 y HU-009 trabajen sin base de datos.",
+    "tender": {
+        "ocid": "ocds-dgv273-seacev3-1258029",
+        "code": "1258029",
+        "title": "SIE-SIE-15-2026-OC-MPI-1",
+        "entity": "MUNICIPALIDAD PROVINCIAL DE ILO",
+        "method": "Subasta Inversa Electrónica",
+        "rubros": [
+            "1510"
+        ],
+        "state": "vigente",
+        "description": null,
+        "department": "MOQUEGUA",
+        "published_at": "2026-10-14T22:48:00-05:00",
+        "deadline_at": null,
+        "estimated_value": null,
+        "currency": "PEN",
+        "item_status": "CONVOCADO",
+        "first_seen_at": "2026-10-16T13:41:00+00:00",
+        "last_seen_at": "2026-10-28T13:42:00+00:00",
+        "closed_at": null,
+        "requirements_status": "extraido",
+        "documents": [
+            {
+                "title": "Bases Administrativas",
+                "url": "<enlace de descarga del SEACE>",
+                "doc_type": "biddingDocuments",
+                "doc_format": "rar",
+                "is_bases": true
+            }
+        ],
+        "requirements": [
+            {
+                "requirement_type": "Capacidad legal: inscripción en el Registro de Hidrocarburos de OSINERGMIN",
+                "text": "Copia simple de la autorización e inscripción vigente en el Registro de Hidrocarburos del Organismo Supervisor de la Inversión en Energía y Minería OSINERGMIN, según el Decreto Supremo N° 004-2010-EM",
+                "page": 10,
+                "source": "texto",
+                "document_url": "<enlace de descarga del SEACE>"
+            },
+            {
+                "requirement_type": "Capacidad legal: inscripción en el Registro para el Control de Bienes Fiscalizados",
+                "text": "Copia simple de la inscripción vigente en el Registro para el Control de Bienes Fiscalizados, según el Decreto Supremo N° 268-2019-EF",
+                "page": 10,
+                "source": "texto",
+                "document_url": "<enlace de descarga del SEACE>"
+            }
+        ]
+    },
+    "ingestion_run": {
+        "started_at": "2026-10-28T13:41:00+00:00",
+        "finished_at": "2026-10-28T13:46:00+00:00",
+        "status": "ok",
+        "trigger": "schedule",
+        "months": "2026-10,2026-09",
+        "source_open_goods": 2005,
+        "source_open_pilot": 188,
+        "saved_open": 188,
+        "new_count": 7,
+        "updated_count": 181,
+        "closed_count": 4,
+        "error": null
+    }
+}

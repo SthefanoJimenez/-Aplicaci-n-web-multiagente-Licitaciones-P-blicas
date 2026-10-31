@@ -35,7 +35,10 @@ OUT_DIR = ROOT / "salidas" / "sp005" / "pruebas_api"
 SAMPLE_FILE = ROOT / "salidas" / "sp005" / "muestra_bienes.json"
 PROFILE_SCRIPT = ROOT / "sp005_02_profile_fields.py"
 BASE_URL = "https://contratacionesabiertas.oece.gob.pe/api/v1"
-USER_AGENT = "LicitaFacil-SP005/1.0 (proyecto academico UPAO)"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 TIMEOUT = 60
 
 lines = []
