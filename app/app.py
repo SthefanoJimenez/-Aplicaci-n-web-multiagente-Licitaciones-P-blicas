@@ -6,8 +6,9 @@ import config
 import orchestrator
 import rules
 from agents import evaluator, writer
-from services import analytics, charts, data, llm
+from services import analytics, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, unit_text
+
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -276,6 +277,22 @@ def data_preparation():
         rules=rules,
     )
 
+# ---------------------------------------------------------------------------
+# Convocatorias vigentes (EN-007): estado de la base para el aviso de RN-002
+# ---------------------------------------------------------------------------
+@app.get("/convocatorias/estado")
+def tenders_status():
+    """Estado de la base de convocatorias en JSON: si responde, la última actualización y cuántas
+    vigentes hay. Sirve para comprobar la conexión desde Render y medir el arranque en frío de Neon."""
+    state = tenders.availability()
+    body = {key: state[key] for key in ("ok", "reason", "stale", "last_failed")}
+    body["last_update"] = state["last_update"].isoformat() if state["last_update"] else None
+    if state["ok"]:
+        try:
+            body["open_tenders"] = len(tenders.open_tenders())
+        except tenders.TendersUnavailable:
+            body["ok"], body["reason"] = False, "sin_conexion"
+    return body, (200 if body["ok"] else 503)
 
 if __name__ == "__main__":
     app.run(debug=True)

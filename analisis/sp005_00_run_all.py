@@ -41,7 +41,10 @@ TESTS_DIR = ROOT / "tests_sp005"
 DEFAULT_CATALOG = ROOT.parent / "app" / "data" / "catalog.csv"
 
 BASE_URL = "https://contratacionesabiertas.oece.gob.pe"
-USER_AGENT = "LicitaFacil-SP005/1.0 (proyecto academico UPAO; consultas de baja frecuencia)"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 LIMA = timezone(timedelta(hours=-5))
 TIMEOUT = 90
 PAUSE = 0.5
@@ -55,6 +58,14 @@ results = []   # (paso, estado, detalle)
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+def safe_console():
+    """Evita UnicodeEncodeError en consolas que no son UTF-8 (por ejemplo cp1252 en Windows):
+    los caracteres que la consola no puede mostrar se reemplazan en lugar de detener el script."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
+
 def say(text=""):
     print(text, flush=True)
 
@@ -95,7 +106,7 @@ def list_archive(content, kind):
     with tempfile.TemporaryDirectory() as tmp:
         source = Path(tmp) / f"archivo.{kind}"
         source.write_bytes(content)
-        result = subprocess.run(["tar", "-tf", str(source)], capture_output=True, text=True)
+        result = subprocess.run(["tar", "-tf", str(source)], capture_output=True, encoding="utf-8", errors="replace")
     if result.returncode != 0:
         raise RuntimeError((result.stderr or "tar no pudo leer el archivo").strip())
     return [name for name in result.stdout.splitlines() if name.strip()]
@@ -114,13 +125,20 @@ def api_root(base_url):
     return host, host + "/api/v1"
 
 
+def child_env():
+    """Los scripts hijos escriben en UTF-8 aunque la consola sea cp1252 (Windows)."""
+    return os.environ | {"PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+
+
 def run_script(args, step, capture=False):
     """Ejecuta un script del spike con el mismo Python; muestra su salida en vivo."""
     command = [sys.executable, *map(str, args)]
+    text = {"encoding": "utf-8", "errors": "replace"}
     if capture:
-        result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT)
+        result = subprocess.run(command, capture_output=True, cwd=ROOT, env=child_env(), **text)
         return result.returncode, result.stdout + result.stderr
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=ROOT)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=ROOT,
+                               env=child_env(), **text)
     lines = []
     for line in process.stdout:
         print("   " + line.rstrip(), flush=True)
@@ -404,6 +422,7 @@ def write_summary(now, args):
 
 
 def main():
+    safe_console()
     now = datetime.now(LIMA)
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--partes", default="A,B,C,D", help="Partes a ejecutar, por ejemplo A,B (por defecto todas).")

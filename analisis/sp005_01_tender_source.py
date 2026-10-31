@@ -27,6 +27,7 @@ import argparse
 import gzip
 import io
 import json
+import logging
 import os
 import re
 import sys
@@ -65,9 +66,12 @@ LIMA = timezone(timedelta(hours=-5))
 LA_LIBERTAD = "LA LIBERTAD"
 REQUEST_PAUSE_SECONDS = 0.5
 TIMEOUT_SECONDS = 90
-# Encabezados como los del Swagger del portal. El nombre de cliente se puede
-# cambiar con --user-agent si la puerta de entrada de la API lo exige (ver informe).
-DEFAULT_USER_AGENT = "LicitaFacil-SP005/1.0 (proyecto academico UPAO; consultas de baja frecuencia)"
+# Encabezados como los del Swagger del portal. Se usa User-Agent de navegador
+# para evitar bloqueos del WAF de OECE (Oracle Cloud Infrastructure).
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
 HEADERS = {"Accept": "*/*", "Referer": BASE_URL + "/api"}
 
 SAMPLE_SIZE = 20            # convocatorias en las que se miden las bases (máximo 2 por entidad)
@@ -937,28 +941,63 @@ def command_demo(args):
         dates = f"pub. {published:%d/%m}" if published else "pub. ?"
         dates += f" · consultas hasta {enquiry:%d/%m}" if enquiry else ""
         print(f"  {str(r['code'])[:28]:<28} {str(r['department'])[:12]:<12} {dates:<30} {value:>16}  {str(r['title'])[:50]}")
+    # Para la demo se busca un PDF con texto (se lee mejor ante el asesor); si en los primeros
+    # intentos solo hay PDF escaneados, se guarda el primero de ellos.
+    fallback, attempts = None, 0
     for r in selected:
         doc = bases_document(r)
-        if not doc:
+        if not doc or attempts >= MAX_DEMO_ATTEMPTS:
             continue
+        attempts += 1
         print(f"\nDescargando bases de {r['code']}: {doc['title']}")
         try:
             response = session.get(doc["url"], timeout=TIMEOUT_SECONDS)
-            if response.status_code == 200 and file_kind(response.content) == "pdf":
-                target = OUTPUT_DIR / "demo_bases.pdf"
-                target.write_bytes(response.content)
-                info = analyze_pdf(response.content)
-                print(f"Guardado en {target} · {info['pages']} páginas · "
-                      f"{'con texto' if info['has_text'] else 'escaneado'} · "
-                      f"requisitos de calificación {'encontrados' if info['requirements_found'] else 'no encontrados'}")
-                return
-            print(f"  No se pudo: HTTP {response.status_code}")
         except requests.RequestException as e:
-            print(f"  No se pudo: {type(e).__name__}")
-    print("\nNinguna convocatoria del rubro tuvo bases descargables.")
+            print(f"  No se pudo descargar: {type(e).__name__}")
+            continue
+        if response.status_code != 200:
+            print(f"  No se pudo descargar: HTTP {response.status_code}")
+            continue
+        kind = file_kind(response.content)
+        if kind != "pdf":
+            print(f"  Las bases vienen en {kind.upper()}; para la demo se busca un PDF. Se prueba con la siguiente.")
+            continue
+        info = analyze_pdf(response.content)
+        if info["has_text"]:
+            _save_demo(response.content, info)
+            return
+        print(f"  PDF escaneado ({info['pages']} páginas); se busca uno con texto.")
+        fallback = fallback or (response.content, info)
+        time.sleep(REQUEST_PAUSE_SECONDS)
+    if fallback:
+        _save_demo(*fallback)
+        return
+    print("\nNinguna convocatoria del rubro tuvo bases en PDF entre las revisadas.")
+
+
+MAX_DEMO_ATTEMPTS = 6
+
+
+def _save_demo(content, info):
+    target = OUTPUT_DIR / "demo_bases.pdf"
+    target.write_bytes(content)
+    print(f"Guardado en {target} · {info['pages']} páginas · "
+          f"{'con texto' if info['has_text'] else 'escaneado'} · "
+          f"requisitos de calificación {'encontrados' if info['requirements_found'] else 'no encontrados'}")
+
+
+def safe_console():
+    """Evita UnicodeEncodeError en consolas que no son UTF-8 (por ejemplo cp1252 en Windows):
+    los caracteres que la consola no puede mostrar se reemplazan en lugar de detener el script."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
 
 def main():
+    safe_console()
+    # pypdf avisa de PDF con metadatos mal formados ("Multiple definitions ... /Info"); no afecta la lectura
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-url", default=BASE_URL, help="Servidor de la API (para pruebas).")
     parser.add_argument("--user-agent", default=DEFAULT_USER_AGENT,

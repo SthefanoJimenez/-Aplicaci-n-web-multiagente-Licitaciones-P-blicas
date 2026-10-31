@@ -1,0 +1,20 @@
+{#- Aviso de RN-002 para las pantallas de convocatorias (EN-007).
+    Uso:  {% include "_tenders_notice.html" %}  con  tenders_state = tenders.availability()  en el contexto. -#}
+{% if tenders_state and not tenders_state.ok %}
+<div class="notice notice-warning" role="status">
+  <strong>No pudimos consultar las convocatorias vigentes en este momento.</strong>
+  {% if tenders_state.reason == "sin_configurar" %}La base de convocatorias aún no está configurada.
+  {% else %}La base de datos no respondió; suele resolverse al recargar la página en unos segundos.{% endif %}
+  El análisis de precios y el panorama del mercado siguen disponibles, porque usan los datos históricos.
+</div>
+{% elif tenders_state and (tenders_state.stale or tenders_state.last_failed or not tenders_state.last_update) %}
+<div class="notice notice-warning" role="status">
+  {% if not tenders_state.last_update %}<strong>Todavía no hay convocatorias cargadas.</strong>
+  La primera actualización desde el portal del OECE aún no se completó.
+  {% else %}<strong>Las convocatorias pueden no estar al día.</strong>
+  Se muestran los datos de la última actualización correcta: {{ tenders_state.last_update_text }} (hora de Lima).
+  {% if tenders_state.last_failed %}La última consulta al portal del OECE falló.{% endif %}{% endif %}
+</div>
+{% elif tenders_state %}
+<p class="source" role="note">Actualizado el {{ tenders_state.last_update_text }} (hora de Lima), con datos del portal de Contrataciones Abiertas del OECE.</p>
+{% endif %}

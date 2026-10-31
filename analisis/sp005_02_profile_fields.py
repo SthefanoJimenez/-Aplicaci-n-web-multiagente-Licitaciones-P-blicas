@@ -35,6 +35,7 @@ def walk_keys(obj, prefix=""):
 
 
 def main():
+    sp.safe_console()
     if len(sys.argv) > 1:
         path = Path(sys.argv[1])
     else:
