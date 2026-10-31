@@ -141,7 +141,7 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
             saved_open = session.query(db.Tender).filter(db.Tender.state == "vigente").count()
             run = session.get(db.IngestionRun, run_id)
             run.status = "ok"
-            run.finished_at = db.utcnow()
+            run.finished_at = now_utc if now else db.utcnow()
             run.source_open_goods = len(open_goods)
             run.source_open_pilot = len(pilot)
             run.saved_open = saved_open

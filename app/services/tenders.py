@@ -63,7 +63,7 @@ def _to_contract(row):
     )
 
 
-def open_tenders(rubro=None, method=None):
+def open_tenders(rubro=None, method=None, department=None):
     """Convocatorias vigentes, de la más reciente a la más antigua; con filtros opcionales."""
     try:
         with _session_factory()() as session:
@@ -72,6 +72,8 @@ def open_tenders(rubro=None, method=None):
                      .order_by(db.Tender.published_at.desc()))
             if method:
                 query = query.where(db.Tender.method == method)
+            if department:
+                query = query.where(db.Tender.department == department)
             rows = session.scalars(query).all()
             if rubro:
                 rows = [r for r in rows if rubro in (r.rubros or "").split()]
@@ -129,3 +131,45 @@ def availability(now=None):
         state["stale"] = now - state["last_update"] > STALE_AFTER
     state["last_failed"] = bool(last_any and last_any.status == "fallida")
     return state
+
+
+def days_since(published_at, now=None):
+    """Días transcurridos desde la fecha de publicación (entero >= 0)."""
+    if published_at is None:
+        return None
+    now = now or datetime.now(timezone.utc)
+    delta = as_utc(now) - as_utc(published_at)
+    return max(0, delta.days)
+
+
+def seace_url(tender):
+    """Enlace público del SEACE si aplica: URL de las bases o documento de la convocatoria."""
+    if not tender or not tender.documents:
+        return None
+    # Preferir documento de bases o primer enlace con URL válida
+    bases = next((d.url for d in tender.documents if d.is_bases and d.url and d.url.startswith("http")), None)
+    if bases:
+        return bases
+    return next((d.url for d in tender.documents if d.url and d.url.startswith("http")), None)
+
+
+_NORM_CATALOG = None
+
+
+def match_catalog_item(title_or_desc):
+    """Si el bien de la convocatoria está en el catálogo histórico, devuelve el código CUBSO; si no, None."""
+    global _NORM_CATALOG
+    if not title_or_desc:
+        return None
+    if _NORM_CATALOG is None:
+        from services import data, ocds_source
+        _NORM_CATALOG = [(ocds_source.normalize(row.itemcubso), int(row.codigoitem))
+                         for row in data.CATALOG.itertuples()]
+        _NORM_CATALOG.sort(key=lambda x: -len(x[0]))
+
+    from services import ocds_source
+    norm = ocds_source.normalize(title_or_desc)
+    for c_norm, code in _NORM_CATALOG:
+        if len(c_norm) >= 5 and c_norm in norm:
+            return code
+    return None

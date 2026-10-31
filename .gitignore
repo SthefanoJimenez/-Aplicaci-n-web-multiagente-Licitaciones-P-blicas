@@ -26,3 +26,5 @@ analisis/datos/cache/
 analisis/datos/procesados/
 analisis/datos/produccion/
 *.log
+*.db
+*.sqlite3

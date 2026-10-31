@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% set active_nav = "tenders" %}
+{% block title %}Convocatorias vigentes{% endblock %}
+{% block content %}
+<h1 class="page-title">Convocatorias vigentes de bienes</h1>
+<p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
+
+{% include "_tenders_notice.html" %}
+
+<div class="notice" role="note" style="margin-top:16px;">
+  <p><strong>Aviso sobre la ubicación:</strong> El departamento mostrado corresponde a la sede de la entidad compradora convocante, no necesariamente al lugar final de entrega de los bienes.</p>
+</div>
+
+<form class="filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
+  <div>
+    <label for="f-rubro">Rubro piloto</label>
+    <select id="f-rubro" name="rubro">
+      <option value="">Todos los rubros piloto</option>
+      {% for code, label in pilot_rubros %}
+      <option value="{{ code }}" {% if f.rubro == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-dept">Departamento</label>
+    <select id="f-dept" name="departamento">
+      <option value="">Todo el Perú</option>
+      {% for d in departments %}
+      <option value="{{ d }}" {% if f.department == d %}selected{% endif %}>{{ d|place }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="f-method">Tipo de procedimiento</label>
+    <select id="f-method" name="metodo">
+      <option value="">Todos los procedimientos</option>
+      {% for m in methods %}
+      <option value="{{ m }}" {% if f.method == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="button button-primary">Aplicar</button>
+  {% if f.rubro or f.department or f.method %}
+  <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
+  {% endif %}
+</form>
+
+<div class="section">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
+    <h2 class="section-title">Resultados ({{ tenders|length }} convocatorias vigentes)</h2>
+    <span class="muted small">Ordenadas de la más reciente a la más antigua</span>
+  </div>
+
+  {% if tenders %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Objeto y Convocatoria</th>
+          <th>Entidad compradora</th>
+          <th>Departamento</th>
+          <th>Publicación</th>
+          <th class="num">Antigüedad</th>
+          <th class="num">Valor estimado</th>
+          <th style="min-width: 170px;">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tenders %}
+        <tr>
+          <td>
+            <span class="chip">{{ t.code or t.ocid }}</span>
+            {% if t.method %}<br><span class="muted small">{{ t.method }}</span>{% endif %}
+          </td>
+          <td>
+            <strong>{{ t.title or "Sin título" }}</strong>
+            {% if t.catalog_code %}
+            <div style="margin-top:6px;">
+              <a class="tag" href="{{ url_for('good_sheet', code=t.catalog_code) }}" target="_blank" rel="noopener" title="Ver precios históricos del bien">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px;display:inline-block;vertical-align:text-top;margin-right:2px;" aria-hidden="true"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/></svg>
+                Ver ficha de precios (CUBSO {{ t.catalog_code }})
+              </a>
+            </div>
+            {% endif %}
+          </td>
+          <td>{{ t.entity or "—" }}</td>
+          <td>
+            {{ (t.department or "—")|place }}
+            <br><span class="muted small" title="Sede de la entidad compradora">Entidad</span>
+          </td>
+          <td>
+            {{ t.published_at|date_pe }}
+            {% if t.deadline_at %}
+            <br><span class="muted small">Límite: {{ t.deadline_at|date_pe }}</span>
+            {% endif %}
+          </td>
+          <td class="num">
+            {% if t.days_since is not none %}
+              {% if t.days_since == 0 %}
+                <span class="tag tag-good">Hoy</span>
+              {% elif t.days_since == 1 %}
+                1 día
+              {% else %}
+                {{ t.days_since }} días
+              {% endif %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="num">
+            {% if t.estimated_value and t.estimated_value > 0 %}
+              {{ t.estimated_value|pen }}
+            {% else %}
+              <span class="muted">No publicado</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              {% if t.seace_url %}
+              <a class="button button-sm button-primary" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Descargar bases oficiales del proceso">
+                <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;display:inline-block;vertical-align:text-top;margin-right:4px;" aria-hidden="true"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                Descargar bases
+              </a>
+              {% endif %}
+              <button type="button" class="button button-sm button-secondary" data-copy-search="{{ t.code or t.title }}" data-code="{{ t.code }}" data-title="{{ t.title }}" title="Copiar datos para ubicar el proceso en el SEACE">
+                Copiar p/ SEACE
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="panel" style="text-align:center; padding:48px 24px;">
+    <p class="lead" style="margin:0 0 8px;"><strong>No se encontraron convocatorias vigentes con los filtros seleccionados.</strong></p>
+    <p class="muted" style="margin:0 0 16px;">Intente seleccionando otro rubro piloto o quitando el filtro de departamento.</p>
+    <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Ver todas las convocatorias vigentes</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal / Toast de ayuda para buscar en SEACE -->
+<div id="seace-toast" class="notice notice-good" style="display:none; position:fixed; bottom:24px; right:24px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.18); max-width:420px; animation:fadeIn 0.2s ease;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+    <div>
+      <strong id="seace-toast-title">¡Código copiado al portapapeles!</strong>
+      <p id="seace-toast-msg" style="margin:4px 0 8px; font-size:14px;">Pegue el texto copiado en el campo "Descripción del objeto" o "Nombre" del buscador del SEACE.</p>
+      <a id="seace-toast-link" class="button button-sm button-secondary" href="https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorConvocatorias/buscadorConvocatorias.xhtml" target="_blank" rel="noopener">
+        Abrir buscador del SEACE
+      </a>
+    </div>
+    <button type="button" onclick="document.getElementById('seace-toast').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:18px; line-height:1; color:inherit;">&times;</button>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('[data-copy-search]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const code = btn.dataset.code || '';
+    const title = btn.dataset.title || '';
+    const textToCopy = title ? (title.split(' - ')[0] || title) : code;
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      const toast = document.getElementById('seace-toast');
+      const titleEl = document.getElementById('seace-toast-title');
+      const msgEl = document.getElementById('seace-toast-msg');
+      titleEl.textContent = '¡Copiado: ' + textToCopy + '!';
+      msgEl.innerHTML = 'Se copió la nomenclatura. Péguela directamente en el <strong>Buscador de Procedimientos de Selección</strong> del SEACE para ver el expediente completo.';
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 8000);
+    });
+  });
+});
+</script>
+{% endblock %}

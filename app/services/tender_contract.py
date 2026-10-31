@@ -97,6 +97,11 @@ def field_table(cls):
     rows = []
     for f in fields(cls):
         type_name = str(f.type).replace("typing.", "").replace("<class '", "").replace("'>", "")
+        # Normalizar sintaxis PEP 604 en Python 3.10+ (ej. 'float | None' -> 'Optional[float]')
+        if " | None" in type_name:
+            type_name = f"Optional[{type_name.replace(' | None', '')}]"
+        elif type_name.startswith("None | "):
+            type_name = f"Optional[{type_name.replace('None | ', '')}]"
         optional = type_name.startswith("Optional") or f.default is None
         rows.append((f.name, type_name, optional))
     return rows

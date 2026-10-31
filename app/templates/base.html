@@ -25,6 +25,7 @@
       <nav class="nav" aria-label="Secciones">
         <a href="{{ url_for('describe') }}" {% if active_nav == "evaluate" %}aria-current="page"{% endif %}>Evaluar mi producto</a>
         <a href="{{ url_for('overview') }}" {% if active_nav == "overview" %}aria-current="page"{% endif %}>Panorama del mercado</a>
+        <a href="{{ url_for('tenders_list') }}" {% if active_nav == "tenders" %}aria-current="page"{% endif %}>Convocatorias vigentes</a>
         <a href="{{ url_for('data_preparation') }}" {% if active_nav == "data" %}aria-current="page"{% endif %}>Cómo preparamos los datos</a>
         <button type="button" class="nav-help" data-tour-start title="Recorrido guiado" aria-label="Ver recorrido guiado">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/></svg>

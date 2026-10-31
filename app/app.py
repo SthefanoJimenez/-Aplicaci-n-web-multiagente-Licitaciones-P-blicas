@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime, timezone
+import re
 
 from flask import Flask, Response, redirect, render_template, request, session, url_for
 
@@ -192,8 +193,20 @@ def verdict():
     evaluation = evaluator.evaluate(cost_value, m)
     explanation = writer.explain(evaluation, m, response["detail"])
     below = analytics.share_below(m["code"], m["unit"], cost_value)
+    
+    # Si el código elegido pertenece a un rubro piloto (ej. 1510 combustibles o 2510 vehículos)
+    pilot_rubro = None
+    item_name = (data.GOODS.get(m["code"]) or {}).get("name", "")
+    for code, label, pattern in [
+        ("1510", "Combustibles", r"\b(diesel|gasolina|gasohol|glp|petroleo)\b"),
+        ("2510", "Vehículos", r"\b(camioneta|automovil|vehiculo|volquete|camion|motocicleta)\b"),
+    ]:
+        if re.search(pattern, item_name, re.I):
+            pilot_rubro = {"code": code, "name": label}
+            break
+
     return render_template("verdict.html", m=m, e=evaluation, w=explanation, rnp=rnp,
-                           d=response["detail"], below=below)
+                           d=response["detail"], below=below, pilot_rubro=pilot_rubro)
 
 
 @app.get("/veredicto")
@@ -278,8 +291,67 @@ def data_preparation():
     )
 
 # ---------------------------------------------------------------------------
-# Convocatorias vigentes (EN-007): estado de la base para el aviso de RN-002
+# Convocatorias vigentes (EN-007, HU-007)
 # ---------------------------------------------------------------------------
+PILOT_RUBRO_OPTIONS = [
+    ("1510", "1510 · Combustibles y lubricantes"),
+    ("2510", "2510 · Vehículos de motor"),
+]
+
+
+@app.get("/convocatorias")
+def tenders_list():
+    """Pantalla de convocatorias vigentes de bienes en los rubros piloto."""
+    rubro = request.args.get("rubro", "").strip() or None
+    department = request.args.get("departamento", "").strip().upper() or None
+    method = request.args.get("metodo", "").strip() or None
+
+    tenders_state = tenders.availability()
+    items = []
+    if tenders_state["ok"]:
+        try:
+            raw_tenders = tenders.open_tenders(rubro=rubro, method=method, department=department)
+            now_utc = datetime.now(timezone.utc)
+            for t in raw_tenders:
+                item_dict = {
+                    "ocid": t.ocid,
+                    "code": t.code,
+                    "title": t.title or t.description,
+                    "entity": t.entity,
+                    "department": t.department,
+                    "method": t.method,
+                    "rubros": t.rubros,
+                    "published_at": t.published_at,
+                    "deadline_at": t.deadline_at,
+                    "days_since": tenders.days_since(t.published_at, now_utc),
+                    "estimated_value": t.estimated_value,
+                    "seace_url": tenders.seace_url(t),
+                    "catalog_code": tenders.match_catalog_item(t.title or t.description),
+                }
+                items.append(item_dict)
+        except tenders.TendersUnavailable:
+            pass
+
+    # Métodos y departamentos disponibles para los filtros
+    method_options = [
+        "Subasta Inversa Electrónica",
+        "Licitación Pública Abreviada",
+        "Licitación Pública",
+        "Adjudicación Simplificada",
+        "Comparación de Precios",
+    ]
+
+    return render_template(
+        "tenders.html",
+        tenders=items,
+        tenders_state=tenders_state,
+        pilot_rubros=PILOT_RUBRO_OPTIONS,
+        departments=analytics.DEPARTMENTS,
+        methods=method_options,
+        f={"rubro": rubro or "", "department": department or "", "method": method or ""},
+    )
+
+
 @app.get("/convocatorias/estado")
 def tenders_status():
     """Estado de la base de convocatorias en JSON: si responde, la última actualización y cuántas

@@ -97,6 +97,16 @@
 </section>
 {% endif %}
 
+{% if pilot_rubro %}
+<div class="section notice notice-large" role="note" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+  <div>
+    <strong>Oportunidades de negocio vigentes</strong>
+    <p style="margin:4px 0 0">Este bien pertenece al rubro piloto de <strong>{{ pilot_rubro.name }}</strong> (UNSPSC {{ pilot_rubro.code }}). Hay convocatorias vigentes a las que su empresa podría postular.</p>
+  </div>
+  <a class="button button-primary" href="{{ url_for('tenders_list', rubro=pilot_rubro.code) }}" target="_blank" rel="noopener">Ver convocatorias vigentes ({{ pilot_rubro.code }})</a>
+</div>
+{% endif %}
+
 <p class="source">El veredicto es referencial: compara su costo con precios pasados y no considera los requisitos de las bases de cada convocatoria.</p>
 <div class="actions actions-between">
   <a class="button button-secondary" href="{{ url_for('cost') }}">Probar otro costo</a>
