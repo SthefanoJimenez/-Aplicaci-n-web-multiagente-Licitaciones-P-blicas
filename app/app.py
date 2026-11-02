@@ -1,13 +1,13 @@
 from datetime import date, datetime, timezone
 import re
 
-from flask import Flask, Response, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, session, stream_with_context, url_for
 
 import config
 import orchestrator
 import rules
 from agents import evaluator, writer
-from services import analytics, charts, data, llm, tenders
+from services import analytics, bases_download, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, unit_text
 
 
@@ -326,6 +326,7 @@ def tenders_list():
                     "days_since": tenders.days_since(t.published_at, now_utc),
                     "estimated_value": t.estimated_value,
                     "seace_url": tenders.seace_url(t),
+                    "bases_label": bases_download.declared_label(tenders.bases_format(t)),
                     "catalog_code": tenders.match_catalog_item(t.title or t.description),
                 }
                 items.append(item_dict)
@@ -365,6 +366,33 @@ def tenders_status():
         except tenders.TendersUnavailable:
             body["ok"], body["reason"] = False, "sin_conexion"
     return body, (200 if body["ok"] else 503)
+
+@app.get("/convocatorias/<code>/bases")
+def tender_bases(code):
+    """Descarga de las bases a través de la app: con el formato real y la extensión correcta.
+
+    El enlace del SEACE entrega application/octet-stream sin un nombre confiable y el navegador
+    guardaba el archivo con una extensión equivocada (ZIP "corrupto"). Ver services/bases_download.py.
+    """
+    try:
+        tender = tenders.tender_by_code(code)
+    except tenders.TendersUnavailable:
+        return render_template("bases_unavailable.html", tender=None, url=None,
+                               reason="la base de convocatorias no respondió"), 503
+    url = tenders.seace_url(tender) if tender else None
+    if not url:
+        abort(404)
+    try:
+        bases = bases_download.open_bases(url)
+    except bases_download.BasesUnavailable as e:
+        return render_template("bases_unavailable.html", tender=tender, url=url, reason=e.reason), 502
+    safe_code = re.sub(r"[^A-Za-z0-9_-]", "_", str(tender.code or code))
+    headers = {"Content-Disposition": f'attachment; filename="bases_{safe_code}.{bases.extension}"',
+               "Cache-Control": "no-store"}
+    if bases.size:
+        headers["Content-Length"] = str(bases.size)
+    return Response(stream_with_context(bases.chunks), mimetype=bases.mimetype, headers=headers)
+
 
 if __name__ == "__main__":
     app.run(debug=True)

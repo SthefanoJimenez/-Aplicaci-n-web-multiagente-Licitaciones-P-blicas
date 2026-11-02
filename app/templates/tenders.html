@@ -117,11 +117,14 @@
           </td>
           <td>
             <div style="display:flex; flex-direction:column; gap:6px;">
-              {% if t.seace_url %}
-              <a class="button button-sm button-primary" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Descargar bases oficiales del proceso">
+              {% if t.seace_url and t.code %}
+              <a class="button button-sm button-primary" href="{{ url_for('tender_bases', code=t.code) }}" title="Descargar bases oficiales del proceso con su formato real">
                 <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;display:inline-block;vertical-align:text-top;margin-right:4px;" aria-hidden="true"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                Descargar bases
+                Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}
               </a>
+              <a class="muted" style="font-size:12px;" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Enlace directo publicado por el OECE">Enlace original del SEACE</a>
+              {% elif t.seace_url %}
+              <a class="button button-sm button-primary" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Descargar bases oficiales del proceso">Descargar bases</a>
               {% endif %}
               <button type="button" class="button button-sm button-secondary" data-copy-search="{{ t.code or t.title }}" data-code="{{ t.code }}" data-title="{{ t.title }}" title="Copiar datos para ubicar el proceso en el SEACE">
                 Copiar p/ SEACE

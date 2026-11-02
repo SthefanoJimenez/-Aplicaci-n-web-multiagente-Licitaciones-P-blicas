@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% set active_nav = "tenders" %}
+{% block title %}Bases no disponibles{% endblock %}
+{% block content %}
+<div class="empty">
+  <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+  <h1 class="page-title">No pudimos obtener las bases{% if tender and tender.code %} del proceso {{ tender.code }}{% endif %}</h1>
+  <p class="page-lead" style="margin-inline:auto">
+    Motivo: {{ reason }}. Para no entregarle un archivo dañado, no se inició la descarga.
+    Puede intentar con el enlace original del SEACE o buscar el proceso en el buscador del SEACE.
+  </p>
+  <div class="actions">
+    {% if url %}
+    <a class="button button-primary" href="{{ url }}" target="_blank" rel="noopener">Abrir enlace original del SEACE</a>
+    {% endif %}
+    <a class="button button-secondary" href="https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorConvocatorias/buscadorConvocatorias.xhtml" target="_blank" rel="noopener">Buscador del SEACE</a>
+    <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Volver a convocatorias</a>
+  </div>
+</div>
+{% endblock %}

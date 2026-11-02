@@ -46,11 +46,18 @@ def monthly_zip(releases):
 
 
 class FakeOCDS:
-    """Servidor en un hilo. months = {(año, mes): [releases]}; fail = código HTTP para el archivo mensual."""
+    """Servidor en un hilo. months = {(año, mes): [releases]}; fail = código HTTP para el archivo mensual.
+
+    fail_months = {(año, mes): código} rechaza solo esos meses; files_fail = código para /files.
+    Un mes que no está en months y se pide directo responde 403, como el portal real el 01/11/2026
+    con el archivo de noviembre aún sin generar.
+    """
 
     def __init__(self):
         self.months = {}
         self.fail = None
+        self.fail_months = {}
+        self.files_fail = None
         self.requests = []
         fake = self
 
@@ -61,6 +68,8 @@ class FakeOCDS:
                 if agent.startswith(("curl/", "python-requests/")):
                     return self._send(403, b"", "text/plain")   # como el portal real con clientes sin identificar
                 if self.path.startswith("/api/v1/files"):
+                    if fake.files_fail:
+                        return self._send(fake.files_fail, b"<html>Request Rejected</html>", "text/html")
                     results = [{"source": "seace_v3", "year": str(y), "month": f"{m:02d}",
                                 "files": {"json": f"{fake.base}/api/v1/file/seace_v3/json/{y}/{m:02d}/"}}
                                for (y, m) in fake.months] if "page=1" in self.path else []
@@ -69,6 +78,11 @@ class FakeOCDS:
                     if fake.fail:
                         return self._send(fake.fail, b"", "text/plain")
                     year, month = self.path.rstrip("/").split("/")[-2:]
+                    key = (int(year), int(month))
+                    if key in fake.fail_months:
+                        return self._send(fake.fail_months[key], b"", "text/plain")
+                    if key not in fake.months:
+                        return self._send(403, b"<Error><Code>AccessDenied</Code></Error>", "application/xml")
                     body = monthly_zip(fake.months.get((int(year), int(month)), []))
                     return self._send(200, body, "application/zip")
                 return self._send(404, b"", "text/plain")

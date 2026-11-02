@@ -153,6 +153,12 @@ def seace_url(tender):
     return next((d.url for d in tender.documents if d.url and d.url.startswith("http")), None)
 
 
+def bases_format(tender):
+    """Formato declarado del documento que enlaza seace_url (pdf, zip, rar…), o None."""
+    url = seace_url(tender)
+    return next((d.doc_format for d in tender.documents if d.url == url), None) if url else None
+
+
 _NORM_CATALOG = None
 
 
@@ -172,4 +178,4 @@ def match_catalog_item(title_or_desc):
     for c_norm, code in _NORM_CATALOG:
         if len(c_norm) >= 5 and c_norm in norm:
             return code
-    return None
+    return None

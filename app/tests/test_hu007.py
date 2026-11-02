@@ -220,3 +220,98 @@ def test_verdict_offers_open_tenders_for_pilot_rubro_without_altering_session(cl
         assert sess.get("code") == 233280
         assert sess.get("description") == "diesel b5 s 50 para maquinaria"
         assert sess.get("candidates") == [233280]
+
+
+# ---------------------------------------------------------------------------
+# Corrección del 01/11/2026: "Descargar bases" bajaba un ZIP inválido o corrupto
+# ---------------------------------------------------------------------------
+from services import bases_download  # noqa: E402
+
+PDF = b"%PDF-1.7\n" + b"x" * 20000
+RAR = b"Rar!\x1a\x07\x01\x00" + b"r" * 5000
+DOCX = b"PK\x03\x04" + b"\x00" * 26 + b"[Content_Types].xml" + b"\x00" * 900 + b"word/document.xml" + b"\x00" * 500
+HTML = b"<!DOCTYPE html><html><body>Sesion expirada</body></html>"
+
+
+class FakeResponse:
+    def __init__(self, body, status=200, url="https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=x",
+                 headers=None):
+        self.body, self.status_code, self.url = body, status, url
+        self.headers = {"Content-Type": "application/octet-stream", "Content-Length": str(len(body))} | (headers or {})
+        self.closed = False
+
+    def iter_content(self, size):
+        for i in range(0, len(self.body), 1000):
+            yield self.body[i:i + 1000]
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSession:
+    def __init__(self, response):
+        self.response, self.calls = response, []
+
+    def get(self, url, **kwargs):
+        self.calls.append((url, kwargs.get("headers", {}).get("User-Agent")))
+        return self.response
+
+
+@pytest.fixture
+def seace(monkeypatch):
+    """Sustituye la conexión al SEACE: fake.response es lo que responde."""
+    fake = FakeSession(FakeResponse(PDF))
+    monkeypatch.setattr(bases_download.requests, "Session", lambda: fake)
+    return fake
+
+
+def test_detects_the_real_format_from_the_first_bytes():
+    assert bases_download.detect_kind(PDF) == "pdf"
+    assert bases_download.detect_kind(RAR) == "rar"
+    assert bases_download.detect_kind(DOCX) == "docx"
+    assert bases_download.detect_kind(b"PK\x03\x04" + b"\x00" * 100 + b"bases.pdf") == "zip"
+    assert bases_download.detect_kind(HTML) is None and bases_download.detect_kind(b"") is None
+
+
+def test_only_government_https_links_are_fetched():
+    assert bases_download.is_allowed("https://prod1.seace.gob.pe/SeaceWeb-PRO/SdescargarArchivoAlfresco?fileCode=1")
+    assert not bases_download.is_allowed("http://prod1.seace.gob.pe/archivo")          # sin https
+    assert not bases_download.is_allowed("https://seace.gob.pe.atacante.com/archivo")
+    assert not bases_download.is_allowed("https://169.254.169.254/latest")
+
+
+def test_screen_links_to_the_app_route_and_keeps_the_original_link(client, seed_tenders):
+    html = client.get("/convocatorias").get_data(as_text=True)
+    assert "/convocatorias/1001/bases" in html
+    assert "https://seace.gob.pe/doc/1001_bases.pdf" in html       # enlace original como respaldo
+
+
+@pytest.mark.parametrize("body, extension, mimetype", [
+    (PDF, "pdf", "application/pdf"),
+    (RAR, "rar", "application/vnd.rar"),
+    (DOCX, "docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+])
+def test_download_has_the_real_extension_and_complete_content(client, seed_tenders, seace, body, extension, mimetype):
+    seace.response = FakeResponse(body)
+    response = client.get("/convocatorias/1001/bases")
+    assert response.status_code == 200
+    assert response.headers["Content-Disposition"] == f'attachment; filename="bases_1001.{extension}"'
+    assert response.mimetype == mimetype
+    assert response.data == body                                    # nada se pierde ni se agrega
+    assert seace.calls[0][1] == config.OCDS_USER_AGENT and seace.response.closed
+
+
+def test_html_or_error_from_seace_is_not_served_as_a_file(client, seed_tenders, seace):
+    seace.response = FakeResponse(HTML, headers={"Content-Type": "text/html"})
+    response = client.get("/convocatorias/1001/bases")
+    assert response.status_code == 502 and "Content-Disposition" not in response.headers
+    html = response.get_data(as_text=True)
+    assert "No pudimos obtener las bases" in html and "https://seace.gob.pe/doc/1001_bases.pdf" in html
+    seace.response = FakeResponse(b"", status=403)
+    assert client.get("/convocatorias/1001/bases").status_code == 502
+
+
+def test_tender_without_bases_or_unknown_code_is_404(client, seed_tenders, seace):
+    assert client.get("/convocatorias/1003/bases").status_code == 404
+    assert client.get("/convocatorias/9999/bases").status_code == 404
+    assert seace.calls == []

@@ -8,8 +8,15 @@ bases. No usan pandas ni escriben archivos de análisis.
 Nombre de cliente (User-Agent): por defecto el de un navegador, porque desde el 28/10/2026
 el portal responde 403 al nombre "LicitaFacil-SP005" (evidencia en el SP-006). Se cambia
 con la variable de entorno OCDS_USER_AGENT. Es una decisión del PO registrada como riesgo.
+
+Mes aún no publicado (corrección del 01/11/2026): el 01/11 la ingesta falló con 403 al pedir
+el archivo de 2026/11, que el portal todavía no había generado. Ahora se usa el listado
+/files como fuente de verdad: un mes que no figura ahí se omite (y se informa) en lugar de
+tumbar toda la ejecución. Si el listado no responde, el mes actual que falla con 403/404 se
+omite solo si el mes anterior sí se descarga (un bloqueo real afectaría a ambos).
 """
 import gzip
+import html
 import io
 import json
 import re
@@ -31,7 +38,7 @@ FILES_LIST_PATH = "/api/v1/files?page={page}"
 RECORD_PATH = "/api/v1/record/{ocid}"
 
 LIMA = timezone(timedelta(hours=-5))
-HEADERS = {"Accept": "*/*", "Referer": BASE_URL + "/api"}
+HEADERS = {"Accept": "*/*", "Accept-Language": "es-PE,es;q=0.9", "Referer": BASE_URL + "/api"}
 REQUEST_PAUSE_SECONDS = 0.5
 TIMEOUT_SECONDS = 90
 
@@ -45,6 +52,23 @@ class SourceError(Exception):
     def __init__(self, message, status=None):
         super().__init__(message)
         self.status = status
+
+
+def describe_rejection(response):
+    """Pistas de quién rechazó la consulta (servidor, tipo y comienzo de la respuesta).
+
+    Sirve para distinguir en el resumen de GitHub Actions un archivo que no existe de un
+    bloqueo del firewall del portal. No incluye encabezados de la solicitud ni datos propios.
+    """
+    server = response.headers.get("Server") or "?"
+    kind = (response.headers.get("Content-Type") or "?").split(";")[0]
+    try:
+        head = next(response.iter_content(300), b"")
+    except (requests.RequestException, StopIteration):
+        head = b""
+    text = html.unescape(re.sub(r"<[^>]+>", " ", head.decode("utf-8", errors="replace")))
+    text = re.sub(r"\s+", " ", text).strip()[:160]
+    return f"servidor: {server} · tipo: {kind}" + (f" · respuesta: «{text}»" if text else "")
 
 
 # ---------------------------------------------------------------------------
@@ -102,31 +126,65 @@ def _walk_strings(obj):
             yield from _walk_strings(value)
 
 
+def default_monthly_url(session, year, month):
+    return session.base_url + MONTHLY_JSON_PATH.format(year=year, month=f"{month:02d}")
+
+
+def _url_in_listing(session, listing, year, month):
+    """Dirección del JSON de ese mes dentro de una página de /files, o None si no figura."""
+    results = listing.get("results", []) if isinstance(listing, dict) else []
+    for entry in results:
+        try:
+            same_month = int(entry.get("month", 0)) == month
+        except (TypeError, ValueError):
+            same_month = False
+        if (str(entry.get("source")) == "seace_v3" and str(entry.get("year")) == str(year)
+                and same_month and (entry.get("files") or {}).get("json")):
+            return entry["files"]["json"]
+    wanted = re.compile(rf"seace_v3/json/{year}/0?{month}(?!\d)", re.I)
+    for text in _walk_strings(listing):
+        if wanted.search(text):
+            return text if text.startswith("http") else session.base_url + "/" + text.lstrip("/")
+    return None
+
+
+def monthly_listing(session, months, max_pages=5):
+    """Lee /files y devuelve ({(año, mes): url} de los meses pedidos que figuran, nota).
+
+    Si /files no responde o no se puede leer, devuelve (None, nota con el motivo): quien llama
+    usa entonces las direcciones por defecto, como antes. La nota sirve para el diagnóstico.
+    """
+    pending = set(months)
+    found = {}
+    for page in range(1, max_pages + 1):
+        url = session.base_url + FILES_LIST_PATH.format(page=page)
+        try:
+            with session.get(url, timeout=TIMEOUT_SECONDS, stream=True) as response:
+                if response.status_code != 200:
+                    return None, f"/files respondió {response.status_code} ({describe_rejection(response)})"
+                listing = json.loads(response.content)
+        except requests.RequestException as e:
+            return None, f"/files no respondió ({type(e).__name__})"
+        except ValueError:
+            return None, "/files respondió algo que no es JSON"
+        for year, month in list(pending):
+            found_url = _url_in_listing(session, listing, year, month)
+            if found_url:
+                found[(year, month)] = found_url
+                pending.discard((year, month))
+        results = listing.get("results", []) if isinstance(listing, dict) else []
+        if not pending or not results:
+            break
+    return found, "/files respondió 200"
+
+
 def resolve_monthly_url(session, year, month, max_pages=5):
     """Dirección del archivo mensual en JSON según /files; si no se encuentra, la ruta por defecto."""
-    default = session.base_url + MONTHLY_JSON_PATH.format(year=year, month=f"{month:02d}")
-    for page in range(1, max_pages + 1):
-        try:
-            response = session.get(session.base_url + FILES_LIST_PATH.format(page=page), timeout=TIMEOUT_SECONDS)
-            response.raise_for_status()
-            listing = response.json()
-        except (requests.RequestException, ValueError):
-            return default
-        results = listing.get("results", []) if isinstance(listing, dict) else []
-        for entry in results:
-            if (str(entry.get("source")) == "seace_v3" and str(entry.get("year")) == str(year)
-                    and int(entry.get("month", 0)) == month and (entry.get("files") or {}).get("json")):
-                return entry["files"]["json"]
-        wanted = re.compile(rf"seace_v3/json/{year}/0?{month}(?!\d)", re.I)
-        for text in _walk_strings(listing):
-            if wanted.search(text):
-                return text if text.startswith("http") else session.base_url + "/" + text.lstrip("/")
-        if not results:
-            break
-    return default
+    found, _note = monthly_listing(session, [(year, month)], max_pages)
+    return (found or {}).get((year, month)) or default_monthly_url(session, year, month)
 
 
-def download_month(session, year, month, folder):
+def download_month(session, year, month, folder, url=None):
     """Descarga el archivo mensual en la carpeta indicada y devuelve su ruta.
 
     Lanza SourceError si el portal no lo entrega (por ejemplo, 403).
@@ -134,12 +192,12 @@ def download_month(session, year, month, folder):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"ocds_{year}_{month:02d}.bin"
-    url = resolve_monthly_url(session, year, month)
+    url = url or resolve_monthly_url(session, year, month)
     try:
         with session.get(url, timeout=TIMEOUT_SECONDS * 4, stream=True) as response:
             if response.status_code != 200:
-                raise SourceError(f"El portal respondió {response.status_code} al pedir {url}",
-                                  status=response.status_code)
+                raise SourceError(f"El portal respondió {response.status_code} al pedir {url} "
+                                  f"({describe_rejection(response)})", status=response.status_code)
             with open(target, "wb") as file:
                 for chunk in response.iter_content(1 << 20):
                     file.write(chunk)
@@ -345,19 +403,78 @@ def bases_document(row):
 # ---------------------------------------------------------------------------
 # Lectura completa para la ingesta
 # ---------------------------------------------------------------------------
-def fetch_rows(now, months=None, session=None, folder=None):
-    """Descarga los meses configurados y devuelve (convocatorias normalizadas, archivos leídos).
+NOT_PUBLISHED_STATUS = (403, 404)
 
+
+def fetch_rows(now, months=None, session=None, folder=None):
+    """Descarga los meses configurados y devuelve (convocatorias, archivos leídos, meses omitidos).
+
+    meses omitidos: [("2026-11", motivo)] de los meses que el portal todavía no publica.
     Los archivos se guardan en una carpeta temporal que se borra al terminar, salvo que se
-    indique otra. Lanza SourceError si algún mes no se puede descargar o leer.
+    indique otra. Lanza SourceError si no se pudo leer ningún mes, o si falla un mes que no
+    es el actual (eso no es "aún no publicado": es un rechazo o una falla del portal).
     """
     session = session or session_for()
     months = months or config.OCDS_MONTHS
+    wanted = months_to_fetch(now, months)
+    listing, listing_note = monthly_listing(session, wanted)
+    skipped, deferred_error = [], None
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(folder or tmp)
-        paths = [download_month(session, y, m, target) for y, m in months_to_fetch(now, months)]
+        paths = []
+        for year, month in wanted:
+            label = f"{year}-{month:02d}"
+            if listing is not None and (year, month) not in listing:
+                skipped.append((label, "el listado /files aún no lo incluye"))
+                continue
+            url = (listing or {}).get((year, month)) or default_monthly_url(session, year, month)
+            try:
+                paths.append(download_month(session, year, month, target, url=url))
+            except SourceError as error:
+                is_current = (year, month) == wanted[0]
+                if is_current and error.status in NOT_PUBLISHED_STATUS and len(wanted) > 1:
+                    deferred_error = SourceError(f"{error} · {listing_note}", status=error.status)
+                    skipped.append((label, f"respondió {error.status}; se asume aún no publicado"))
+                    continue
+                raise SourceError(f"{error} · {listing_note}", status=error.status) from error
+        if not paths:
+            if deferred_error:
+                raise deferred_error
+            raise SourceError(f"El portal no publica ninguno de los meses pedidos ({', '.join(s[0] for s in skipped)})"
+                              f" · {listing_note}")
         objects = []
         for path in paths:
             objects.extend(read_ocds_file(path))
     rows = [normalize_release(r) for r in compiled_releases(objects)]
-    return rows, [p.name for p in paths]
+    return rows, [p.name for p in paths], skipped
+
+
+def diagnose(session=None, now=None):
+    """Consultas pequeñas para separar "archivo aún no publicado" de "bloqueo del portal".
+
+    Devuelve [(qué se pidió, código o motivo, detalle)]. No descarga archivos completos: lee
+    solo los encabezados y el comienzo de cada respuesta. La usa `python ingest_job.py --diagnostico`.
+    """
+    session = session or session_for()
+    now = now or datetime.now(LIMA)
+    results = []
+
+    def probe(label, url):
+        try:
+            with session.get(url, timeout=TIMEOUT_SECONDS, stream=True) as response:
+                detail = (response.headers.get("Content-Type") or "?").split(";")[0]
+                if response.status_code != 200:
+                    detail = describe_rejection(response)
+                results.append((label, response.status_code, detail))
+        except requests.RequestException as e:
+            results.append((label, "sin respuesta", type(e).__name__))
+        time.sleep(REQUEST_PAUSE_SECONDS)
+
+    probe("listado /files (página 1)", session.base_url + FILES_LIST_PATH.format(page=1))
+    listing, _note = monthly_listing(session, months_to_fetch(now, 2))
+    for year, month in months_to_fetch(now, 2):
+        listed = "figura en /files" if listing and (year, month) in listing else (
+            "NO figura en /files" if listing is not None else "listado no disponible")
+        url = (listing or {}).get((year, month)) or default_monthly_url(session, year, month)
+        probe(f"archivo {year}-{month:02d} ({listed})", url)
+    return results

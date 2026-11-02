@@ -220,6 +220,54 @@ def test_unidentified_clients_get_403_like_the_real_portal(source):
     assert error.value.status == 403
 
 
+# Corrección del 01/11/2026: el archivo del mes nuevo aún no existe y el portal responde 403
+NOV_1 = datetime(2026, 11, 1, 8, 30, tzinfo=LIMA)
+
+
+def test_month_not_yet_in_files_is_skipped_and_the_run_succeeds(factory, source):
+    result = run(factory, source, now=NOV_1)               # pide 2026-11 y 2026-10; /files solo lista oct y set
+    assert result["status"] == "ok"
+    assert [month for month, _reason in result["skipped_months"]] == ["2026-11"]
+    assert not any("/json/2026/11/" in path for path, _agent in source.requests)   # ni siquiera lo pide
+    with factory() as session:
+        assert session.query(db.Tender).filter_by(state="vigente").count() == 2   # 101 y 102 (octubre)
+
+
+def test_without_listing_the_current_month_403_is_skipped_if_the_previous_month_downloads(factory, source):
+    source.files_fail = 500
+    result = run(factory, source, now=NOV_1)
+    assert result["status"] == "ok"
+    assert result["skipped_months"][0][0] == "2026-11" and "403" in result["skipped_months"][0][1]
+
+
+def test_a_real_block_still_fails_and_says_what_files_answered(factory, source):
+    source.files_fail = 403
+    source.fail = 403
+    result = run(factory, source, now=NOV_1)
+    assert result["status"] == "fallida" and result["http_status"] == 403
+    assert "/files respondió 403" in result["error"] and "Request Rejected" in result["error"]
+
+
+def test_previous_month_failing_is_not_treated_as_unpublished(factory, source):
+    source.fail_months[(2026, 9)] = 403
+    result = run(factory, source)                          # 30/10: pide 2026-10 y 2026-09
+    assert result["status"] == "fallida" and result["http_status"] == 403
+
+
+def test_diagnosis_tells_unpublished_month_from_block(source, monkeypatch, capsys):
+    import ingest_job
+    session = ocds_source.session_for(source.base + "/api/v1")
+    monkeypatch.setattr(ocds_source, "session_for", lambda *a, **k: session)
+    real_diagnose = ocds_source.diagnose
+    monkeypatch.setattr(ocds_source, "diagnose", lambda: real_diagnose(now=NOV_1))
+    assert ingest_job.main_with(["--diagnostico"]) == 0
+    out = capsys.readouterr().out
+    assert "archivo 2026-11 (NO figura en /files): 403" in out and "aún no está publicado" in out
+    source.files_fail = 403
+    ingest_job.main_with(["--diagnostico"])
+    assert "no es un mes sin publicar" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # Tarea de GitHub Actions
 # ---------------------------------------------------------------------------
@@ -293,7 +341,7 @@ def test_status_route_and_notice(app_reads, source, monkeypatch):
     body = client.get("/convocatorias/estado").get_json()
     assert body["ok"] and body["open_tenders"] == 3
     with app.test_request_context():
-        ok_html = render_template_string('{% include "_tenders_notice.html" %}', tenders_state=tenders.availability())
+        ok_html = render_template_string('{% include "_tenders_notice.html" %}', tenders_state=tenders.availability(now=NOW + timedelta(hours=1)))
         assert "Actualizado el" in ok_html
         down = {"ok": False, "reason": "sin_conexion"}
         down_html = render_template_string('{% include "_tenders_notice.html" %}', tenders_state=down)

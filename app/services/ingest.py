@@ -107,7 +107,10 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
         run_id = run.id
 
     try:
-        rows, _files = fetch(now_lima, months)
+        fetched = fetch(now_lima, months)
+        rows = fetched[0]
+        # Meses que el portal aún no publica (por ejemplo, el día 1 del mes): se informan, no fallan
+        skipped = list(fetched[2]) if len(fetched) > 2 else []
     except ocds_source.SourceError as error:
         _finish_failed(session_factory, run_id, error)
         return {"run_id": run_id, "status": "fallida", "error": str(error), "http_status": error.status}
@@ -152,4 +155,4 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
 
     return {"run_id": run_id, "status": "ok", "source_open_goods": len(open_goods), "source_open_pilot": len(pilot),
             "saved_open": saved_open, "new": new_count, "updated": updated_count, "closed": closed_count,
-            "documents_added": documents_added}
+            "documents_added": documents_added, "skipped_months": skipped}
