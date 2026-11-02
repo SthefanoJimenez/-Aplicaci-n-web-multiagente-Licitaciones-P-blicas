@@ -1,0 +1,57 @@
+# Diagnóstico a pedido: ¿el portal del OECE bloquea la red de GitHub o al cliente (la app)?
+# Se ejecuta a mano (Actions → "Diagnóstico de la API OECE" → Run workflow) y NO toca la base de datos.
+# Hace las mismas consultas que `python ingest_job.py --diagnostico` en una computadora local, más
+# las mismas consultas con curl, para comparar ambos resultados en el mismo momento.
+name: Diagnóstico de la API OECE
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    env:
+      OCDS_USER_AGENT: ${{ vars.OCDS_USER_AGENT }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      # 1) El mismo código de la ingesta (requests, mismo nombre de cliente)
+      - name: Consultas con el código de la app
+        run: python ingest_job.py --diagnostico
+
+      # 2) Las mismas direcciones con curl y el User-Agent de un navegador: si curl también recibe
+      #    403 aquí y 200 en una computadora local, el bloqueo es a la red, no a la biblioteca de Python.
+      - name: Consultas con curl
+        continue-on-error: true
+        run: |
+          UA="${OCDS_USER_AGENT:-Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}"
+          PREV=$(date -d "$(date +%Y-%m-01) -1 day" +%Y/%m)
+          {
+            echo "### Consultas con curl desde GitHub Actions"
+            echo ""
+            for URL in \
+              "https://contratacionesabiertas.oece.gob.pe/api/v1/files?page=1" \
+              "https://contratacionesabiertas.oece.gob.pe/api/v1/file/seace_v3/json/${PREV}/"; do
+              RESULT=$(curl -sS -o /dev/null --max-time 60 -A "$UA" \
+                -H "Referer: https://contratacionesabiertas.oece.gob.pe/api" \
+                -w "%{http_code} · %{content_type}" "$URL" 2>&1 || true)
+              echo "- ${URL} → ${RESULT}"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"

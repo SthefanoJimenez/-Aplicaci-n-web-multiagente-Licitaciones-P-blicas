@@ -1,4 +1,3 @@
-
 name: Ingesta diaria de convocatorias
 
 on:
@@ -39,3 +38,9 @@ jobs:
 
       - name: Ejecutar la ingesta
         run: python ingest_job.py
+
+      # Solo si la ingesta falla: consultas pequeñas para saber si el 403 es un mes aún no
+      # publicado o un bloqueo del portal a la red de GitHub. El resultado sale en el resumen.
+      - name: Diagnóstico de la API (solo si falló)
+        if: failure()
+        run: python ingest_job.py --diagnostico
