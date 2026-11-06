@@ -77,7 +77,11 @@ def test_contract_example_matches_the_entities_and_has_no_user_data():
 
 def test_tables_follow_the_contract_with_keys_and_no_user_table(factory):
     inspector = inspect(factory.kw["bind"])
-    assert set(inspector.get_table_names()) == {"convocatorias", "documentos", "requisitos", "actualizaciones"}
+    assert set(inspector.get_table_names()) == {"convocatorias", "documentos", "requisitos", "fragmentos",
+                                                "actualizaciones"}
+    assert {fk["referred_table"] for fk in inspector.get_foreign_keys("fragmentos")} == {"convocatorias", "documentos"}
+    chunk_columns = {c["name"] for c in inspector.get_columns("fragmentos")}
+    assert {f.name for f in fields(tender_contract.RequirementChunk)} | {"embedding"} <= chunk_columns
     assert inspector.get_foreign_keys("documentos")[0]["referred_table"] == "convocatorias"
     assert {fk["referred_table"] for fk in inspector.get_foreign_keys("requisitos")} == {"convocatorias", "documentos"}
     columns = {c["name"] for c in inspector.get_columns("convocatorias")}
@@ -274,7 +278,7 @@ def test_diagnosis_tells_unpublished_month_from_block(source, monkeypatch, capsy
 def test_job_without_database_url_does_nothing(monkeypatch, capsys):
     import ingest_job
     monkeypatch.setattr(config, "DATABASE_URL", None)
-    assert ingest_job.main() == 2 and "Falta DATABASE_URL" in capsys.readouterr().out
+    assert ingest_job.main_with([]) == 2 and "Falta DATABASE_URL" in capsys.readouterr().out
 
 
 def test_job_writes_summary_and_never_prints_the_password(tmp_path, monkeypatch, capsys, source):
@@ -287,13 +291,13 @@ def test_job_writes_summary_and_never_prints_the_password(tmp_path, monkeypatch,
     monkeypatch.setattr(ingest, "run_ingestion",
                         lambda factory, trigger=None: real_run(factory, now=NOW, fetch=fetch_from(source), months=2,
                                                                trigger=trigger))
-    assert ingest_job.main() == 0
+    assert ingest_job.main_with([]) == 0
     assert "Vigentes guardadas: 3" in (tmp_path / "resumen.md").read_text(encoding="utf-8")
     monkeypatch.setattr(config, "DATABASE_URL", "postgresql://usuario:clave-secreta@host/db")
     monkeypatch.setattr(db, "make_engine", lambda url=None: db.create_engine(url or "sqlite://"))
     monkeypatch.setattr(ingest, "run_ingestion", lambda factory, trigger=None: {
         "run_id": 1, "status": "fallida", "error": "no conecta a usuario:clave-secreta@host", "http_status": None})
-    assert ingest_job.main() == 1
+    assert ingest_job.main_with([]) == 1
     assert "clave-secreta" not in capsys.readouterr().out
 
 

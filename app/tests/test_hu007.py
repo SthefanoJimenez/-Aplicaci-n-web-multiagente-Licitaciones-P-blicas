@@ -35,7 +35,9 @@ def test_db():
 @pytest.fixture
 def seed_tenders(test_db):
     """Inserta convocatorias vigentes de prueba con diferentes combinaciones."""
-    now_utc = NOW.astimezone(timezone.utc)
+    # Relativo a la fecha real: la pantalla calcula los días con datetime.now(), así que una fecha
+    # fija hacía que «3 días» dependiera del día en que se corrieran las pruebas.
+    now_utc = datetime.now(timezone.utc)
     with test_db.begin() as session:
         # 1. Ejecución de ingesta exitosa para que availability() sea ok
         run = db.IngestionRun(

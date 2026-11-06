@@ -96,8 +96,11 @@ def detect_kind(head):
     return None
 
 
-def open_bases(url, session=None):
-    """Pide el archivo y devuelve BasesFile listo para enviarlo; lanza BasesUnavailable si no sirve."""
+def open_bases(url, session=None, max_bytes=MAX_BYTES):
+    """Pide el archivo y devuelve BasesFile listo para enviarlo; lanza BasesUnavailable si no sirve.
+
+    max_bytes: tamaño máximo. La pantalla usa MAX_BYTES; la lectura de bases (RAG) admite más.
+    """
     if not is_allowed(url):
         raise BasesUnavailable("el enlace no es de un dominio del SEACE")
     session = session or requests.Session()
@@ -114,9 +117,9 @@ def open_bases(url, session=None):
         raise BasesUnavailable("el SEACE redirigió a un dominio no permitido")
     size = response.headers.get("Content-Length")
     size = int(size) if size and size.isdigit() else None
-    if size is not None and size > MAX_BYTES:
+    if size is not None and size > max_bytes:
         response.close()
-        raise BasesUnavailable("el archivo es demasiado grande para pasar por la app")
+        raise BasesUnavailable(f"el archivo pesa {size / 1048576:.0f} MB y el límite es {max_bytes / 1048576:.0f} MB")
     if (response.headers.get("Content-Encoding") or "identity").lower() != "identity":
         size = None   # requests descomprime: el tamaño informado no es el que se enviará
 
@@ -144,8 +147,9 @@ def open_bases(url, session=None):
             yield head
             for piece in raw:
                 sent += len(piece)
-                if sent > MAX_BYTES:
-                    break
+                if sent > max_bytes:
+                    # Antes se cortaba en silencio y quedaba un archivo dañado: ahora la descarga falla
+                    raise BasesUnavailable(f"el archivo supera el límite de {max_bytes / 1048576:.0f} MB")
                 yield piece
         finally:
             response.close()

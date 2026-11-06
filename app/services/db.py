@@ -1,9 +1,11 @@
 """Base de datos de convocatorias (EN-007): PostgreSQL en Neon en producción, SQLite en las pruebas.
 
-Cuatro tablas, que siguen el contrato de services/tender_contract.py:
+Cinco tablas, que siguen el contrato de services/tender_contract.py:
 - convocatorias: una fila por ocid; nunca se borra, solo cambia de estado.
 - documentos: los documentos publicados de cada convocatoria.
 - requisitos: los requisitos que extrae HU-009.
+- fragmentos: la sección de requisitos de las bases partida en fragmentos con su vector (RAG, EN-012).
+  En PostgreSQL el vector usa la extensión pgvector; en SQLite (pruebas) se guarda como JSON.
 - actualizaciones: una fila por ejecución de la ingesta, con sus conteos (OE8).
 
 No hay tabla de usuarios ni de perfiles (RN-001). La escribe la ingesta diaria de GitHub
@@ -11,8 +13,9 @@ Actions y la lee la app en Render; la cadena de conexión llega por DATABASE_URL
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
-                        create_engine, event)
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint,
+                        create_engine, event, text)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 import config
@@ -71,6 +74,7 @@ class Tender(Base):
 
     documents: Mapped[list["TenderDocument"]] = relationship(back_populates="tender", cascade="all, delete-orphan")
     requirements: Mapped[list["Requirement"]] = relationship(back_populates="tender", cascade="all, delete-orphan")
+    chunks: Mapped[list["RequirementChunk"]] = relationship(back_populates="tender", cascade="all, delete-orphan")
 
 
 class TenderDocument(Base):
@@ -106,6 +110,27 @@ class Requirement(Base):
     tender: Mapped[Tender] = relationship(back_populates="requirements")
 
 
+class RequirementChunk(Base):
+    """Un fragmento de la sección de requisitos de las bases, con su vector (RAG, EN-012)."""
+    __tablename__ = "fragmentos"
+    __table_args__ = (UniqueConstraint("tender_id", "chunk_index", name="uq_fragmento_por_convocatoria"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tender_id: Mapped[int] = mapped_column(ForeignKey("convocatorias.id"), index=True)
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documentos.id"))
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    page: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(10), default="texto")       # "texto" u "ocr"
+    file_name: Mapped[str | None] = mapped_column(String(300))            # archivo dentro de lo descargado
+    embedding = mapped_column(Vector(config.EMBEDDING_DIM).with_variant(JSON(), "sqlite"))
+    model: Mapped[str | None] = mapped_column(String(80))
+    tokens_est: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    tender: Mapped[Tender] = relationship(back_populates="chunks")
+
+
 # ---------------------------------------------------------------------------
 # Conexión
 # ---------------------------------------------------------------------------
@@ -139,5 +164,11 @@ def make_session_factory(engine):
 
 
 def create_tables(engine):
-    """Crea las tablas que falten; no borra ni cambia las que existen."""
+    """Crea las tablas que falten; no borra ni cambia las que existen.
+
+    En PostgreSQL activa antes la extensión pgvector (Neon la ofrece en todos sus planes).
+    """
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)

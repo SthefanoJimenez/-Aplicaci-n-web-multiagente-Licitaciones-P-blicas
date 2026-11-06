@@ -35,3 +35,13 @@ OCDS_MONTHS = int(os.environ.get("OCDS_MONTHS", "").strip() or "2")
 
 # Rubros piloto (familia UNSPSC): 1510 combustibles y 2510 vehículos.
 PILOT_RUBROS = tuple(r.strip() for r in os.environ.get("PILOT_RUBROS", "1510,2510").split(",") if r.strip())
+
+# RAG de las bases (EN-012). Modelo de embeddings de Gemini y tamaño del vector: 768 es una de las
+# dimensiones que recomienda Google para gemini-embedding-001 (por defecto entrega 3072).
+EMBEDDING_MODEL = os.environ.get("GEMINI_EMBEDDING_MODEL", "").strip() or "gemini-embedding-001"
+EMBEDDING_DIM = 768
+# Bases que se descargan e indexan por ejecución de la ingesta (cada una tarda segundos, o minutos con OCR)
+RAG_MAX_BASES_PER_RUN = int(os.environ.get("RAG_MAX_BASES_PER_RUN", "").strip() or "25")
+# Tamaño máximo de las bases que descarga la lectura (la pantalla de descarga mantiene 80 MB).
+# El 03/11/2026, 2 de 142 bases vigentes pasaban de 80 MB.
+RAG_MAX_BASES_MB = int(os.environ.get("RAG_MAX_BASES_MB", "").strip() or "250")

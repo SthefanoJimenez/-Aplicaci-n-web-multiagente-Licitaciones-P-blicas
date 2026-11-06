@@ -1,7 +1,7 @@
 """Contrato de datos de las convocatorias vigentes (EN-007).
 
 Define qué guarda la base y qué reciben las pantallas (HU-007) y la extracción de requisitos
-(HU-009): cuatro entidades, sus campos, el tipo de cada uno y si puede faltar. Las tablas de
+(HU-009): sus entidades, sus campos, el tipo de cada uno y si puede faltar. Las tablas de
 services/db.py siguen este contrato campo por campo, y tender_contract_example.json trae un
 ejemplo completo para trabajar sin base de datos.
 
@@ -48,6 +48,22 @@ class Requirement:
     page: Optional[int] = None           # página del documento, si se puede saber
     source: str = "texto"                # "texto" (PDF con texto o Word) u "ocr" (escaneado)
     document_url: Optional[str] = None   # documento del que salió
+
+
+@dataclass
+class RequirementChunk:
+    """Fragmento de la sección de requisitos de las bases con su vector (RAG, EN-012). Tabla "fragmentos".
+
+    Lo escribe la ingesta (services/rag.py) y lo consultan HU-009 y el asistente. El vector no se
+    expone a las pantallas: solo el texto, la página y la convocatoria de la que salió.
+    """
+    chunk_index: int                     # orden dentro de la sección
+    text: str                            # texto del fragmento (unos 1200 caracteres)
+    page: Optional[int] = None           # página de las bases donde empieza; None en Word
+    source: str = "texto"                # "texto" u "ocr"
+    file_name: Optional[str] = None      # archivo dentro de lo descargado (los ZIP y RAR traen varios)
+    model: Optional[str] = None          # modelo de embeddings, por ejemplo "gemini-embedding-001"
+    tokens_est: Optional[int] = None     # tokens estimados (caracteres / 4), para medir el costo
 
 
 @dataclass

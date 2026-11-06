@@ -9,3 +9,5 @@ langsmith==0.14.4
 requests==2.34.2
 SQLAlchemy==2.1.4
 psycopg[binary]==3.3.6
+pgvector==0.4.1
+pypdf==6.17.0

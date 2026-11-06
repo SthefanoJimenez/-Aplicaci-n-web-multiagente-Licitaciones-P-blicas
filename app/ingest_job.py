@@ -4,12 +4,23 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
     python ingest_job.py
     python ingest_job.py --diagnostico    solo consulta la API (sin base de datos) para ver si
                                           un 403 es un mes aún no publicado o un bloqueo
+    python ingest_job.py --sin-rag        solo la ingesta, sin leer las bases
+    python ingest_job.py --solo-rag       solo lee las bases pendientes (RAG, EN-012)
+    python ingest_job.py --buscar "experiencia mínima" [--codigo 1258127]
+                                          prueba la búsqueda en los fragmentos guardados
+    python ingest_job.py --diagnosticar-bases [--codigo 1262871]
+                                          por qué no se encontró la sección de requisitos
+                                          (vuelve a descargar las bases; no guarda nada)
+    python ingest_job.py --releer-sin-seccion
+                                          vuelve a leer las bases "sin la sección" (tras mejorar el lector)
 
-Crea las tablas que falten, ejecuta la ingesta y escribe el resumen en pantalla (y en el
-resumen de la ejecución de GitHub Actions). Termina con código 1 si la ejecución falló, para
+Crea las tablas que falten, ejecuta la ingesta y, si hay GEMINI_API_KEY, lee las bases de las
+convocatorias nuevas y guarda su sección de requisitos con vectores (RAG). Escribe el resumen en
+pantalla (y en el resumen de la ejecución de GitHub Actions). Termina con código 1 si la ejecución falló, para
 que el historial de GitHub Actions la muestre en rojo; los datos anteriores se conservan.
 Nunca imprime la cadena de conexión ni las claves.
 """
+import argparse
 import os
 import sys
 
@@ -67,14 +78,119 @@ def run_diagnosis():
     return 0
 
 
+def run_rag(factory):
+    """Lee las bases pendientes y devuelve las líneas del resumen. No hace fallar la ingesta."""
+    from services import rag
+    if not config.GEMINI_API_KEY:
+        return ["Lectura de bases (RAG) omitida: falta GEMINI_API_KEY para generar los vectores."]
+    def show(number, total, code, status, seconds):
+        print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
+
+    print("Leyendo bases pendientes…", flush=True)
+    result = rag.index_pending(factory, progress=show)
+    lines = [f"Lectura de bases (RAG): {result['processed']} procesadas · con requisitos: {result['extraido']} · "
+             f"sin la sección: {result['seccion_no_encontrada']} · no legibles: {result['no_legible']} · "
+             f"con error: {result['error']} · fragmentos: {result['chunks']:,} · tokens estimados: {result['tokens']:,}"
+             f" · quedan por leer: {result['remaining']}"]
+    if result["extraido"]:
+        lines.append(f"Tokens estimados por base con requisitos: {result['tokens'] // result['extraido']:,}")
+    if result["stopped"]:
+        lines.append(f"Se detuvo la lectura de bases porque Gemini no respondió ({scrub(result['stopped'])}). "
+                     "Las pendientes se leerán en la próxima ejecución.")
+    for code, status, detail in result["details"]:
+        if status != "extraido":
+            lines.append(f"- {code}: {status} ({detail})")
+    return lines
+
+
+def run_search(factory, query, codes):
+    from services import rag
+    if not config.GEMINI_API_KEY:
+        print("Falta GEMINI_API_KEY para convertir la pregunta en vector.")
+        return 2
+    with factory() as session:
+        results = rag.search(session, query, k=5, codes=codes)
+    if not results:
+        print("No hay fragmentos guardados que coincidan. ¿Ya se ejecutó la lectura de bases?")
+        return 1
+    for r in results:
+        page = f"pág. {r['page']}" if r["page"] else "Word"
+        print(f"\n[{r['similarity']:.3f}] {r['code']} · {r['entity']} · {page} · {r['source']}")
+        print("   " + r["text"][:400].replace("\n", " "))
+    return 0
+
+
+def run_bases_diagnosis(factory, codes):
+    """Descarga las bases "sin la sección" (o las indicadas) y muestra por qué no se halló. No escribe nada."""
+    from sqlalchemy import select
+    from services import bases_download, bases_reader, rag
+    with factory() as session:
+        query = select(db.Tender).where(db.Tender.state == "vigente")
+        query = (query.where(db.Tender.code.in_(codes)) if codes
+                 else query.where(db.Tender.requirements_status == "seccion_no_encontrada"))
+        tenders = []
+        for t in session.scalars(query.order_by(db.Tender.code)):
+            bases = next((d for d in t.documents if d.is_bases and d.url), None)
+            others = [f"{d.title} ({d.doc_format})" for d in t.documents if d is not bases]
+            tenders.append((t.code, t.title, bases.url if bases else None,
+                            f"{bases.title} ({bases.doc_format})" if bases else None, others))
+    if not tenders:
+        print("No hay convocatorias vigentes sin la sección de requisitos.")
+        return 0
+    use_ocr = bases_reader.ocr_available()
+    print(f"Diagnóstico de {len(tenders)} bases · OCR {'disponible' if use_ocr else 'NO disponible'} · no se guarda nada\n",
+          flush=True)
+    limit = config.RAG_MAX_BASES_MB * 1024 * 1024
+    for code, title, url, bases_title, others in tenders:
+        print(f"=== {code} · {(title or '')[:70]}", flush=True)
+        if bases_title:
+            print(f"   Documento leído: {bases_title}")
+        if others:
+            print(f"   Otros documentos publicados: {'; '.join(others)[:300]}")
+        if not url:
+            print("   No publica documento de bases.\n")
+            continue
+        try:
+            content = b"".join(bases_download.open_bases(url, max_bytes=limit).chunks)
+        except bases_download.BasesUnavailable as e:
+            print(f"   No se pudo descargar: {e.reason}\n")
+            continue
+        for doc in bases_reader.explain(content, use_ocr=use_ocr):
+            if "error" in doc:
+                print(f"   {doc['document']}: {doc['error']}")
+                continue
+            scan = f" · escaneadas: {doc['image_pages']} (OCR en {doc['ocr_pages']})" if doc["image_pages"] else ""
+            unread = " · ESCANEADO SIN LEER" if doc["unread_scan"] else ""
+            print(f"   {doc['document']} · {doc['pages'] or 'Word'} págs.{scan}{unread} · "
+                  f"líneas con «califica/habilitación»: {doc['total_lines']}")
+            for page, line, verdict in doc["lines"]:
+                where = f"pág. {page}" if page else "Word"
+                print(f"     [{where}] {line}\n        → {verdict}")
+        print(flush=True)
+    return 0
+
+
 def main_with(args):
     """Como main(), con los argumentos explícitos (lo usan las pruebas)."""
     return main(list(args))
 
 
+def parse(args):
+    parser = argparse.ArgumentParser(description="Ingesta diaria de convocatorias y lectura de bases (RAG).")
+    parser.add_argument("--diagnostico", action="store_true")
+    parser.add_argument("--sin-rag", action="store_true")
+    parser.add_argument("--solo-rag", action="store_true")
+    parser.add_argument("--buscar")
+    parser.add_argument("--diagnosticar-bases", action="store_true")
+    parser.add_argument("--releer-sin-seccion", action="store_true")
+    parser.add_argument("--codigo", action="append")
+    # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
+    return parser.parse_args(args)
+
+
 def main(args=None):
-    args = sys.argv[1:] if args is None else args
-    if "--diagnostico" in args:
+    options = parse(sys.argv[1:] if args is None else args)
+    if options.diagnostico:
         return run_diagnosis()
     if not config.DATABASE_URL:
         print("Falta DATABASE_URL (variable de entorno o app/.env). No se ejecutó la ingesta.")
@@ -82,6 +198,27 @@ def main(args=None):
     engine = db.make_engine()
     db.create_tables(engine)
     factory = db.make_session_factory(engine)
+    if options.diagnosticar_bases:
+        code = run_bases_diagnosis(factory, options.codigo)
+        engine.dispose()
+        return code
+    if options.buscar:
+        code = run_search(factory, options.buscar, options.codigo)
+        engine.dispose()
+        return code
+    if options.releer_sin_seccion:
+        from sqlalchemy import update
+        with factory.begin() as session:
+            reset = session.execute(update(db.Tender).where(db.Tender.state == "vigente")
+                                    .where(db.Tender.requirements_status == "seccion_no_encontrada")
+                                    .values(requirements_status="pendiente")).rowcount
+        print(f"{reset} bases sin la sección vuelven a quedar pendientes.", flush=True)
+        options.solo_rag = True
+    if options.solo_rag:
+        lines = run_rag(factory)
+        print("\n".join(lines))
+        engine.dispose()
+        return 0
     trigger = os.environ.get("GITHUB_EVENT_NAME") or "local"
     client = client_kind()
     print(f"Ingesta · meses: {config.OCDS_MONTHS} · rubros: {', '.join(config.PILOT_RUBROS)} · "
@@ -97,6 +234,8 @@ def main(args=None):
         ]
         for month, reason in result.get("skipped_months", []):
             lines.append(f"Mes {month} omitido: {reason}. Se volverá a intentar en la próxima ejecución.")
+        if not options.sin_rag:
+            lines += run_rag(factory)
     else:
         lines = [f"Ejecución {result['run_id']}: FALLIDA. Se conservan los datos anteriores.",
                  f"Motivo: {scrub(result['error'])}"]

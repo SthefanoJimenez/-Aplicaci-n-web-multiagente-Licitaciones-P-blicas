@@ -53,6 +53,9 @@ def _apply_row(tender, row, now, run_id):
 def _sync_documents(tender, row):
     """Agrega los documentos nuevos y marca cuál son las bases. Los que la fuente ya no lista se conservan."""
     bases = ocds_source.bases_document(row)
+    previous = next((d.url for d in tender.documents if d.is_bases), None)
+    if bases and previous and bases.get("url") != previous:
+        tender.requirements_status = "pendiente"      # llegaron otras bases (p. ej. las integradas): el RAG las vuelve a leer
     by_url = {d.url: d for d in tender.documents}
     added = 0
     for doc in row.get("documents") or []:

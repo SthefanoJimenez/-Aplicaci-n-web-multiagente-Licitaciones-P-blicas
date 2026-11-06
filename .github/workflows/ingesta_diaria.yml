@@ -21,6 +21,8 @@ jobs:
         working-directory: app
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # Para la lectura de bases (RAG): sin esta clave la ingesta corre igual y omite ese paso
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OCDS_USER_AGENT: ${{ vars.OCDS_USER_AGENT }}
       OCDS_MONTHS: ${{ vars.OCDS_MONTHS }}
       PYTHONUNBUFFERED: "1"
