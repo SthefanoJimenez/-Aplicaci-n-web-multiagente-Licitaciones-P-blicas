@@ -3200,6 +3200,54 @@ details.table-view summary {
     flex: none;
 }
 
+/* HU-015: documentos de la empresa, con el mismo ancho que el perfil. */
+.page-documents { max-width: 948px; }
+.page-documents > .notice { margin-bottom: 16px; }
+.page-documents input[type="date"],
+.page-documents input[type="file"] {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    border: 1.5px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    background: white;
+    color: var(--ink);
+    font: inherit;
+}
+.page-documents input[type="file"]::file-selector-button {
+    border: 0;
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-right: 10px;
+    font: inherit;
+    background: var(--seal-tint);
+    color: var(--seal);
+    cursor: pointer;
+}
+.page-documents input:disabled { background: var(--paper); }
+.page-documents input[aria-invalid="true"],
+.page-documents select[aria-invalid="true"] { border-color: var(--bad); }
+.document-checkbox-field { align-self: center; }
+.document-checkbox { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.document-checkbox input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; }
+.document-list { list-style: none; margin: 24px 0; padding: 0; }
+.document-card { padding: 20px 0; border-top: 1px solid var(--rule); min-width: 0; }
+.document-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.document-heading h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; flex: 1 1 240px; }
+.document-filename { overflow-wrap: anywhere; }
+.document-state { padding: 4px 8px; border-radius: 4px; font-size: 14px; font-weight: 600; }
+.document-state-current { color: var(--good); background: var(--good-tint); }
+.document-state-expired { color: var(--bad); background: var(--bad-tint); }
+.document-state-future { color: var(--ink-2); background: var(--paper); }
+.document-empty { margin: 24px 0; padding: 20px; background: var(--paper); border-radius: var(--radius-sm); }
+.document-actions .document-delete { color: var(--bad); border-color: var(--bad); }
+.document-delete-confirm { background: var(--bad); color: white; }
+.document-delete-confirm:hover { background: #8f1c13; color: white; }
+.page-documents .notice ul { margin: 8px 0 0; }
+.page-documents .notice { display: block; }
+
 @media (max-width: 1350px) {
     .topbar-inner {
         grid-template-columns: auto minmax(0, 1fr);

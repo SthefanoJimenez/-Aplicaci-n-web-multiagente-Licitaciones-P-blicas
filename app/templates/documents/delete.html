@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active_nav = "profile" %}
+{% block title %}Borrar documento{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="delete-title">
+  <p class="eyebrow">Documentos de mi empresa</p>
+  <h1 class="page-title" id="delete-title">¿Borrar este documento?</h1>
+  <p class="page-lead document-filename">{{ document.filename }}</p>
+  <p>Se borrarán el PDF y sus datos de esta cuenta. Ya no estará disponible al revisar sus documentos para una convocatoria.</p>
+  <p>Esta acción no se puede deshacer. Conserve una copia antes de continuar.</p>
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="actions"><button class="button document-delete-confirm" type="submit">Sí, borrar documento</button><a class="button button-secondary" href="{{ url_for('company_documents.index') }}">Conservar documento</a></div>
+  </form>
+</section>
+{% endblock %}

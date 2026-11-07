@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set active_nav = "profile" %}
+{% block title %}Documentos de mi empresa{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="documents-title">
+  <p class="eyebrow">Mi empresa · Documentos privados</p>
+  <h1 class="page-title" id="documents-title">Documentos de mi empresa</h1>
+  <p class="page-lead">Guarde sus constancias y contratos para tenerlos disponibles al revisar una convocatoria.</p>
+  <p class="hint">Solo su cuenta puede ver, descargar, editar o borrar estos documentos. Se conserva el PDF original.</p>
+  <p><a href="{{ url_for('auth.profile') }}">Volver al perfil de mi empresa</a></p>
+</section>
+<section class="panel" aria-labelledby="upload-title">
+  <h2 class="section-title" id="upload-title">Adjuntar un documento</h2>
+  <p class="hint" id="upload-limits">PDF de hasta 5 MB y 200 páginas, sin contraseña ni archivos adjuntos. Máximo 30 documentos y 50 MB por empresa.</p>
+  <form method="post" action="{{ url_for('company_documents.index') }}" enctype="multipart/form-data" data-document-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% include "documents/_metadata.html" %}
+    <div class="field">
+      <label class="label" for="file">Archivo PDF</label>
+      <input id="file" name="file" type="file" accept=".pdf,application/pdf" required aria-describedby="upload-limits file-error"
+             {% if errors.get('file') %}aria-invalid="true"{% endif %}>
+      <p class="error" id="file-error" aria-live="polite">{{ errors.get('file', '') }}</p>
+      {% if errors %}<p class="hint">Por seguridad, vuelva a seleccionar el PDF antes de enviarlo.</p>{% endif %}
+    </div>
+    <div class="actions"><button class="button button-primary" type="submit">Guardar documento</button></div>
+  </form>
+</section>
+<section class="panel" aria-labelledby="saved-title">
+  <h2 class="section-title" id="saved-title">Documentos guardados</h2>
+  <p class="hint">{{ documents|length }} de {{ max_documents }} documentos · {{ '%.1f'|format(used_mb) }} de 50 MB utilizados.</p>
+  {% if documents %}
+  <ul class="document-list">
+    {% for doc in documents %}
+    <li class="document-card">
+      <div class="document-heading"><h3>{{ doc.filename }}</h3><span class="document-state document-state-{{ doc.state }}">{{ doc.state_label }}</span></div>
+      <p class="hint">{{ doc.type_label }} · {{ '%.0f'|format(doc.size_bytes / 1024) }} KB · {{ doc.page_count }} página{% if doc.page_count != 1 %}s{% endif %}</p>
+      <p class="hint">Desde: {{ doc.valid_from|date_pe if doc.valid_from else 'No declarado' }} · Vencimiento: {{ doc.expires_on|date_pe if doc.expires_on else 'Sin vencimiento declarado' }}</p>
+      <div class="actions document-actions">
+        <a class="button button-secondary" href="{{ url_for('company_documents.file', document_id=doc.id) }}" target="_blank" rel="noopener" aria-label="Ver PDF {{ doc.filename }} (abre otra pestaña)">Ver PDF</a>
+        <a class="button button-secondary" href="{{ url_for('company_documents.file', document_id=doc.id, descargar=1) }}" aria-label="Descargar {{ doc.filename }}">Descargar</a>
+        <a class="button button-secondary" href="{{ url_for('company_documents.edit', document_id=doc.id) }}" aria-label="Editar tipo y vigencia de {{ doc.filename }}">Editar tipo y vigencia</a>
+        <a class="button button-secondary document-delete" href="{{ url_for('company_documents.delete', document_id=doc.id) }}" aria-label="Borrar {{ doc.filename }}">Borrar</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="document-empty"><p><strong>Aún no ha guardado documentos.</strong></p><p>Empiece por su constancia del RNP, contratos anteriores o constancias de experiencia.</p></div>
+  {% endif %}
+  <p class="hint">La vigencia se calcula con las fechas que usted declara. Subir un PDF no verifica su autenticidad ni confirma que cumpla los requisitos de una convocatoria.</p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/company-documents.js') }}" defer></script>{% endblock %}

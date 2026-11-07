@@ -1,0 +1,30 @@
+{% from "auth/_fields.html" import summary %}
+{{ summary(errors) }}
+<div class="profile-grid">
+  <div class="field">
+    <label class="label" for="document_type">Tipo de documento</label>
+    <select id="document_type" name="document_type" required {% if errors.get('document_type') %}aria-invalid="true" aria-describedby="type-error"{% endif %}>
+      <option value="">Seleccione un tipo</option>
+      {% for value, label in types.items() %}<option value="{{ value }}" {% if values.get('document_type') == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    {% if errors.get('document_type') %}<p class="error" id="type-error">{{ errors.document_type }}</p>{% endif %}
+  </div>
+  <div class="field">
+    <label class="label" for="valid_from">Vigente desde (opcional)</label>
+    <input id="valid_from" name="valid_from" type="date" value="{{ values.get('valid_from', '') }}"
+           {% if errors.get('valid_from') %}aria-invalid="true" aria-describedby="from-error"{% endif %}>
+    {% if errors.get('valid_from') %}<p class="error" id="from-error">{{ errors.valid_from }}</p>{% endif %}
+  </div>
+  <div class="field">
+    <label class="label" for="expires_on">Fecha de vencimiento</label>
+    <input id="expires_on" name="expires_on" type="date" value="{{ values.get('expires_on', '') }}"
+           aria-describedby="expiry-hint{% if errors.get('expires_on') %} expiry-error{% endif %}"
+           {% if errors.get('expires_on') %}aria-invalid="true"{% endif %}>
+    <p class="hint" id="expiry-hint">Si el documento no indica vencimiento, marque la casilla de al lado.</p>
+    {% if errors.get('expires_on') %}<p class="error" id="expiry-error">{{ errors.expires_on }}</p>{% endif %}
+  </div>
+  <div class="field document-checkbox-field">
+    <label class="document-checkbox" for="no_expiry"><input id="no_expiry" name="no_expiry" type="checkbox" value="1" {% if values.get('no_expiry') %}checked{% endif %}> Sin vencimiento declarado</label>
+    <p class="hint">Las fechas son declaradas por su empresa. Revise lo que exige cada convocatoria.</p>
+  </div>
+</div>
