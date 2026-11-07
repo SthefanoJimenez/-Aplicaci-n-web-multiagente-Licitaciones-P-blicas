@@ -53,7 +53,7 @@ def request_rubro(session, code, company="", name=None):
         row = db.RubroRequest(code=code, company=company)
         session.add(row)
     elif not row.active:
-        row.requested_at = db.utcnow()          # se vuelve a pedir: cuenta desde hoy
+        row.requested_at = db.utcnow()          
     row.active = True
     if name:
         row.name = name.strip()[:200]
@@ -178,8 +178,6 @@ def catalog_from_rows(rows, now, days=CATALOG_DAYS):
             for c in item.get("classifications") or []:
                 digits = re.sub(r"\D", "", c.get("id") or "")
                 text = (c.get("description") or "").strip()
-                # Solo las descripciones UNSPSC (las CUBSO describen un producto concreto, no la familia)
-                # (si la clasificación no trae descripción, la API repite la del ítem: no sirve como nombre)
                 if ("unspsc" in (c.get("scheme") or "").lower() and len(digits) >= 8 and text
                         and text != (item.get("description") or "").strip()):
                     descriptions[digits[:4]][text[:1].upper() + text[1:].lower()] += 1
@@ -187,7 +185,6 @@ def catalog_from_rows(rows, now, days=CATALOG_DAYS):
     for code, count in tenders.most_common():
         examples = [text for text, _ in descriptions[code].most_common(NAME_EXAMPLES)]
         examples = examples[:1] + [e[:1].lower() + e[1:] for e in examples[1:]]
-        # "Ej.:" deja claro que no es el nombre oficial de la familia, sino bienes que la componen
         name = PILOT_NAMES.get(code) or (("Ej.: " + ", ".join(examples))[:300] if examples else None)
         result.append((code, name, count))
     return result
