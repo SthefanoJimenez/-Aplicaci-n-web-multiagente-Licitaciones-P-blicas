@@ -1,8 +1,7 @@
+
 name: Ingesta diaria de convocatorias
 
 on:
-  schedule:
-    - cron: "30 13 * * *"
   workflow_dispatch:
 
 permissions:

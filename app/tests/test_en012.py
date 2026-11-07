@@ -1,9 +1,4 @@
-"""EN-012: RAG de las bases (lectura de la sección de requisitos, fragmentos, vectores y búsqueda).
 
-No usan internet ni la API de Gemini: los PDF y Word se arman en la prueba, la descarga se
-simula y los vectores salen de una bolsa de palabras (palabras en común = vectores parecidos).
-La prueba con PostgreSQL y pgvector corre solo si RAG_TEST_POSTGRES_URL apunta a una base de prueba.
-"""
 import hashlib
 import io
 import os
@@ -221,19 +216,20 @@ def statuses(factory):
 def test_index_pending_reads_each_bases_and_records_why_it_could_not(factory):
     seed(factory)
     summary = rag.index_pending(factory, limit=10, fetch=fake_fetch, embed=fake_embed, use_ocr=False)
+    # 1004 es un PDF escaneado leído sin OCR: queda en "error" para reintentarse en una computadora con OCR
     assert statuses(factory) == {"1001": "extraido", "1002": "extraido", "1003": "seccion_no_encontrada",
-                                 "1004": "no_legible", "1005": "error", "1006": "no_legible"}
-    assert summary["processed"] == 6 and summary["extraido"] == 2 and summary["error"] == 1
-    assert summary["remaining"] == 1                         # 1005 se reintenta en la próxima ejecución
+                                 "1004": "error", "1005": "error", "1006": "no_legible"}
+    assert summary["processed"] == 6 and summary["extraido"] == 2 and summary["error"] == 2
+    assert summary["remaining"] == 2                         # 1004 y 1005 se reintentan en la próxima ejecución
     with factory() as session:
         chunks = session.query(db.RequirementChunk).join(db.Tender).filter(db.Tender.code == "1001").all()
         assert chunks and all(c.page == 2 and c.source == "texto" and len(c.embedding) == config.EMBEDDING_DIM
                               for c in chunks)
         assert summary["tokens"] == sum(c.tokens_est for c in session.query(db.RequirementChunk))
-    # La segunda ejecución solo reintenta la que falló
+    # La segunda ejecución solo reintenta las que fallaron
     calls = []
     rag.index_pending(factory, limit=10, fetch=lambda url: calls.append(url) or fake_fetch(url), embed=fake_embed, use_ocr=False)
-    assert calls == ["https://prod1.seace.gob.pe/1005"]
+    assert sorted(calls) == ["https://prod1.seace.gob.pe/1004", "https://prod1.seace.gob.pe/1005"]
 
 
 def test_search_returns_the_right_tender_and_page(factory):
