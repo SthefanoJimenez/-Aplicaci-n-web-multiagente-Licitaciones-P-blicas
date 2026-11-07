@@ -70,8 +70,8 @@ def run(factory, fake):
 
 
 @pytest.fixture
-def client():
-    return app.test_client()
+def client(account_client):
+    return account_client
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +137,7 @@ def test_rubro_without_data_offers_the_request_button_and_one_with_data_does_not
     run(factory, source)
     page = client.get("/convocatorias?rubro=3011").get_data(as_text=True)
     assert "aún no tiene convocatorias cargadas" in page and "Solicitar este rubro" in page
+    assert 'name="csrf_token"' in page
     assert "En el último mes se publicaron 4 convocatorias" in page
     page = client.get("/convocatorias?rubro=1510").get_data(as_text=True)
     assert "Solicitar este rubro" not in page and "ADQUISICION 301" in page
@@ -170,6 +171,7 @@ def test_requesting_twice_keeps_one_request(factory, source, client):
 
 def test_catalog_page_button_saves_the_request(factory, source, client):
     run(factory, source)
+    assert 'name="csrf_token"' in client.get("/rubros").get_data(as_text=True)
     response = client.post("/convocatorias/solicitar-rubro", data={"rubro": "4229"}, follow_redirects=True)
     assert "Solicitud registrada para el rubro 4229" in response.get_data(as_text=True)
     page = client.get("/rubros").get_data(as_text=True)

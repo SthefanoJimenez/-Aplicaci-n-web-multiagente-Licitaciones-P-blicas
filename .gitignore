@@ -28,3 +28,5 @@ analisis/datos/produccion/
 *.log
 *.db
 *.sqlite3
+app/instance/
+/instance/

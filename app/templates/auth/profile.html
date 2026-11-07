@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "auth/_fields.html" import input, summary %}
+{% set active_nav = "profile" %}
+{% block title %}Mi empresa{% endblock %}
+{% block page_class %}page-profile{% endblock %}
+{% block content %}
+<section class="panel profile-panel" aria-labelledby="profile-title">
+  <p class="eyebrow">Perfil de la empresa</p>
+  <h1 class="page-title" id="profile-title">Mi empresa</h1>
+  <p class="page-lead">Declare sus datos una sola vez y actualícelos cuando cambien.</p>
+  <p class="hint">Cuenta: {{ current_user.email }}. Los datos de este perfil son privados.</p>
+  {{ summary(errors) }}
+  <form method="post" action="{{ url_for('auth.profile') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <div class="profile-grid">
+      {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization') }}
+      {{ input('business_activity', 'Giro o actividad principal', values, errors, hint='Por ejemplo: venta de materiales de construcción.', maximum=300) }}
+      {{ input('rubros', 'Rubros que ofrece', values, errors, hint='Por ejemplo: cemento, acero y agregados.', maximum=500) }}
+      {{ input('monthly_sales', 'Ventas mensuales (S/)', values, errors, hint='Hasta 14 cifras enteras y 2 decimales, sin separadores de miles. Si aún no tiene ventas, escriba 0.', maximum=17) }}
+      {{ input('experience_years', 'Años completos de experiencia', values, errors, hint='Si está empezando, escriba 0.', maximum=3) }}
+      {{ input('similar_contracts_amount', 'Monto facturado en contratos similares (S/)', values, errors, hint='Total acumulado: hasta 14 cifras enteras y 2 decimales. Si no tiene contratos similares, escriba 0.', maximum=17) }}
+    </div>
+    <div class="field">
+      <label class="label" for="specialized_staff">Personal especializado</label>
+      <textarea id="specialized_staff" name="specialized_staff" rows="4" maxlength="3000" required
+                aria-describedby="staff-hint{% if errors.get('specialized_staff') %} staff-error{% endif %}"
+                {% if errors.get('specialized_staff') %}aria-invalid="true"{% endif %}>{{ values.get('specialized_staff', '') }}</textarea>
+      <p class="hint" id="staff-hint">Indique los puestos y la experiencia disponible. Si no cuenta con personal especializado, escriba «No cuento con personal especializado».</p>
+      {% if errors.get('specialized_staff') %}<p class="error" id="staff-error">{{ errors.specialized_staff }}</p>{% endif %}
+    </div>
+    <p class="hint">Este perfil registra información declarada por su empresa. Guardarlo todavía no emite un veredicto sobre una convocatoria.</p>
+    <div class="actions">
+      <button class="button button-primary" type="submit">Guardar perfil</button>
+      <a class="button button-secondary" href="{{ url_for('describe') }}">Evaluar mi producto</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/profile-amounts.js') }}" defer></script>
+{% endblock %}

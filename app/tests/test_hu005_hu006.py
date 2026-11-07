@@ -21,9 +21,8 @@ def no_model(monkeypatch):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    return app.test_client()
+def client(signed_in_client):
+    return signed_in_client
 
 
 def with_code(client, code):

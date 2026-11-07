@@ -53,6 +53,7 @@
             <span class="muted small">Sin convocatorias vigentes hoy</span>
             {% else %}
             <form method="post" action="{{ url_for('request_rubro') }}" style="margin:0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="rubro" value="{{ r.code }}">
               <button type="submit" class="button button-sm button-secondary">Solicitar este rubro</button>
             </form>

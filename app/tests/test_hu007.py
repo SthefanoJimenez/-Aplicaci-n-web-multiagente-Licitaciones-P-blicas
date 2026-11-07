@@ -116,10 +116,8 @@ def seed_tenders(test_db):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
-        yield c
+def client(signed_in_client):
+    return signed_in_client
 
 
 def test_tenders_screen_displays_required_fields_and_disclaimers(client, seed_tenders):

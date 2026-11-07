@@ -23,6 +23,10 @@ MAX_DESCRIPTION_LENGTH = 300
 # de GitHub, nunca en el repositorio. Vacía = la app funciona sin convocatorias (aviso RN-002).
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or None
 
+# HU-008: opcional para probar cuentas en una base local sin escribir en Neon.
+# Vacía = comparte DATABASE_URL; si tampoco existe, usa app/instance/cuentas.sqlite3.
+ACCOUNTS_DATABASE_URL = os.environ.get("ACCOUNTS_DATABASE_URL", "").strip() or None
+
 # Nombre de cliente para la API OCDS. Por defecto, el de un navegador: desde el 28/10/2026 el
 # portal responde 403 a "LicitaFacil-SP005" (SP-006). Decisión del PO, registrada como riesgo.
 OCDS_USER_AGENT = os.environ.get("OCDS_USER_AGENT", "").strip() or (

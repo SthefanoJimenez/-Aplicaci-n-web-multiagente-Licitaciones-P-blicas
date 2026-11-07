@@ -84,10 +84,8 @@ def test_without_valid_candidates_returns_no_evidence(monkeypatch):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    with app.test_client() as c:
-        yield c
+def client(signed_in_client):
+    return signed_in_client
 
 
 def fake_candidates(monkeypatch, codes):

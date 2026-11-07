@@ -27,6 +27,7 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('candidates') }}" data-loading novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="field">
         <label for="description" class="label">Descripción del bien</label>
         <textarea data-tour="1" data-tour-title="Describa su producto" data-tour-text="Escriba con sus palabras qué vende: material, medida o presentación. Por ejemplo, «cemento portland en bolsa de 42.5 kg»." id="description" name="description" rows="4" maxlength="{{ max_length }}"

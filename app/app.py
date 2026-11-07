@@ -6,6 +6,7 @@ from flask import Flask, Response, abort, redirect, render_template, request, se
 import config
 import orchestrator
 import rules
+import auth
 from agents import evaluator, writer
 from services import analytics, bases_download, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, unit_text
@@ -13,6 +14,7 @@ from services.formatting import format_amount, format_pen, unit_text
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
+auth.init_app(app)
 
 
 @app.context_processor

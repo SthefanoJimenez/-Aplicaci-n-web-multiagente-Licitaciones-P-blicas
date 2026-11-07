@@ -11,6 +11,7 @@
 
 <div class="section panel">
   <form method="post" action="{{ url_for('verdict') }}" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="cost" class="label">Su costo por {{ m.unit|unit_text }}</label>
     <div class="money">
       <span aria-hidden="true">S/</span>

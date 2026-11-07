@@ -71,6 +71,7 @@
       Si es lo que usted vende, solicítelo: desde la siguiente actualización diaria se descargarán sus convocatorias vigentes.
     </p>
     <form method="post" action="{{ url_for('request_rubro') }}" class="filters" style="margin:0; padding:0; border:0; grid-template-columns:minmax(0,360px) auto; justify-content:start;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="rubro" value="{{ rubro_info.code }}">
       <div>
         <label for="f-empresa">Empresa (opcional)</label>

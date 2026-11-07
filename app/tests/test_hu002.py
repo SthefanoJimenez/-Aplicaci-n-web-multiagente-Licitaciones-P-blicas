@@ -86,9 +86,8 @@ def test_graph_decides_output_by_evidence(code, result, no_model):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    return app.test_client()
+def client(signed_in_client):
+    return signed_in_client
 
 
 def with_code(client, code, candidates=None):

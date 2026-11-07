@@ -14,6 +14,7 @@
 </div>
 
 <form method="post" action="{{ url_for('confirm') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset class="candidates" data-tour="1" data-tour-title="Elija el bien que más se parece" data-tour-text="El agente encontró estos bienes del catálogo, del más al menos parecido. Cada uno indica cuántas veces lo compró el Estado.">
     <legend class="sr-only">Bienes del catálogo</legend>
     {% for c in candidates %}

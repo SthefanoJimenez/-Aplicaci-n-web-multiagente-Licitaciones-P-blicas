@@ -1,0 +1,32 @@
+{% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none) %}
+<div class="field">
+  <label class="label" for="{{ name }}">{{ label }}</label>
+  {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount'] %}
+  {% if is_amount %}<div class="amount-input" data-amount-input>{% endif %}
+  <input id="{{ name }}" name="{{ name }}" type="{{ type }}" required
+         autocomplete="{{ autocomplete }}" maxlength="{{ maximum }}"
+         {% if minimum is not none %}minlength="{{ minimum }}"{% endif %}
+         {% if type != 'password' %}value="{{ values.get(name, '') }}"{% endif %}
+         {% if is_amount %}inputmode="decimal" placeholder="0.00" data-amount-field
+         pattern="[0-9]{1,14}([.,][0-9]{1,2})?"
+         title="Use hasta 14 cifras enteras y dos decimales, con un solo punto o coma y sin separadores de miles."{% endif %}
+         {% if name == 'experience_years' %}inputmode="numeric"{% endif %}
+         {% if errors.get(name) %}aria-invalid="true"{% endif %}
+         {% if hint or errors.get(name) %}aria-describedby="{{ name }}-hint{% if errors.get(name) %} {{ name }}-error{% endif %}"{% endif %}>
+  {% if is_amount %}
+    <span class="amount-guide" aria-hidden="true" hidden><span class="amount-guide-prefix" data-amount-prefix></span><span data-amount-suffix></span></span>
+  </div>
+  {% endif %}
+  {% if hint or errors.get(name) %}<p class="hint" id="{{ name }}-hint">{{ hint }}</p>{% endif %}
+  {% if errors.get(name) %}<p class="error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro summary(errors) %}
+{% if errors %}
+<div class="notice" role="alert">
+  <strong>Revise los campos indicados.</strong>
+  <ul>{% for field, message in errors.items() %}<li data-error-field="{{ field }}">{{ message }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% endmacro %}

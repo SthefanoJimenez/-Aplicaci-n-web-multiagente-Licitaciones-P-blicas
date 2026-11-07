@@ -61,12 +61,12 @@ def test_invalid_key_does_not_use_fallback(monkeypatch):
 
 
 @pytest.mark.parametrize("code, text", [(503, "saturado"), (429, "límite de uso")])
-def test_error_screen_explains_the_cause(monkeypatch, code, text):
+def test_error_screen_explains_the_cause(monkeypatch, code, text, signed_in_client):
     def fail(description):
         raise llm.ModelError("simulado", code=code)
     monkeypatch.setattr(classifier, "classify", fail)
     app.config["TESTING"] = True
-    response = app.test_client().post("/candidatos", data={"description": "fertilizante"})
+    response = signed_in_client.post("/candidatos", data={"description": "fertilizante"})
     html = response.get_data(as_text=True)
     assert response.status_code == 503
     assert text in html and 'value="fertilizante"' in html and "Reintentar búsqueda" in html

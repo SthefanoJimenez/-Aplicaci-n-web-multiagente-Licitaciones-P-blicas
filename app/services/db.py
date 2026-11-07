@@ -13,8 +13,8 @@ Siete tablas, que siguen el contrato de services/tender_contract.py:
 - catalogo_rubros: las familias UNSPSC con convocatorias de bienes en el último mes (HU-013). La
   ingesta lo rehace en cada ejecución; es la lista de rubros del filtro y de la pantalla de rubros.
 
-No hay tabla de usuarios ni de perfiles (RN-001). La escribe la ingesta diaria de GitHub
-Actions y la lee la app en Render; la cadena de conexión llega por DATABASE_URL.
+La ingesta escribe estas tablas y la app las lee; la cadena de conexión llega por DATABASE_URL.
+Las cuentas y los perfiles privados de HU-008 se definen por separado en services/accounts.py.
 """
 from datetime import datetime, timezone
 

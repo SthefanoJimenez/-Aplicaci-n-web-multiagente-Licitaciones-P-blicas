@@ -3028,3 +3028,230 @@ details.table-view summary {
         transition: none;
     }
 }
+/* HU-008: formularios de cuenta y navegación, con la escala visual del proyecto. */
+.account-panel {
+    max-width: 540px;
+    margin: 16px auto;
+}
+
+.profile-panel {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.page-profile {
+    max-width: 948px; /* Tarjeta de 900 px y los 24 px de cada lado de .page. */
+}
+
+.page-profile > .notice {
+    display: block;
+    margin: 0 0 16px;
+    overflow-wrap: anywhere;
+}
+
+.profile-panel .hint {
+    overflow-wrap: anywhere;
+}
+
+.profile-panel textarea {
+    max-width: 100%;
+    resize: vertical;
+}
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+}
+
+.amount-input {
+    position: relative;
+}
+
+.amount-guide {
+    position: absolute;
+    inset-inline: 15.5px; /* El borde de 1.5 px y los 14 px de padding del input. */
+    top: 50%;
+    transform: translateY(-50%);
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+    user-select: none;
+    font: 400 16px/1.5 var(--font);
+    color: var(--ink-3);
+}
+
+.amount-guide-prefix {
+    color: transparent;
+}
+
+.account-panel input[type="email"],
+.account-panel input[type="password"] {
+    width: 100%;
+    font: 400 16px/1.5 var(--font);
+    color: var(--ink);
+    background: var(--surface);
+    border: 1.5px solid var(--rule-strong);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.account-panel input[aria-invalid="true"] {
+    border-color: var(--bad);
+}
+
+.account-panel .notice,
+.profile-panel .notice {
+    display: block;
+}
+
+.account-panel .notice ul,
+.profile-panel .notice ul {
+    margin: 8px 0 0;
+    padding-left: 20px;
+}
+
+.field-feedback {
+    margin: 6px 0 0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.field-feedback-error {
+    color: var(--bad);
+}
+
+.field-feedback-success {
+    color: var(--good);
+}
+
+.account-panel .button[aria-disabled="true"],
+.account-panel .button[aria-disabled="true"]:hover {
+    background: var(--rule);
+    color: var(--ink-2);
+    cursor: not-allowed;
+}
+
+/* Los enlaces de cuenta se mantienen juntos; los de secciones bajan como grupo. */
+.topbar-inner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    max-width: 1440px;
+    min-height: 72px;
+    padding: 12px 24px;
+    gap: 10px 20px;
+}
+
+.topbar-inner .brand {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.topbar-inner .nav {
+    justify-content: center;
+    align-items: center;
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.topbar-inner .nav a {
+    padding: 8px 10px;
+    white-space: nowrap;
+}
+
+.nav-account {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.nav-account a,
+.nav-signout {
+    color: var(--ink-2);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font: 600 15px/1.55 var(--font);
+    padding: 8px 10px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.nav-account a:hover,
+.nav-signout:hover {
+    color: var(--ink);
+    background: var(--paper);
+}
+
+.nav-account a[aria-current="page"] {
+    color: var(--seal);
+    background: var(--seal-tint);
+}
+
+.nav-session {
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.nav-account .nav-help {
+    flex: none;
+}
+
+@media (max-width: 1350px) {
+    .topbar-inner {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .topbar-inner .nav {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: flex-start;
+        border-top: 1px solid var(--rule);
+        padding-top: 8px;
+    }
+
+    .nav-account {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+
+@media (max-width: 680px) {
+    .profile-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .account-panel {
+        margin: 0 auto;
+    }
+
+    .topbar-inner {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px 16px;
+    }
+
+    .nav-account {
+        grid-column: 1;
+        grid-row: 2;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .topbar-inner .nav {
+        grid-row: 3;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+    }
+
+    .topbar-inner .nav a {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        white-space: normal;
+        padding: 8px;
+    }
+}

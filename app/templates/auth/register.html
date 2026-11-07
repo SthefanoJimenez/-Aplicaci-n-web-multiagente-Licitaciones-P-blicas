@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "auth/_fields.html" import input, summary %}
+{% set active_nav = "register" %}
+{% block title %}Crear cuenta{% endblock %}
+{% block content %}
+<section class="panel account-panel" aria-labelledby="account-title">
+  <p class="eyebrow">Su empresa en LicitaFácil</p>
+  <h1 class="page-title" id="account-title">Crear cuenta</h1>
+  <p class="page-lead">Guarde el perfil de su empresa para consultarlo y actualizarlo cuando lo necesite.</p>
+  {{ summary(errors) }}
+  <form method="post" action="{{ url_for('auth.register') }}" data-registration-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization', minimum=2) }}
+    {{ input('email', 'Correo electrónico', values, errors, type='email', autocomplete='email', maximum=254) }}
+    {{ input('password', 'Contraseña', {}, errors, type='password', autocomplete='new-password', hint='Use entre 12 y 128 caracteres. Puede escribir una frase larga.', minimum=12, maximum=128) }}
+    {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=12, maximum=128) }}
+    <div class="actions"><button class="button button-primary button-wide" type="submit" aria-describedby="registration-help">Crear mi cuenta</button></div>
+    <p class="hint" id="registration-help">Complete los cuatro campos. La contraseña debe tener entre 12 y 128 caracteres y coincidir en ambos campos.</p>
+    <p class="sr-only" id="registration-announcement" role="status" aria-atomic="true"></p>
+  </form>
+  <p class="hint">¿Ya tiene una cuenta? <a href="{{ url_for('auth.login', **({'next': next_url} if next_url else {})) }}">Iniciar sesión</a></p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/register.js') }}" defer></script>
+{% endblock %}

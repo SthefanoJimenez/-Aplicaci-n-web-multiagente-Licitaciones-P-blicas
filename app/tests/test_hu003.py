@@ -82,9 +82,8 @@ def test_nonexistent_good_has_no_competition(no_model):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    return app.test_client()
+def client(signed_in_client):
+    return signed_in_client
 
 
 def market_html(client, code):

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Cuenta temporalmente no disponible{% endblock %}
+{% block content %}
+<section class="panel account-panel" aria-labelledby="error-title">
+  <h1 class="page-title" id="error-title">No pudimos acceder a su cuenta</h1>
+  <p>La conexión no está disponible en este momento. Intente nuevamente en unos minutos.</p>
+  <a href="{{ url_for('overview') }}">Consultar el panorama del mercado</a>
+</section>
+{% endblock %}

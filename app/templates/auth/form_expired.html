@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Vuelva a abrir el formulario{% endblock %}
+{% block content %}
+<section class="panel account-panel" aria-labelledby="error-title">
+  <h1 class="page-title" id="error-title">Vuelva a abrir el formulario</h1>
+  <p>El formulario venció o no se envió desde esta sesión. Vuelva a cargar la página e intente otra vez.</p>
+  <a href="{{ url_for('auth.profile') if current_user else url_for('auth.login') }}">Volver a mi cuenta</a>
+</section>
+{% endblock %}

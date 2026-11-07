@@ -27,14 +27,29 @@
         <a href="{{ url_for('overview') }}" {% if active_nav == "overview" %}aria-current="page"{% endif %}>Panorama del mercado</a>
         <a href="{{ url_for('tenders_list') }}" {% if active_nav == "tenders" %}aria-current="page"{% endif %}>Convocatorias vigentes</a>
         <a href="{{ url_for('data_preparation') }}" {% if active_nav == "data" %}aria-current="page"{% endif %}>Cómo preparamos los datos</a>
+      </nav>
+      <div class="nav-account" role="group" aria-label="Cuenta y ayuda">
+        {% if current_user %}
+        <a href="{{ url_for('auth.profile') }}" {% if active_nav == "profile" %}aria-current="page"{% endif %}>Mi empresa</a>
+        <form class="nav-session" method="post" action="{{ url_for('auth.logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="nav-signout" type="submit">Cerrar sesión</button>
+        </form>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}" {% if active_nav == "login" %}aria-current="page"{% endif %}>Iniciar sesión</a>
+        <a href="{{ url_for('auth.register') }}" {% if active_nav == "register" %}aria-current="page"{% endif %}>Crear cuenta</a>
+        {% endif %}
         <button type="button" class="nav-help" data-tour-start title="Recorrido guiado" aria-label="Ver recorrido guiado">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/></svg>
         </button>
-      </nav>
+      </div>
     </div>
   </header>
 
   <main id="contenido" class="page {% block page_class %}{% endblock %}">
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="notice notice-info" role="status">{{ message }}</div>
+    {% endfor %}
     {% block content %}{% endblock %}
   </main>
 
@@ -45,5 +60,6 @@
     </div>
   </footer>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -18,9 +18,8 @@ def no_model(monkeypatch):
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    return app.test_client()
+def client(signed_in_client):
+    return signed_in_client
 
 
 def test_detail_has_same_rows_as_analysis_table():
