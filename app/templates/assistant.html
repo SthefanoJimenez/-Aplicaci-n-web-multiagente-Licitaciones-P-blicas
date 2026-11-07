@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}Asistente Inteligente de Postulación a Licitaciones{% endblock %}
+
+{% block content %}
+<div class="assistant-page">
+  <!-- Cabecera principal -->
+  <div class="assistant-header">
+    <div class="assistant-title-group">
+      <div class="assistant-badge">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A7 7 0 1 1 13 4.07V5a1 1 0 0 1-2 0v-.93a9 9 0 1 0 2 12.86z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>LangGraph AI • SEACE v3</span>
+      </div>
+      <h1 class="page-title">¿A qué convocatorias puedo postular?</h1>
+      <p class="page-lead">
+        Asesoría especializada para empresarios proveedores y nuevos licitadores del Estado. Evalúa tus opciones reales de ganar o calificar, evitando que te descalifiquen por requisitos no cumplidos en las bases administrativas.
+      </p>
+    </div>
+    {% if history %}
+    <form method="post" action="{{ url_for('assistant_clear') }}">
+      <button type="submit" class="btn-clean" title="Reiniciar conversación y perfil">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+        <span>Reiniciar chat</span>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="assistant-layout">
+    <!-- Panel izquierdo: perfil reconocido -->
+    <aside class="assistant-sidebar">
+      <div class="card-profile">
+        <div class="card-profile-header">
+          <div class="user-profile-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <h3 class="card-profile-title">Perfil del Proveedor</h3>
+            <p class="card-profile-sub">Información inferida de tu consulta en curso:</p>
+          </div>
+        </div>
+        
+        <ul class="profile-list">
+          <li class="profile-item">
+            <span class="profile-label">Rubro principal:</span>
+            <span class="profile-val">
+              {% if profile.rubro_name %}
+                <span class="tag-pill tag-blue">{{ profile.rubro_name }} ({{ profile.rubro }})</span>
+              {% else %}
+                <span class="tag-pill tag-muted">Por definir</span>
+              {% endif %}
+            </span>
+          </li>
+          <li class="profile-item">
+            <span class="profile-label">Inscripción RNP:</span>
+            <span class="profile-val">
+              {% if profile.has_rnp is sameas true %}
+                <span class="tag-pill tag-green">&#10003; Vigente</span>
+              {% elif profile.has_rnp is sameas false %}
+                <span class="tag-pill tag-red">&#10007; Sin RNP</span>
+              {% else %}
+                <span class="tag-pill tag-muted">No especificado</span>
+              {% endif %}
+            </span>
+          </li>
+          <li class="profile-item">
+            <span class="profile-label">Ventas previas al Estado:</span>
+            <span class="profile-val">
+              {% if profile.sold_to_state is sameas false %}
+                <span class="tag-pill tag-amber">Primera vez / Sin ventas</span>
+              {% elif profile.sold_to_state is sameas true %}
+                <span class="tag-pill tag-green">Proveedor habitual</span>
+              {% else %}
+                <span class="tag-pill tag-muted">No especificado</span>
+              {% endif %}
+            </span>
+          </li>
+          <li class="profile-item">
+            <span class="profile-label">Experiencia facturada:</span>
+            <span class="profile-val">
+              {% if profile.experience_amount is not none and profile.experience_amount is number %}
+                <strong>{{ profile.experience_amount | pen }}</strong>
+              {% else %}
+                <span class="tag-pill tag-muted">Por definir</span>
+              {% endif %}
+            </span>
+          </li>
+          <li class="profile-item">
+            <span class="profile-label">Modalidad:</span>
+            <span class="profile-val">
+              {% if profile.has_consortium %}
+                <span class="tag-pill tag-purple">&#10003; En Consorcio</span>
+              {% else %}
+                <span class="tag-pill tag-muted">Individual</span>
+              {% endif %}
+            </span>
+          </li>
+        </ul>
+
+        <div class="legend-card">
+          <h4>Criterio del Semáforo de Calificación:</h4>
+          <div class="legend-item"><span class="dot dot-green"></span> <strong>Verde:</strong> Cumples habilitación técnica, RNP y experiencia de las bases.</div>
+          <div class="legend-item"><span class="dot dot-yellow"></span> <strong>Amarillo:</strong> Viable mediante consorcio o requisitos subsanables.</div>
+          <div class="legend-item"><span class="dot dot-red"></span> <strong>Rojo:</strong> Descalificación inminente (falta RNP, falta habilitación clave o facturación).</div>
+        </div>
+
+        <div class="sidebar-norm-tip">
+          <div class="norm-tip-title">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>Ley N° 30225 & OSCE</span>
+          </div>
+          <p class="norm-tip-desc">
+            En procedimientos de Subasta Inversa Electrónica no se evalúa experiencia. En licitaciones directas, el consorcio permite sumar experiencia de socios calificados.
+          </p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Panel principal: Conversación -->
+    <main class="assistant-chat-pane">
+      <!-- Barra superior del Asistente -->
+      <div class="chat-header-bar">
+        <div class="chat-assistant-meta">
+          <div class="assistant-avatar-wrap">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="assistant-avatar-img" alt="LicitaBot">
+            <span class="pulse-status-dot" title="En línea"></span>
+          </div>
+          <div class="chat-assistant-details">
+            <div class="assistant-name-row">
+              <span class="assistant-bot-name">LicitaBot AI</span>
+              <span class="assistant-role-pill">Asesor Experto</span>
+            </div>
+            <div class="assistant-status-text">
+              <span class="dot-online"></span> Respuestas fundamentadas en Bases Administrativas del SEACE
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contenedor del chat -->
+      <div class="chat-container" id="chat-messages-container">
+        <!-- Mensaje de bienvenida inicial si no hay historial -->
+        {% if not history %}
+        <div class="chat-bubble chat-bubble-ai welcome-card">
+          <div class="avatar-ai">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+          </div>
+          <div class="bubble-content">
+            <div class="welcome-header">
+              <h3>¡Hola! Soy tu Asistente Inteligente de Licitaciones</h3>
+              <span class="welcome-tag">Evaluación Automatizada</span>
+            </div>
+            <p>
+              Te ayudo a identificar a qué convocatorias del Estado puedes postular con éxito según tu giro de negocio, tu facturación y las bases reales del SEACE, alertándote de inmediato si corres riesgo de ser descalificado.
+            </p>
+            <p><strong>Para comenzar, selecciona una consulta de ejemplo o escribe tu caso:</strong></p>
+            <div class="prompt-suggestions">
+              <button type="button" class="btn-suggestion" onclick="fillQuery('Soy una empresa que vende combustible y diésel, nunca le he vendido al Estado y no sé si puedo postular.')">
+                <span class="sug-icon">⛽</span>
+                <span><strong>Combustibles:</strong> "Vendo combustible y diésel, nunca le he vendido al Estado"</span>
+              </button>
+              <button type="button" class="btn-suggestion" onclick="fillQuery('Tengo una empresa de venta de camionetas y vehículos. Facturo S/ 300,000 en el sector privado y tengo RNP.')">
+                <span class="sug-icon">🚗</span>
+                <span><strong>Vehículos:</strong> "Vendo vehículos con facturación privada de S/ 300,000 y RNP"</span>
+              </button>
+              <button type="button" class="btn-suggestion" onclick="fillQuery('Quiero postular en consorcio con un socio que tiene experiencia para la licitación 1001')">
+                <span class="sug-icon">🤝</span>
+                <span><strong>Consorcio:</strong> "Quiero postular en consorcio con un socio experimentado para la 1001"</span>
+              </button>
+              <button type="button" class="btn-suggestion" onclick="fillQuery('Vendo cemento y materiales de construcción, tengo experiencia de S/ 70,000 pero no sé si califico.')">
+                <span class="sug-icon">🏗️</span>
+                <span><strong>Construcción:</strong> "Vendo cemento y materiales con S/ 70,000 de experiencia"</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Historial de mensajes -->
+        {% for msg in history %}
+          {% if msg.role == 'user' %}
+          <div class="chat-bubble chat-bubble-user">
+            <div class="bubble-content">
+              {{ msg.content }}
+            </div>
+            <div class="avatar-user">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+          </div>
+          {% else %}
+          <div class="chat-bubble chat-bubble-ai">
+            <div class="avatar-ai">
+              <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+            </div>
+            <div class="bubble-content markdown-body">
+              {{ msg.content | replace('\n', '<br>') | safe }}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <!-- Formulario de envío -->
+      <form class="chat-form" method="post" action="{{ url_for('assistant_ask') }}" id="chat-form">
+        <div class="input-wrapper">
+          <textarea
+            id="chat-input"
+            name="query"
+            class="chat-input"
+            placeholder="Escribe tu consulta sobre a qué convocatorias postular, tus productos o experiencia..."
+            rows="2"
+            required
+          ></textarea>
+          <button type="submit" class="btn-send" id="btn-submit" title="Enviar consulta">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            <span>Consultar</span>
+          </button>
+        </div>
+        <div class="chat-form-footer">
+          <span class="chat-hint">Presiona <strong>Enter</strong> para enviar, <strong>Shift + Enter</strong> para nueva línea.</span>
+        </div>
+      </form>
+    </main>
+  </div>
+</div>
+
+<script>
+function fillQuery(text) {
+  const input = document.getElementById('chat-input');
+  input.value = text;
+  input.focus();
+}
+
+// Auto-scroll al final del chat al cargar
+document.addEventListener("DOMContentLoaded", function() {
+  const container = document.getElementById("chat-messages-container");
+  if (container) {
+    container.scrollTop = container.scrollHeight;
+  }
+  
+  const textarea = document.getElementById("chat-input");
+  const form = document.getElementById("chat-form");
+  if (textarea && form) {
+    textarea.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (textarea.value.trim().length > 0) {
+          form.submit();
+        }
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

@@ -8,7 +8,7 @@ import orchestrator
 import rules
 import auth
 import documents
-from agents import evaluator, writer
+from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, unit_text
 
@@ -95,8 +95,8 @@ def candidates():
         response = orchestrator.identify_good(description)
     except orchestrator.InvalidDescription as e:
         return _describe_page(description, str(e), 400)
-    except llm.ModelError as e:
-        return render_template("error.html", description=description.strip(), code=getattr(e, "code", None)), 503
+    except (llm.ModelError, ValueError) as e:
+        return render_template("error.html", description=description.strip(), code=getattr(e, "code", 503)), 503
 
     session["description"] = description.strip()
     session.pop("code", None)
@@ -109,6 +109,30 @@ def candidates():
     session["candidates"] = [c["code"] for c in response["candidates"]]
     return render_template("candidates.html", description=description.strip(),
                            candidates=response["candidates"], n_awards=data.N_AWARDS)
+
+
+@app.route("/candidatos/directo", methods=["GET", "POST"])
+def candidates_direct():
+    """Búsqueda directa en catálogo usando TF-IDF cuando no hay API Key de Gemini configurada."""
+    description = (request.values.get("description") or session.get("description") or "").strip()
+    if not description:
+        return redirect(url_for("describe"))
+    preselected = classifier.preselect(description)
+    valid, _ = classifier.validate(preselected)
+    if not valid:
+        session["description"] = description
+        session.pop("candidates", None)
+        return render_template("result.html", description=description, min_catalog=rules.MIN_CATALOG)
+    candidates_list = [data.GOODS[c] for c in valid]
+    session["description"] = description
+    session.pop("code", None)
+    session["candidates"] = [c["code"] for c in candidates_list]
+    return render_template(
+        "candidates.html",
+        description=description,
+        candidates=candidates_list,
+        n_awards=data.N_AWARDS,
+    )
 
 
 @app.get("/candidatos")
@@ -455,6 +479,56 @@ def tender_bases(code):
     if bases.size:
         headers["Content-Length"] = str(bases.size)
     return Response(stream_with_context(bases.chunks), mimetype=bases.mimetype, headers=headers)
+
+
+
+# ---------------------------------------------------------------------------
+# Asistente de Postulación con LangGraph (HU-010 / HU-014)
+# ---------------------------------------------------------------------------
+@app.get("/asistente")
+def assistant_chat():
+    """Pantalla del asistente de postulación con historial de conversación y perfil de la sesión."""
+    from services import assistant
+    history = session.get("assistant_history", [])
+    profile = session.get("supplier_profile", {})
+    tenders_state = tenders.availability()
+    return render_template(
+        "assistant.html",
+        history=history,
+        profile=profile,
+        tenders_state=tenders_state,
+        active_nav="assistant",
+    )
+
+
+@app.post("/asistente")
+def assistant_ask():
+    """Procesa una consulta del usuario mediante el grafo de LangGraph."""
+    from services import assistant
+    query = request.form.get("query", "").strip()
+    if not query:
+        return redirect(url_for("assistant_chat"))
+
+    history = session.get("assistant_history", [])
+    profile = session.get("supplier_profile", {})
+
+    result = assistant.ask_assistant(query, history=history, profile=profile)
+
+    # Actualizar historial
+    history.append({"role": "user", "content": query})
+    history.append({"role": "assistant", "content": result["response"]})
+    session["assistant_history"] = history
+    session["supplier_profile"] = result["profile"]
+
+    return redirect(url_for("assistant_chat"))
+
+
+@app.post("/asistente/limpiar")
+def assistant_clear():
+    """Reinicia la conversación del asistente y el perfil guardado en sesión."""
+    session.pop("assistant_history", None)
+    session.pop("supplier_profile", None)
+    return redirect(url_for("assistant_chat"))
 
 
 if __name__ == "__main__":

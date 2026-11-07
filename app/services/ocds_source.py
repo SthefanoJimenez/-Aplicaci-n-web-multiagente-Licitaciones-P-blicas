@@ -358,12 +358,24 @@ def is_goods(row):
 
 
 def is_open(row, now):
-    """Vigente: fecha límite futura si existe; si no, algún ítem "CONVOCADO" (regla del SP-005)."""
-    deadline = parse_date(row["deadline"])
+    """Vigente: aún acepta ofertas.
+
+    Criterios:
+    1. Si ningún ítem está en estado de convocatoria ("CONVOCADO" o "active"), el proceso
+       ya no acepta ofertas (por ejemplo, tiene buena pro / "ADJUDICADO", "CONSENTIDO",
+       "CONTRATADO", o está "DESIERTO", "CANCELADO", "NULO").
+    2. Si tiene al menos un ítem "CONVOCADO", sigue vigente.
+    3. Si tiene fecha límite válida, debe ser futura (deadline >= now).
+    """
+    statuses = {normalize(s) for s in str(row.get("item_status") or "").split("|") if s.strip()}
+    if not statuses and row.get("status"):
+        statuses = {normalize(row.get("status"))}
+    if not (statuses & OPEN_STATUS):
+        return False
+    deadline = parse_date(row.get("deadline"))
     if deadline is not None:
         return deadline >= now
-    statuses = {normalize(row.get("status"))} | {normalize(s) for s in str(row.get("item_status") or "").split("|")}
-    return bool(statuses & OPEN_STATUS)
+    return True
 
 
 def family_of(item):

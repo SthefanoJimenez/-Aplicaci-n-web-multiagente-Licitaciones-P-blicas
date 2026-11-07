@@ -29,7 +29,16 @@ _client = None
 def _get_client():
     global _client
     if _client is None:
-        _client = genai.Client(api_key=config.GEMINI_API_KEY)
+        if not config.GEMINI_API_KEY:
+            raise ModelError(
+                "No se ha configurado la clave de API de Gemini (GEMINI_API_KEY). "
+                "Configure GEMINI_API_KEY en su archivo .env o en las variables de entorno.",
+                code=401,
+            )
+        try:
+            _client = genai.Client(api_key=config.GEMINI_API_KEY)
+        except Exception as e:
+            raise ModelError(f"Error al inicializar el cliente de Gemini: {e}", code=401) from e
     return _client
 
 
@@ -74,6 +83,8 @@ def _generate_with(prompt, model):
             raise ModelError(f"El modelo {model} respondió con el error {e.code}", code=e.code) from e
         except (json.JSONDecodeError, TypeError) as e:
             raise ModelError("El modelo devolvió una respuesta que no es JSON") from e
+        except ValueError as e:
+            raise ModelError(f"Error de configuración del modelo: {e}", code=401) from e
     raise ModelError("El modelo no respondió")
 
 
@@ -100,12 +111,17 @@ EMBED_BATCH = 50          # textos por llamada
 
 @traceable(run_type="embedding", name="Gemini embeddings", metadata={"ls_provider": "google_genai"})
 def _call_embed(texts, task_type, model):
-    response = _get_client().models.embed_content(
-        model=model,
-        contents=texts,
-        config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=config.EMBEDDING_DIM),
-    )
-    return [list(e.values) for e in response.embeddings]
+    try:
+        response = _get_client().models.embed_content(
+            model=model,
+            contents=texts,
+            config=types.EmbedContentConfig(task_type=task_type, output_dimensionality=config.EMBEDDING_DIM),
+        )
+        return [list(e.values) for e in response.embeddings]
+    except errors.APIError:
+        raise
+    except Exception as e:
+        raise ModelError(f"Error al generar embeddings: {e}", code=401) from e
 
 
 def _normalize(vector):

@@ -22,6 +22,15 @@ def release(n, now, family="15101505", category="goods", item_status="CONVOCADO"
         {"id": "2", "title": "Resumen ejecutivo", "documentType": "tenderNotice", "format": "pdf",
          "url": f"https://seace.example/{n}/resumen.pdf"},
     ] if docs else []
+    if isinstance(item_status, list):
+        items = [
+            {"description": f"BIEN {n}-{i}", "statusDetails": s,
+             "classification": {"scheme": "UNSPSC", "id": family}}
+            for i, s in enumerate(item_status, 1)
+        ]
+    else:
+        items = [{"description": f"BIEN {n}", "statusDetails": item_status,
+                  "classification": {"scheme": "UNSPSC", "id": family}}]
     return {
         "ocid": f"ocds-dgv273-seacev3-{n}", "date": published,
         "buyer": {"id": f"PE-RUC-{n}", "name": f"ENTIDAD {n}"},
@@ -31,8 +40,7 @@ def release(n, now, family="15101505", category="goods", item_status="CONVOCADO"
             "procurementMethodDetails": "Subasta Inversa Electrónica", "datePublished": published,
             "tenderPeriod": {"startDate": published, "endDate": published},
             "value": {"amount": 0, "currency": "PEN"},
-            "items": [{"description": f"BIEN {n}", "statusDetails": item_status,
-                       "classification": {"scheme": "UNSPSC", "id": family}}],
+            "items": items,
             "documents": documents,
         },
     }

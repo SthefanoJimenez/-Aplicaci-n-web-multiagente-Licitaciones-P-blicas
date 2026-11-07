@@ -114,6 +114,47 @@ def seed_tenders(test_db):
         )
         session.add(t3)
 
+        # 5. Convocatoria 4: Proceso que ya tiene buena pro / adjudicado -> estado "no_vigente"
+        # No debe aparecer en la pantalla de convocatorias vigentes
+        t4 = db.Tender(
+            ocid="ocds-dgv273-seacev3-1004",
+            code="1004",
+            title="ADQUISICION DE COMBUSTIBLE ADJUDICADO CON BUENA PRO",
+            entity="MUNICIPALIDAD DISTRITAL DE LAREDO",
+            department="LA LIBERTAD",
+            method="Subasta Inversa Electrónica",
+            rubros="1510",
+            state="no_vigente",
+            item_status="ADJUDICADO",
+            published_at=now_utc - timedelta(days=10),
+            closed_at=now_utc - timedelta(days=1),
+            estimated_value=85000.0,
+            currency="PEN",
+            first_run_id=run.id,
+            last_run_id=run.id,
+        )
+        session.add(t4)
+
+        # 6. Convocatoria 5: Proceso con ítems mixtos (un ítem adjudicado pero otro aún convocado)
+        # Sigue vigente y debe aparecer en la pantalla de convocatorias vigentes
+        t5 = db.Tender(
+            ocid="ocds-dgv273-seacev3-1005",
+            code="1005",
+            title="ADQUISICION DE COMBUSTIBLES POR PAQUETES",
+            entity="GOBIERNO REGIONAL DE LA LIBERTAD",
+            department="LA LIBERTAD",
+            method="Subasta Inversa Electrónica",
+            rubros="1510",
+            state="vigente",
+            item_status="ADJUDICADO | CONVOCADO",
+            published_at=now_utc - timedelta(days=2),
+            estimated_value=250000.0,
+            currency="PEN",
+            first_run_id=run.id,
+            last_run_id=run.id,
+        )
+        session.add(t5)
+
 
 @pytest.fixture
 def client(signed_in_client):
@@ -220,6 +261,25 @@ def test_verdict_offers_open_tenders_for_pilot_rubro_without_altering_session(cl
         assert sess.get("code") == 233280
         assert sess.get("description") == "diesel b5 s 50 para maquinaria"
         assert sess.get("candidates") == [233280]
+
+
+def test_awarded_tender_with_buena_pro_is_not_displayed_and_mixed_tender_is_displayed(client, seed_tenders):
+    """Criterios de Aceptación:
+
+    - Una convocatoria con buena pro (adjudicada / no_vigente) no aparece en la pantalla de convocatorias vigentes.
+    - Una convocatoria con algún ítem aún convocado sigue visible en la pantalla.
+    """
+    res = client.get("/convocatorias")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+
+    # Convocatoria 1004 (ADJUDICADO con buena pro, estado no_vigente) NO debe aparecer
+    assert "1004" not in html
+    assert "ADQUISICION DE COMBUSTIBLE ADJUDICADO CON BUENA PRO" not in html
+
+    # Convocatoria 1005 (mixta: tiene un ítem convocado) SÍ debe aparecer
+    assert "1005" in html
+    assert "ADQUISICION DE COMBUSTIBLES POR PAQUETES" in html
 
 
 # ---------------------------------------------------------------------------

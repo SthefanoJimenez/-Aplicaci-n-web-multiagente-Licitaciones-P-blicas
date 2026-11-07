@@ -73,7 +73,7 @@ def classify(description, call_model=llm.generate_json):
     try:
         response = call_model(PROMPT_REPHRASE.replace("{{DESCRIPCION}}", description))
         rephrased = str(response.get("descripcion", "")).strip() or None
-    except (llm.ModelError, AttributeError):
+    except (llm.ModelError, AttributeError, ValueError, Exception):
         rephrased = None
 
     preselected = preselect(description, rephrased)
@@ -81,8 +81,11 @@ def classify(description, call_model=llm.generate_json):
         f"{c} | {data.GOODS[c]['name']} | {data.GOODS[c]['unit']}" for c in preselected
     )
 
-    response = call_model(PROMPT_CHOOSE.replace("{{CATALOGO}}", listing).replace("{{DESCRIPCION}}", description))
-    proposed = response.get("codigos", []) if isinstance(response, dict) else []
+    try:
+        response = call_model(PROMPT_CHOOSE.replace("{{CATALOGO}}", listing).replace("{{DESCRIPCION}}", description))
+        proposed = response.get("codigos", []) if isinstance(response, dict) else []
+    except ValueError as e:
+        raise llm.ModelError(f"Error en el modelo: {e}", code=401) from e
 
     valid, discarded = validate(proposed if isinstance(proposed, list) else [])
     return {

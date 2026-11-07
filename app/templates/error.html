@@ -4,18 +4,23 @@
 {% block content %}
 <div class="empty">
   <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-  <h1 class="page-title">El buscador del catálogo no respondió</h1>
+  <h1 class="page-title">
+    {% if code == 401 %}Falta configurar la clave de Gemini
+    {% else %}El buscador del catálogo no respondió{% endif %}
+  </h1>
   <p class="page-lead" style="margin-inline:auto">
-    {% if code == 429 %}Se alcanzó el límite de uso del servicio que interpreta su descripción. Espere un minuto antes de reintentar.
+    {% if code == 401 %}No se ha configurado la variable <code>GEMINI_API_KEY</code> en su archivo <code>.env</code>. Para clasificar con inteligencia artificial agregue su clave de Google Gemini API. Mientras tanto, puede buscar candidatos de inmediato usando el catálogo directo.
+    {% elif code == 429 %}Se alcanzó el límite de uso del servicio que interpreta su descripción. Espere un minuto antes de reintentar.
     {% elif code in (500, 503) %}El servicio de Google que interpreta su descripción está saturado en este momento. Suele resolverse en unos minutos.
     {% else %}El servicio que interpreta su descripción no respondió.{% endif %}
-    Su descripción se conservó: puede reintentar la búsqueda. Mientras tanto, puede consultar cualquier bien desde el <a href="{{ url_for('overview') }}">panorama del mercado</a>.
+    Su descripción se conservó: puede reintentar la búsqueda o consultar cualquier bien desde el <a href="{{ url_for('overview') }}">panorama del mercado</a>.
   </p>
   <form method="post" action="{{ url_for('candidates') }}" data-loading>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="description" value="{{ description }}">
     <div class="actions">
       <button type="submit" class="button button-primary" data-loading-text="Buscando en el catálogo…">Reintentar búsqueda</button>
+      <a class="button button-secondary" href="{{ url_for('candidates_direct', description=description) }}">Buscar en catálogo (sin IA)</a>
       <a class="button button-secondary" href="{{ url_for('home') }}">Volver al inicio</a>
     </div>
     <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>

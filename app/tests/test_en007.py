@@ -126,6 +126,13 @@ def test_open_rule_rubro_and_bases_priority():
     assert ocds_source.bases_document(row)["title"] == "Bases Integradas"
     closed = ocds_source.normalize_release(fake_ocds.release(8, NOW, item_status="ADJUDICADO"))
     assert not ocds_source.is_open(closed, NOW)
+    consentido = ocds_source.normalize_release(fake_ocds.release(9, NOW, item_status="CONSENTIDO"))
+    assert not ocds_source.is_open(consentido, NOW)
+    contratado = ocds_source.normalize_release(fake_ocds.release(10, NOW, item_status="CONTRATADO"))
+    assert not ocds_source.is_open(contratado, NOW)
+    # Proceso con un ítem adjudicado pero otro aún convocado: sigue vigente
+    mixed = ocds_source.normalize_release(fake_ocds.release(11, NOW, item_status=["ADJUDICADO", "CONVOCADO"]))
+    assert ocds_source.is_open(mixed, NOW)
 
 
 def test_months_cross_the_year_and_client_name_is_configurable(monkeypatch):
@@ -183,6 +190,18 @@ def test_tender_that_is_no_longer_open_changes_state_and_is_not_deleted(factory,
         assert tender.state == "no_vigente" and tender.closed_at is not None
     source.months[(2026, 10)][0] = fake_ocds.release(101, NOW)            # vuelve a estar vigente
     run(factory, source, now=NOW + timedelta(days=2))
+    with factory() as session:
+        tender = session.query(db.Tender).filter_by(code="101").one()
+        assert tender.state == "vigente" and tender.closed_at is None
+
+
+def test_tender_with_some_open_items_remains_open_in_ingestion(factory, source):
+    """Criterio: Una convocatoria con algún ítem aún convocado sigue visible / vigente en la ingesta."""
+    run(factory, source)
+    # 101 ahora tiene un ítem adjudicado y un ítem aún convocado
+    source.months[(2026, 10)][0] = fake_ocds.release(101, NOW, item_status=["ADJUDICADO", "CONVOCADO"])
+    result = run(factory, source, now=NOW + timedelta(days=1))
+    assert result["closed"] == 0 and result["saved_open"] == 3
     with factory() as session:
         tender = session.query(db.Tender).filter_by(code="101").one()
         assert tender.state == "vigente" and tender.closed_at is None
