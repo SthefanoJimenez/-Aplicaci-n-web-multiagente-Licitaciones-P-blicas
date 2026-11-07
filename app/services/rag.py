@@ -1,19 +1,4 @@
-"""RAG de las bases de las convocatorias (EN-012).
 
-Para que el asistente no tenga que leer bases de cien páginas (el SP-006 estimó unos 50 000
-tokens por base completa), la ingesta guarda solo la sección de requisitos de calificación,
-partida en fragmentos con su vector, en la tabla "fragmentos" de Neon (pgvector):
-
-1. index_pending(): toma las convocatorias vigentes cuyas bases aún no se leyeron, descarga las
-   bases, ubica la sección de requisitos (services/bases_reader.py), la parte en fragmentos,
-   pide los vectores a Gemini y los guarda. Deja el resultado en convocatorias.requirements_status:
-   "extraido", "seccion_no_encontrada", "no_legible" o "error" (se reintenta en la siguiente ejecución).
-2. search(): convierte la pregunta en vector y devuelve los fragmentos más parecidos, con la
-   convocatoria y la página de las bases de donde salieron.
-
-En PostgreSQL la búsqueda la hace pgvector (distancia coseno); en SQLite, que solo se usa en las
-pruebas, se calcula en Python.
-"""
 import re
 import time
 
@@ -49,17 +34,26 @@ def _cut_point(text, start, end):
 
 
 def chunk_section(section, size=CHUNK_CHARS, overlap=CHUNK_OVERLAP):
-    """[(texto, página)] de la sección: fragmentos de ~size caracteres que se solapan en overlap."""
+    """[(texto, página)] de la sección: fragmentos de ~size caracteres que se solapan en overlap.
+
+    Ningún fragmento cruza un cambio de página, y cada uno lleva la página de su texto nuevo (lo que no
+    repite del anterior). Así la ficha de la convocatoria muestra cada parte en su página exacta.
+    Antes (hasta el 07/11/2026) la página era la del primer carácter y un fragmento podía seguir en la
+    página siguiente.
+    """
     text = section.text
-    pieces, start = [], 0
-    while start < len(text):
-        end = _cut_point(text, start, start + size)
+    breaks = sorted(position for position, _page in section.page_marks if 0 < position < len(text))
+    pieces, start, fresh = [], 0, 0          # fresh: donde empieza el texto que este fragmento agrega
+    while fresh < len(text):
+        limit = start + size
+        page_break = next((b for b in breaks if fresh < b < limit), None)
+        end = page_break if page_break is not None else _cut_point(text, start, limit)
         piece = re.sub(r"[ \t]+", " ", text[start:end]).strip()
-        if len(piece) >= MIN_CHUNK_CHARS or not pieces:
-            pieces.append((piece, section.page_at(start)))
+        if text[fresh:end].strip():          # nunca se descarta texto nuevo, aunque sea poco
+            pieces.append((piece, section.page_at(fresh)))
         if end >= len(text):
             break
-        start = max(end - overlap, start + 1)
+        start, fresh = max(end - overlap, start + 1), end
     return pieces
 
 
@@ -92,11 +86,23 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
         tender.requirements_status = "error"
         return {"status": "error", "chunks": 0, "tokens": 0, "detail": e.reason}
     result = bases_reader.read_bases(content, use_ocr=use_ocr)
-    tender.chunks.clear()                                   # si las bases cambiaron, se reemplaza todo
-    session.flush()                                         # borra los anteriores antes de insertar (clave única)
     if result.status != "extraido":
+        if tender.requirements_status == "extraido" and tender.chunks:
+            # Una lectura peor no borra una buena: pasó el 07/11/2026 al releer en una PC sin OCR unas bases
+            # escaneadas que la iMac sí había leído. (Si llegan otras bases, la ingesta deja la convocatoria
+            # en "pendiente" y entonces sí se reemplaza todo.)
+            return {"status": "conservado", "chunks": 0, "tokens": 0,
+                    "detail": f"se conserva la lectura anterior; esta vez: {result.status} ({result.detail})"}
+        tender.chunks.clear()
+        if result.status == "no_legible" and "no hay OCR" in result.detail:
+            # Falta OCR en esta computadora, no es que las bases no se puedan leer: queda para reintentar
+            tender.requirements_status = "error"
+            return {"status": "error", "chunks": 0, "tokens": 0,
+                    "detail": result.detail + "; se reintentará en una computadora con OCR"}
         tender.requirements_status = result.status
         return {"status": result.status, "chunks": 0, "tokens": 0, "detail": result.detail}
+    tender.chunks.clear()                                   # si las bases cambiaron, se reemplaza todo
+    session.flush()                                         # borra los anteriores antes de insertar (clave única)
     pieces = chunk_section(result.section)
     try:
         vectors = embed([p for p, _ in pieces], "RETRIEVAL_DOCUMENT")
@@ -112,6 +118,34 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
             tokens_est=estimate))
     tender.requirements_status = "extraido"
     return {"status": "extraido", "chunks": len(pieces), "tokens": tokens, "detail": result.section.source}
+
+
+def reindex_codes(session_factory, codes, fetch=None, embed=None, use_ocr=None, progress=None):
+    """Vuelve a leer las bases de las convocatorias indicadas (por ejemplo, tras mejorar el lector)."""
+    summary = {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0, "conservado": 0,
+               "chunks": 0, "tokens": 0, "stopped": None, "details": []}
+    with session_factory() as session:
+        ids = list(session.scalars(select(db.Tender.id).where(db.Tender.code.in_([str(c) for c in codes]))))
+    for number, tender_id in enumerate(ids, 1):
+        started = time.perf_counter()
+        try:
+            with session_factory.begin() as session:
+                tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents),
+                                                                    selectinload(db.Tender.chunks)])
+                result = index_tender(session, tender, fetch=fetch, embed=embed, use_ocr=use_ocr)
+                code = tender.code
+        except IndexingStopped as e:
+            summary["stopped"] = str(e)
+            break
+        summary["processed"] += 1
+        summary[result["status"]] += 1
+        summary["chunks"] += result["chunks"]
+        summary["tokens"] += result["tokens"]
+        summary["details"].append((code, result["status"], result["detail"]))
+        if progress:
+            progress(number, len(ids), code, result["status"], time.perf_counter() - started)
+    summary["remaining"] = 0
+    return summary
 
 
 def pending_ids(session, limit):
@@ -137,7 +171,7 @@ def index_pending(session_factory, limit=None, fetch=None, embed=None, use_ocr=N
     progress(número, total, código, estado, segundos): se llama al terminar cada base, para mostrar el avance.
     """
     limit = config.RAG_MAX_BASES_PER_RUN if limit is None else limit
-    summary = {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0,
+    summary = {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0, "conservado": 0,
                "chunks": 0, "tokens": 0, "stopped": None, "details": []}
     with session_factory() as session:
         ids = pending_ids(session, limit)

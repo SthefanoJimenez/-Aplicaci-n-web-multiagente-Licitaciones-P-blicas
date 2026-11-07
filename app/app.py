@@ -408,6 +408,26 @@ def tenders_status():
             body["ok"], body["reason"] = False, "sin_conexion"
     return body, (200 if body["ok"] else 503)
 
+@app.get("/convocatorias/<code>")
+def tender_sheet(code):
+    """Ficha de una convocatoria (HU-010): sus datos y los requisitos de calificación de sus bases."""
+    try:
+        tender, reqs = tenders.tender_sheet(code)
+    except tenders.TendersUnavailable:
+        return render_template("tender.html", tender=None, reqs=None, unavailable=True, code=code), 503
+    if tender is None:
+        abort(404)
+    rubro_names = tenders.rubro_names()
+    return render_template(
+        "tender.html", tender=tender, reqs=reqs, unavailable=False, code=code,
+        seace_url=tenders.seace_url(tender),
+        bases_label=bases_download.declared_label(tenders.bases_format(tender)),
+        days_since=tenders.days_since(tender.published_at, datetime.now(timezone.utc)),
+        rubros=[rubro_names.get(r, r) for r in tender.rubros],
+        catalog_code=tenders.match_catalog_item(tender.title or tender.description),
+    )
+
+
 @app.get("/convocatorias/<code>/bases")
 def tender_bases(code):
     """Descarga de las bases a través de la app: con el formato real y la extensión correcta.

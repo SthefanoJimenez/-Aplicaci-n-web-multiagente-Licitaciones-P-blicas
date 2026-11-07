@@ -1,21 +1,10 @@
-"""Lectura de las bases para el RAG (EN-012): abre el archivo y ubica la sección de requisitos.
 
-Es el código que se probó en el SP-006 (analisis/sp006_01_leer_bases.py), traído a la app sin
-pandas ni archivos de análisis:
-
-- abre lo que entrega el SEACE aunque llegue en PDF, Word, ZIP, RAR o 7z;
-- saca el texto página por página (pypdf para PDF, word/document.xml para Word);
-- si el PDF es escaneado (menos de 200 caracteres por página) usa OCR con tesseract en español,
-  solo si está instalado; si no, la base queda como "no legible";
-- ubica la sección "requisitos de calificación" (o "de habilitación") que es título de sección y
-  no una línea del índice, igual que el SP-006.
-
-Devuelve la sección con la página donde empieza cada parte, para que cada fragmento del RAG sepa
-de qué página salió.
-"""
+import functools
+import glob
 import html
 import io
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -253,11 +242,46 @@ def _spanish_score(text):
     return sum(w in COMMON_WORDS for w in words) / len(words) if words else 0.0
 
 
+# Dónde suelen quedar en Windows si no se agregaron al PATH (instalador de UB Mannheim y ZIP de Poppler)
+WINDOWS_TESSERACT = [r"C:\Program Files\Tesseract-OCR\tesseract.exe", r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+                     os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Tesseract-OCR", "tesseract.exe")]
+WINDOWS_POPPLER = [r"C:\poppler\*\Library\bin\pdftoppm.exe", r"C:\poppler\Library\bin\pdftoppm.exe",
+                   r"C:\Program Files\poppler*\Library\bin\pdftoppm.exe", r"C:\Program Files\poppler*\bin\pdftoppm.exe",
+                   os.path.join(os.environ.get("USERPROFILE", ""), "poppler*", "Library", "bin", "pdftoppm.exe")]
+
+
+@functools.lru_cache(maxsize=None)
+def tool_path(name):
+    """Ruta del programa externo ("tesseract" o "pdftoppm"), o None si no está.
+
+    Orden: la variable TESSERACT_PATH / POPPLER_PATH del .env (el .exe o su carpeta), el PATH y, en
+    Windows, las carpetas donde suelen instalarse. Así el OCR funciona en Windows aunque no se haya
+    tocado el PATH.
+    """
+    variable = {"tesseract": "TESSERACT_PATH", "pdftoppm": "POPPLER_PATH"}.get(name)
+    configured = os.environ.get(variable, "").strip().strip('"') if variable else ""
+    if configured:
+        for candidate in (configured, os.path.join(configured, name), os.path.join(configured, name + ".exe")):
+            if os.path.isfile(candidate):
+                return candidate
+    found = shutil.which(name)
+    if found:
+        return found
+    if os.name == "nt":
+        patterns = WINDOWS_TESSERACT if name == "tesseract" else WINDOWS_POPPLER if name == "pdftoppm" else []
+        for pattern in patterns:
+            matches = sorted(glob.glob(pattern), reverse=True)      # la versión más nueva primero
+            if matches:
+                return matches[0]
+    return None
+
+
 def ocr_available():
-    if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
+    tesseract, pdftoppm = tool_path("tesseract"), tool_path("pdftoppm")
+    if not (tesseract and pdftoppm):
         return False
     try:
-        langs = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=30)
+        langs = subprocess.run([tesseract, "--list-langs"], capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
         return False
     return "spa" in (langs.stdout + langs.stderr).split()
@@ -279,7 +303,7 @@ def clean_ocr(text):
 
 
 def _tesseract(image, psm):
-    result = subprocess.run(["tesseract", str(image), "stdout", "-l", "spa", "--psm", psm],
+    result = subprocess.run([tool_path("tesseract") or "tesseract", str(image), "stdout", "-l", "spa", "--psm", psm],
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
     return clean_ocr(OCR_ORDINAL.sub("o", result.stdout)) if result.returncode == 0 else ""
 
@@ -292,7 +316,8 @@ def ocr_pages(content, page_numbers):
         pdf.write_bytes(content)
         for n in page_numbers:
             prefix = Path(tmp) / f"p{n:04d}"
-            subprocess.run(["pdftoppm", "-r", str(OCR_DPI), "-gray", "-f", str(n), "-l", str(n), str(pdf), str(prefix)],
+            subprocess.run([tool_path("pdftoppm") or "pdftoppm", "-r", str(OCR_DPI), "-gray", "-f", str(n), "-l", str(n),
+                            str(pdf), str(prefix)],
                            capture_output=True, timeout=300)
             images = sorted(Path(tmp).glob(f"{prefix.name}*.pgm"))
             text = _tesseract(images[0], "3") if images else ""

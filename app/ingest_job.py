@@ -20,6 +20,21 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
                                           desactiva el pedido (de esa empresa o de todas)
     python ingest_job.py --ver-rubros     rubros de la ingesta y pedidos registrados
     python ingest_job.py --espacio        espacio que ocupa cada tabla en la base (Neon)
+    python ingest_job.py --catalogo       catálogo de rubros (HU-013): convocatorias de bienes del último mes
+    python ingest_job.py --ejecuciones [N]
+                                          últimas N ejecuciones registradas en la base (por defecto 10)
+    python ingest_job.py --muestra-bases  una convocatoria vigente por formato de bases, para probar la descarga
+    python ingest_job.py --ocr            dónde encontró la app tesseract y pdftoppm, y si hay español
+    python ingest_job.py --releer CÓDIGO [CÓDIGO ...]
+                                          vuelve a leer las bases de esas convocatorias (p. ej. para que
+                                          sus requisitos queden con la página exacta, cambio del 07/11/2026)
+    python ingest_job.py --requisitos [CÓDIGO ...]
+                                          requisitos de calificación como los muestra la ficha; sin códigos,
+                                          sugiere convocatorias para probar (PDF con texto, OCR, Word, sin leer)
+
+La ingesta diaria se ejecuta en una computadora del equipo (scripts/imac/ o scripts/windows/): el portal del
+OECE responde 403 a la red de GitHub Actions. INGEST_TRIGGER da el origen que queda registrado
+("programada_imac" o "programada_windows").
     RUBROS_INGESTA=todos python ingest_job.py
                                           guarda los bienes vigentes de todos los rubros de la API
 
@@ -57,6 +72,11 @@ def scrub(text):
     return text
 
 
+def run_origin():
+    """Origen que queda registrado en "actualizaciones": la tarea programada de la iMac, GitHub o local."""
+    return os.environ.get("INGEST_TRIGGER") or os.environ.get("GITHUB_EVENT_NAME") or "local"
+
+
 def client_kind():
     return "navegador" if config.OCDS_USER_AGENT.startswith("Mozilla/5.0 (Macintosh") else "personalizado"
 
@@ -65,7 +85,7 @@ def run_diagnosis():
     """Consultas pequeñas a la API (sin base de datos) y su resultado en pantalla y en el resumen."""
     from services import ocds_source
     lines = [f"Diagnóstico de la API OCDS · nombre de cliente: {client_kind()} · "
-             f"origen: {os.environ.get('GITHUB_EVENT_NAME') or 'local'}"]
+             f"origen: {run_origin()}"]
     results = ocds_source.diagnose()
     for label, status, detail in results:
         lines.append(f"- {label}: {status} · {detail}")
@@ -88,21 +108,30 @@ def run_diagnosis():
     return 0
 
 
-def run_rag(factory):
-    """Lee las bases pendientes y devuelve las líneas del resumen. No hace fallar la ingesta."""
+def run_rag(factory, codes=None):
+    """Lee las bases pendientes (o las de `codes`) y devuelve las líneas del resumen. No hace fallar la ingesta."""
     from services import rag
     if not config.GEMINI_API_KEY:
         return ["Lectura de bases (RAG) omitida: falta GEMINI_API_KEY para generar los vectores."]
     def show(number, total, code, status, seconds):
         print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
 
-    print("Leyendo bases pendientes…", flush=True)
-    result = rag.index_pending(factory, progress=show)
+    from services import bases_reader
+    if not bases_reader.ocr_available():
+        print("Aviso: esta computadora no tiene OCR (tesseract con español y pdftoppm). Las bases escaneadas "
+              "quedan para leerse en una computadora con OCR; las que ya se leyeron no se borran.", flush=True)
+    if codes:
+        print(f"Volviendo a leer las bases de {len(codes)} convocatoria(s)…", flush=True)
+        result = rag.reindex_codes(factory, codes, progress=show)
+    else:
+        print("Leyendo bases pendientes…", flush=True)
+        result = rag.index_pending(factory, progress=show)
     read_codes = [code for code, _status, _detail in result["details"]]
     lines = [f"Lectura de bases (RAG): {result['processed']} procesadas · con requisitos: {result['extraido']} · "
              f"sin la sección: {result['seccion_no_encontrada']} · no legibles: {result['no_legible']} · "
              f"con error: {result['error']} · fragmentos: {result['chunks']:,} · tokens estimados: {result['tokens']:,}"
-             f" · quedan por leer: {result['remaining']}"]
+             f" · quedan por leer: {result['remaining']}"
+             + (f" · lecturas anteriores conservadas: {result['conservado']}" if result.get("conservado") else "")]
     if result["extraido"]:
         lines.append(f"Tokens estimados por base con requisitos: {result['tokens'] // result['extraido']:,}")
     if config.ALL_RUBROS and read_codes:
@@ -111,7 +140,9 @@ def run_rag(factory):
         lines.append(f"Se detuvo la lectura de bases porque Gemini no respondió ({scrub(result['stopped'])}). "
                      "Las pendientes se leerán en la próxima ejecución.")
     for code, status, detail in result["details"]:
-        if status != "extraido":
+        if status == "conservado":
+            lines.append(f"- {code}: se conservan los requisitos que ya tenía ({detail.split('; ', 1)[-1]})")
+        elif status != "extraido":
             lines.append(f"- {code}: {status} ({detail})")
     return lines
 
@@ -219,6 +250,150 @@ def run_requests(factory, options):
     return show_rubros(factory)
 
 
+def show_catalog(factory, top=25):
+    """Catálogo de rubros (HU-013): familias UNSPSC con convocatorias de bienes del último mes."""
+    with factory() as session:
+        rows = rubros.catalog(session)
+        counts = rubros.open_counts(session)
+        requested = set(rubros.requested_codes(session))
+    if not rows:
+        print("El catálogo aún no se generó: se arma con la próxima ingesta.")
+        return 1
+    total = sum(r.tenders_month for r in rows)
+    print(f"Catálogo de rubros: {len(rows)} rubros · {total:,} convocatorias de bienes en los últimos "
+          f"{rubros.CATALOG_DAYS} días · actualizado {rows[0].updated_at:%Y-%m-%d %H:%M} UTC")
+    print("Rubro · convocatorias del mes · vigentes cargadas · estado · bienes que incluye")
+    for r in rows[:top]:
+        state = ("piloto" if r.code in config.PILOT_RUBROS else "solicitado" if r.code in requested
+                 else "con datos" if counts.get(r.code) else "sin datos")
+        print(f"- {r.code} · {r.tenders_month:,} · {counts.get(r.code, 0):,} · {state} · {r.name or '—'}")
+    if len(rows) > top:
+        print(f"- … y {len(rows) - top} rubros más (lista completa en la pantalla /rubros)")
+    return 0
+
+
+def show_runs(factory, limit=10):
+    """Últimas ejecuciones registradas en la tabla actualizaciones y cuántos días corrió la tarea programada."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import select
+    from services import ocds_source
+    with factory() as session:
+        runs = list(session.scalars(select(db.IngestionRun).order_by(db.IngestionRun.id.desc()).limit(limit)))
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        # programada_imac (scripts/imac/) o programada_windows (scripts/windows/)
+        scheduled = [r for r in session.scalars(select(db.IngestionRun).where(db.IngestionRun.trigger.like("programada%")))
+                     if r.status == "ok" and ingest.as_utc(r.started_at) >= since]
+    if not runs:
+        print("Todavía no hay ejecuciones registradas.")
+        return 1
+    lima = ocds_source.LIMA
+    print(f"Últimas {len(runs)} ejecuciones (hora de Lima):")
+    for r in runs:
+        start = ingest.as_utc(r.started_at).astimezone(lima)
+        took = ""
+        if r.finished_at:
+            took = f" · {(ingest.as_utc(r.finished_at) - ingest.as_utc(r.started_at)).total_seconds():.0f} s"
+        detail = (f" · {r.saved_open:,} vigentes · {r.new_count or 0:,} nuevas" if r.status == "ok"
+                  else f" · {(r.error or '')[:90]}")
+        print(f"- {r.id} · {start:%Y-%m-%d %H:%M} · {r.trigger or '—'} · {r.status}{took}{detail}")
+    days = sorted({ingest.as_utc(r.started_at).astimezone(lima).date() for r in scheduled})
+    origins = ", ".join(sorted({r.trigger for r in scheduled})) or "sin ejecuciones"
+    print(f"Tarea programada ({origins}): {len(days)} de los últimos 7 días con ejecución correcta"
+          + (f" ({', '.join(f'{d:%d/%m}' for d in days)})." if days else "."))
+    return 0
+
+
+def show_bases_sample(factory):
+    """Una convocatoria vigente por formato declarado de las bases, para probar «Descargar bases» en Render."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from services import bases_download, tenders as tenders_service
+    with factory() as session:
+        rows = session.scalars(select(db.Tender).where(db.Tender.state == "vigente")
+                               .options(selectinload(db.Tender.documents))
+                               .order_by(db.Tender.published_at.desc())).all()
+        picked = {}
+        for t in rows:
+            label = bases_download.declared_label(tenders_service.bases_format(t)) or "Sin formato declarado"
+            if tenders_service.seace_url(t) and label not in picked:
+                picked[label] = (t.code, (t.entity or "")[:60])
+    if not picked:
+        print("No hay convocatorias vigentes con bases.")
+        return 1
+    print("Una convocatoria vigente por formato declarado por el OECE (el real lo detecta la app al descargar):")
+    for label, (code, entity) in sorted(picked.items()):
+        print(f"- {label}: {code} · {entity} · /convocatorias/{code}/bases")
+    print("En Render, abra https://<su-app>.onrender.com/convocatorias/<código>/bases para cada una.")
+    return 0
+
+
+def show_ocr():
+    """Qué OCR encuentra la app en esta computadora (para las bases escaneadas). No usa la base de datos."""
+    import subprocess
+    from services import bases_reader
+    tesseract, pdftoppm = bases_reader.tool_path("tesseract"), bases_reader.tool_path("pdftoppm")
+    print(f"tesseract: {tesseract or 'no encontrado'}")
+    print(f"pdftoppm:  {pdftoppm or 'no encontrado'}")
+    if tesseract:
+        try:
+            out = subprocess.run([tesseract, "--list-langs"], capture_output=True, text=True, timeout=30)
+            lines = (out.stdout + out.stderr).splitlines()
+            langs = [line.strip() for line in lines if line.strip() and "list of" not in line.lower()]
+            print(f"idiomas:   {', '.join(langs) or '—'}{'' if 'spa' in langs else '  ← falta el español (spa)'}")
+        except (OSError, subprocess.SubprocessError) as e:
+            print(f"idiomas:   no se pudo consultar ({type(e).__name__})")
+    ok = bases_reader.ocr_available()
+    print("OCR disponible: sí, las bases escaneadas se pueden leer en esta computadora." if ok else
+          "OCR disponible: no. Instale lo que falta o indique su ruta con TESSERACT_PATH / POPPLER_PATH en app/.env.")
+    return 0 if ok else 1
+
+
+def show_requirements(factory, codes):
+    """Requisitos de calificación de cada convocatoria, tal como los arma la ficha (HU de requisitos)."""
+    from sqlalchemy import func, select
+    from services import requirements
+    with factory() as session:
+        if not codes:
+            print("Convocatorias vigentes para probar la ficha (/convocatorias/<código>):")
+            picks = [("Requisitos de un PDF con texto", "extraido", "texto", False),
+                     ("Requisitos leídos con OCR", "extraido", "ocr", False),
+                     ("Requisitos de un Word (sin páginas)", "extraido", None, True)]
+            for label, status, source, word in picks:
+                query = (select(db.Tender.code).join(db.RequirementChunk, db.RequirementChunk.tender_id == db.Tender.id)
+                         .where(db.Tender.state == "vigente", db.Tender.requirements_status == status))
+                query = (query.where(db.RequirementChunk.page.is_(None)) if word
+                         else query.where(db.RequirementChunk.source == source, db.RequirementChunk.page.is_not(None)))
+                code = session.scalars(query.order_by(db.Tender.published_at.desc()).limit(1)).first()
+                print(f"- {label}: {code or 'ninguna todavía'}")
+            for status in ("seccion_no_encontrada", "no_legible", "error", "pendiente"):
+                code = session.scalars(select(db.Tender.code).where(db.Tender.state == "vigente",
+                                                                    db.Tender.requirements_status == status)
+                                       .order_by(db.Tender.published_at.desc()).limit(1)).first()
+                count = session.scalar(select(func.count()).select_from(db.Tender).where(
+                    db.Tender.state == "vigente", db.Tender.requirements_status == status))
+                print(f"- Bases {status}: {code or 'ninguna'} ({count:,} vigente{'s' if count != 1 else ''} en ese estado)")
+            return 0
+        for code in codes:
+            tender = session.scalars(select(db.Tender).where(db.Tender.code == str(code))).first()
+            if tender is None:
+                print(f"\n{code}: no existe en la base.")
+                continue
+            reqs = requirements.for_tender(session, tender.id, tender.requirements_status)
+            print(f"\n{code} · {(tender.title or '')[:80]}")
+            if not reqs.available:
+                print(f"  {reqs.status}: {reqs.title} → la ficha ofrece «Descargar bases».")
+                continue
+            where = (("página " if len(reqs.pages) == 1 else "páginas ") + ", ".join(map(str, reqs.pages))
+                     if reqs.pages else "Word, sin páginas")
+            print(f"  extraido · {reqs.file_name} · {where} · {'OCR' if reqs.source == 'ocr' else 'texto'}")
+            for block in reqs.blocks:
+                titles = [t for kind, t in block.segments if kind == "titulo"]
+                size = sum(len(t) for _k, t in block.segments)
+                print(f"  - Página {block.page or '—'} · {size:,} caracteres"
+                      + (f" · {' | '.join(titles[:4])}" if titles else ""))
+    return 0
+
+
 def show_rubros(factory):
     with factory() as session:
         codes = rubros.ingestion_rubros(session)
@@ -302,6 +477,12 @@ def parse(args):
     parser.add_argument("--nombre")
     parser.add_argument("--ver-rubros", action="store_true")
     parser.add_argument("--espacio", action="store_true")
+    parser.add_argument("--catalogo", action="store_true")
+    parser.add_argument("--ejecuciones", nargs="?", type=int, const=10)
+    parser.add_argument("--muestra-bases", action="store_true")
+    parser.add_argument("--requisitos", nargs="*")
+    parser.add_argument("--releer", nargs="+")
+    parser.add_argument("--ocr", action="store_true")
     # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
     return parser.parse_args(args)
 
@@ -310,6 +491,8 @@ def main(args=None):
     options = parse(sys.argv[1:] if args is None else args)
     if options.diagnostico:
         return run_diagnosis()
+    if options.ocr:
+        return show_ocr()
     if not config.DATABASE_URL:
         print("Falta DATABASE_URL (variable de entorno o app/.env). No se ejecutó la ingesta.")
         return 2
@@ -318,6 +501,26 @@ def main(args=None):
     factory = db.make_session_factory(engine)
     if options.solicitar_rubro or options.quitar_rubro or options.ver_rubros:
         code = run_requests(factory, options)
+        engine.dispose()
+        return code
+    if options.ejecuciones:
+        code = show_runs(factory, options.ejecuciones)
+        engine.dispose()
+        return code
+    if options.releer:
+        print("\n".join(run_rag(factory, options.releer)))
+        engine.dispose()
+        return 0
+    if options.requisitos is not None:
+        code = show_requirements(factory, options.requisitos)
+        engine.dispose()
+        return code
+    if options.muestra_bases:
+        code = show_bases_sample(factory)
+        engine.dispose()
+        return code
+    if options.catalogo:
+        code = show_catalog(factory)
         engine.dispose()
         return code
     if options.espacio:
@@ -345,7 +548,7 @@ def main(args=None):
         print("\n".join(lines))
         engine.dispose()
         return 0
-    trigger = os.environ.get("GITHUB_EVENT_NAME") or "local"
+    trigger = run_origin()
     client = client_kind()
     with factory() as session:
         labels = dict(rubros.named_options(session))      # sin el conteo del filtro: el resumen trae el suyo

@@ -1,13 +1,4 @@
-"""Lectura de las convocatorias desde la app (EN-007; la usan HU-007 y HU-009).
 
-La app solo lee la base: la escribe la ingesta diaria de GitHub Actions. Las funciones
-devuelven objetos del contrato (services/tender_contract.py), no filas de la base, para que
-las pantallas no dependan de SQLAlchemy.
-
-Si DATABASE_URL no está configurada o la base no responde, availability() lo dice y las
-funciones de lectura lanzan TendersUnavailable: la pantalla muestra el aviso de RN-002
-(templates/_tenders_notice.html) y el resto de la app, que usa los CSV históricos, sigue igual.
-"""
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -159,6 +150,35 @@ def tender_by_code(code):
             return _to_contract(row) if row else None
     except SQLAlchemyError as e:
         raise TendersUnavailable("sin_conexion") from e
+
+
+def tender_sheet(code):
+    """(convocatoria, requisitos) para la ficha (HU-010); (None, None) si el código no existe.
+
+    Los requisitos salen de los fragmentos guardados en la base vectorial (services/requirements.py).
+    """
+    from services import requirements
+    try:
+        with _session_factory()() as session:
+            row = session.scalars(select(db.Tender).where(db.Tender.code == str(code))
+                                  .options(selectinload(db.Tender.documents),
+                                           selectinload(db.Tender.requirements))).first()
+            if row is None:
+                return None, None
+            return _to_contract(row), requirements.for_tender(session, row.id, row.requirements_status)
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+
+
+def rubro_names():
+    """{rubro: "1510 · Combustibles y lubricantes"} con el nombre del catálogo, sin conteos."""
+    from services import rubros
+    try:
+        with _session_factory()() as session:
+            names = rubros.names(session)
+    except SQLAlchemyError:
+        return {}
+    return {code: f"{code} · {name}" for code, name in names.items()}
 
 
 def lima_text(moment):
