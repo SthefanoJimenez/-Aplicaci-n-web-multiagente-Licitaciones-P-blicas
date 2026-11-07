@@ -35,6 +35,9 @@ OCDS_MONTHS = int(os.environ.get("OCDS_MONTHS", "").strip() or "2")
 
 # Rubros piloto (familia UNSPSC): 1510 combustibles y 2510 vehículos.
 PILOT_RUBROS = tuple(r.strip() for r in os.environ.get("PILOT_RUBROS", "1510,2510").split(",") if r.strip())
+# RUBROS_INGESTA=todos: la ingesta guarda los bienes vigentes de TODOS los rubros que trae la API. Sin ella,
+# solo los piloto y los solicitados (EN-011). La lectura de bases atiende primero a piloto y solicitados.
+ALL_RUBROS = os.environ.get("RUBROS_INGESTA", "").strip().lower() == "todos"
 
 # RAG de las bases (EN-012). Modelo de embeddings de Gemini y tamaño del vector: 768 es una de las
 # dimensiones que recomienda Google para gemini-embedding-001 (por defecto entrega 3072).

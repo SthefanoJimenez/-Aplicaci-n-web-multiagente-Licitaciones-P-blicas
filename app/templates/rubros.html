@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% set active_nav = "tenders" %}
+{% block title %}Catálogo de rubros{% endblock %}
+{% block content %}
+<h1 class="page-title">Catálogo de rubros</h1>
+<p class="page-lead">Rubros (familias UNSPSC) con convocatorias de bienes publicadas en el último mes. Elija el suyo para ver sus convocatorias vigentes; si aún no tiene datos, puede solicitarlo.</p>
+
+<form class="filters" method="get" action="{{ url_for('rubro_catalog') }}" role="search" style="margin-top:24px; grid-template-columns:minmax(0,420px) auto auto; justify-content:start;">
+  <div>
+    <label for="f-q">Buscar rubro</label>
+    <input id="f-q" name="q" type="text" inputmode="search" value="{{ q }}" placeholder="Código o bien, por ejemplo 3011 o cemento">
+  </div>
+  <button type="submit" class="button button-primary">Buscar</button>
+  {% if q %}<a class="button button-secondary" href="{{ url_for('rubro_catalog') }}">Limpiar</a>{% endif %}
+</form>
+
+{% if not state.ok %}
+<div class="notice" role="alert" style="margin-top:16px;">
+  <p><strong>El catálogo no está disponible:</strong> la base de convocatorias no respondió. Intente de nuevo en unos minutos.</p>
+</div>
+{% elif not rows %}
+<div class="panel" style="text-align:center; padding:32px 24px; margin-top:16px;">
+  <p style="margin:0;"><strong>{% if q %}Ningún rubro coincide con «{{ q }}».{% else %}El catálogo aún no se generó: se arma con la próxima actualización diaria.{% endif %}</strong></p>
+</div>
+{% else %}
+<div class="section">
+  <h2 class="section-title">{{ rows|length }} rubro{{ "s" if rows|length != 1 }}</h2>
+  <p class="muted small">Los nombres son ejemplos de bienes de cada familia, tomados de las descripciones UNSPSC que publica el OECE; la API no publica el nombre oficial de la familia.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Rubro</th>
+          <th>Bienes que incluye</th>
+          <th class="num">Convocatorias del último mes</th>
+          <th class="num">Vigentes cargadas</th>
+          <th style="min-width:170px;">Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="chip">{{ r.code }}</span></td>
+          <td>{{ r.name or "—" }}</td>
+          <td class="num">{{ r.tenders_month }}</td>
+          <td class="num">{{ r.open_count }}</td>
+          <td>
+            {% if r.state == "con_datos" %}
+            <a class="button button-sm button-primary" href="{{ url_for('tenders_list', rubro=r.code) }}">Ver convocatorias</a>
+            {% elif r.state == "solicitado" %}
+            <span class="tag">Solicitado</span><br><span class="muted small">Se carga en la próxima actualización</span>
+            {% elif r.state == "sin_vigentes" %}
+            <span class="muted small">Sin convocatorias vigentes hoy</span>
+            {% else %}
+            <form method="post" action="{{ url_for('request_rubro') }}" style="margin:0;">
+              <input type="hidden" name="rubro" value="{{ r.code }}">
+              <button type="submit" class="button button-sm button-secondary">Solicitar este rubro</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

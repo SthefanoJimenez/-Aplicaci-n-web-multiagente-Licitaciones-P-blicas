@@ -78,7 +78,8 @@ def test_contract_example_matches_the_entities_and_has_no_user_data():
 def test_tables_follow_the_contract_with_keys_and_no_user_table(factory):
     inspector = inspect(factory.kw["bind"])
     assert set(inspector.get_table_names()) == {"convocatorias", "documentos", "requisitos", "fragmentos",
-                                                "actualizaciones"}
+                                                "actualizaciones", "rubros_solicitados",
+                                                "catalogo_rubros"}
     assert {fk["referred_table"] for fk in inspector.get_foreign_keys("fragmentos")} == {"convocatorias", "documentos"}
     chunk_columns = {c["name"] for c in inspector.get_columns("fragmentos")}
     assert {f.name for f in fields(tender_contract.RequirementChunk)} | {"embedding"} <= chunk_columns

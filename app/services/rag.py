@@ -17,7 +17,7 @@ pruebas, se calcula en Python.
 import re
 import time
 
-from sqlalchemy import case, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.orm import selectinload
 
 import config
@@ -115,11 +115,17 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
 
 
 def pending_ids(session, limit):
-    """Convocatorias vigentes por indexar: primero las nuevas ("pendiente"), luego las que fallaron."""
+    """Convocatorias vigentes por indexar. Orden: primero las de los rubros piloto y solicitados (EN-011:
+    con RUBROS_INGESTA=todos hay muchas más bases que tiempo para leerlas), luego las nuevas ("pendiente")
+    antes que las que fallaron, y de la más reciente a la más antigua."""
+    from services import rubros
+    # Los rubros se guardan como "1510 3011": todos de 4 dígitos, así que '%1510%' solo calza con 1510
+    priority = [db.Tender.rubros.like(f"%{code}%") for code in rubros.ingestion_rubros(session)]
+    first = case((or_(*priority), 0), else_=1) if priority else None
+    order = ([first] if first is not None else []) + [
+        case((db.Tender.requirements_status == "pendiente", 0), else_=1), db.Tender.published_at.desc()]
     query = (select(db.Tender.id).where(db.Tender.state == "vigente")
-             .where(db.Tender.requirements_status.in_(RETRY_STATUSES))
-             .order_by(case((db.Tender.requirements_status == "pendiente", 0), else_=1),
-                       db.Tender.published_at.desc()))
+             .where(db.Tender.requirements_status.in_(RETRY_STATUSES)).order_by(*order))
     if limit:
         query = query.limit(limit)
     return list(session.scalars(query))

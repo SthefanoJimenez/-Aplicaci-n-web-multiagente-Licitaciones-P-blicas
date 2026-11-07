@@ -301,13 +301,20 @@ PILOT_RUBRO_OPTIONS = [
 
 @app.get("/convocatorias")
 def tenders_list():
-    """Pantalla de convocatorias vigentes de bienes en los rubros piloto."""
+    """Pantalla de convocatorias vigentes de bienes en los rubros piloto y los solicitados (EN-011)."""
     rubro = request.args.get("rubro", "").strip() or None
     department = request.args.get("departamento", "").strip().upper() or None
+    request_notice = request.args.get("solicitud")        # "ok" o "invalida", tras «Solicitar este rubro»
     method = request.args.get("metodo", "").strip() or None
 
     tenders_state = tenders.availability()
     items = []
+    rubro_info = None
+    if tenders_state["ok"] and rubro and rubro != "sin":
+        try:
+            rubro_info = tenders.rubro_status(rubro)       # HU-013: ¿tiene datos? ¿se puede solicitar?
+        except tenders.TendersUnavailable:
+            rubro_info = None
     if tenders_state["ok"]:
         try:
             raw_tenders = tenders.open_tenders(rubro=rubro, method=method, department=department)
@@ -346,11 +353,43 @@ def tenders_list():
         "tenders.html",
         tenders=items,
         tenders_state=tenders_state,
-        pilot_rubros=PILOT_RUBRO_OPTIONS,
+        pilot_rubros=tenders.rubro_options(PILOT_RUBRO_OPTIONS),   # catálogo completo de rubros (HU-013)
+        rubro_info=rubro_info,
+        request_notice=request_notice,
         departments=analytics.DEPARTMENTS,
         methods=method_options,
         f={"rubro": rubro or "", "department": department or "", "method": method or ""},
     )
+
+
+@app.post("/convocatorias/solicitar-rubro")
+def request_rubro():
+    """«Solicitar este rubro» (HU-013): guarda la solicitud; la siguiente ingesta descarga sus convocatorias."""
+    from services import rubros
+    code = request.form.get("rubro", "")
+    company = request.form.get("empresa", "").strip()[:200]
+    try:
+        saved = tenders.request_rubro(code, company)
+    except rubros.InvalidRubro:
+        return redirect(url_for("tenders_list", solicitud="invalida"), code=303)
+    except tenders.TendersUnavailable:
+        return redirect(url_for("tenders_list", rubro=code, solicitud="sin_conexion"), code=303)
+    return redirect(url_for("tenders_list", rubro=saved, solicitud="ok"), code=303)
+
+
+@app.get("/rubros")
+def rubro_catalog():
+    """Catálogo de rubros (HU-013): todas las familias UNSPSC con convocatorias de bienes del último mes."""
+    try:
+        rows = tenders.rubro_catalog()
+        state = {"ok": True}
+    except tenders.TendersUnavailable:
+        rows, state = [], {"ok": False}
+    query = request.args.get("q", "").strip()
+    if query:
+        needle = query.lower()
+        rows = [r for r in rows if needle in r["code"] or needle in (r["name"] or "").lower()]
+    return render_template("rubros.html", rows=rows, state=state, q=query)
 
 
 @app.get("/convocatorias/estado")

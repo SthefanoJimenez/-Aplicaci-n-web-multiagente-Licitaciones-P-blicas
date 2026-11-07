@@ -106,6 +106,32 @@ class IngestionRun:
     updated_count: Optional[int] = None
     closed_count: Optional[int] = None
     error: Optional[str] = None
+    rubros: Optional[str] = None                # rubros descargados: piloto + solicitados, "1510,2510,3011" (EN-011)
+    per_rubro: Optional[dict] = None            # vigentes guardadas por rubro tras la ejecución, {"1510": 92} (EN-011)
+
+
+@dataclass
+class RubroRequest:
+    """Un rubro que pidió una empresa (EN-011; la pantalla para pedirlo es HU-013). Tabla "rubros_solicitados".
+
+    La ingesta descarga los rubros piloto más los solicitados activos. No guarda costos ni perfiles (RN-001).
+    """
+    code: str                                   # familia UNSPSC de 4 dígitos, por ejemplo "3011"
+    company: str = ""                           # empresa que lo pidió
+    name: Optional[str] = None                  # nombre para mostrar en el filtro de convocatorias
+    requested_at: Optional[datetime] = None
+    active: bool = True                         # False: ya no se descarga (sus convocatorias pasan a no vigentes)
+
+
+@dataclass
+class RubroCatalog:
+    """Un rubro del catálogo (HU-013): familia UNSPSC con convocatorias de bienes en el último mes.
+    Tabla "catalogo_rubros"; la ingesta la rehace en cada ejecución.
+    """
+    code: str                                   # familia UNSPSC de 4 dígitos
+    name: Optional[str] = None                  # "Ej.: Cemento, hormigón premezclado" (la API no trae el nombre oficial)
+    tenders_month: int = 0                      # convocatorias de bienes publicadas en los últimos 30 días
+    updated_at: Optional[datetime] = None
 
 
 def field_table(cls):

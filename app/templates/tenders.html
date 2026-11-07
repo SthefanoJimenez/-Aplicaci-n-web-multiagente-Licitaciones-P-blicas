@@ -3,7 +3,7 @@
 {% block title %}Convocatorias vigentes{% endblock %}
 {% block content %}
 <h1 class="page-title">Convocatorias vigentes de bienes</h1>
-<p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
+<p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto y en los que solicitan las empresas. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
 
 {% include "_tenders_notice.html" %}
 
@@ -13,9 +13,9 @@
 
 <form class="filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
   <div>
-    <label for="f-rubro">Rubro piloto</label>
+    <label for="f-rubro">Rubro</label>
     <select id="f-rubro" name="rubro">
-      <option value="">Todos los rubros piloto</option>
+      <option value="">Todos los rubros</option>
       {% for code, label in pilot_rubros %}
       <option value="{{ code }}" {% if f.rubro == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -44,6 +44,51 @@
   <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
   {% endif %}
 </form>
+<p class="muted small" style="margin-top:8px;">¿No encuentra lo que vende? <a href="{{ url_for('rubro_catalog') }}">Vea el catálogo completo de rubros</a> y solicite el suyo.</p>
+
+{% if request_notice == "invalida" %}
+<div class="notice" role="alert" style="margin-top:16px;">
+  <p><strong>No se pudo registrar la solicitud:</strong> el rubro debe ser un código de 4 dígitos del catálogo (por ejemplo, 3011).</p>
+</div>
+{% elif request_notice == "sin_conexion" %}
+<div class="notice" role="alert" style="margin-top:16px;">
+  <p><strong>No se pudo registrar la solicitud</strong> porque la base de convocatorias no respondió. Intente de nuevo en unos minutos.</p>
+</div>
+{% endif %}
+
+{% if rubro_info %}
+  {% if request_notice == "ok" and rubro_info.requested %}
+  <div class="notice notice-good" role="status" style="margin-top:16px;">
+    <p><strong>Solicitud registrada para el rubro {{ rubro_info.code }}{% if rubro_info.name %} ({{ rubro_info.name }}){% endif %}.</strong>
+    {% if rubro_info.open_count %}Ya hay convocatorias vigentes cargadas de este rubro; a partir de ahora también se leerán sus bases con prioridad.
+    {% else %}Sus convocatorias vigentes aparecerán aquí después de la próxima actualización diaria.{% endif %}</p>
+  </div>
+  {% elif rubro_info.can_request %}
+  <div class="panel" style="margin-top:16px;" data-rubro-request>
+    <p style="margin:0 0 8px;"><strong>El rubro {{ rubro_info.code }}{% if rubro_info.name %} · {{ rubro_info.name }}{% endif %} aún no tiene convocatorias cargadas.</strong></p>
+    <p class="muted" style="margin:0 0 12px;">
+      {% if rubro_info.tenders_month %}En el último mes se publicaron {{ rubro_info.tenders_month }} convocatorias de bienes de este rubro.{% endif %}
+      Si es lo que usted vende, solicítelo: desde la siguiente actualización diaria se descargarán sus convocatorias vigentes.
+    </p>
+    <form method="post" action="{{ url_for('request_rubro') }}" class="filters" style="margin:0; padding:0; border:0; grid-template-columns:minmax(0,360px) auto; justify-content:start;">
+      <input type="hidden" name="rubro" value="{{ rubro_info.code }}">
+      <div>
+        <label for="f-empresa">Empresa (opcional)</label>
+        <input id="f-empresa" name="empresa" type="text" maxlength="200" placeholder="Razón social">
+      </div>
+      <button type="submit" class="button button-primary">Solicitar este rubro</button>
+    </form>
+  </div>
+  {% elif rubro_info.pending %}
+  <div class="notice" role="status" style="margin-top:16px;">
+    <p><strong>El rubro {{ rubro_info.code }} ya fue solicitado.</strong> Sus convocatorias vigentes aparecerán después de la próxima actualización diaria.</p>
+  </div>
+  {% elif not rubro_info.open_count %}
+  <div class="notice" role="status" style="margin-top:16px;">
+    <p><strong>El rubro {{ rubro_info.code }} se descarga a diario, pero hoy no tiene convocatorias vigentes.</strong> Aparecerán aquí en cuanto el OECE publique alguna.</p>
+  </div>
+  {% endif %}
+{% endif %}
 
 <div class="section">
   <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
@@ -139,7 +184,7 @@
   {% else %}
   <div class="panel" style="text-align:center; padding:48px 24px;">
     <p class="lead" style="margin:0 0 8px;"><strong>No se encontraron convocatorias vigentes con los filtros seleccionados.</strong></p>
-    <p class="muted" style="margin:0 0 16px;">Intente seleccionando otro rubro piloto o quitando el filtro de departamento.</p>
+    <p class="muted" style="margin:0 0 16px;">Intente seleccionando otro rubro o quitando el filtro de departamento.</p>
     <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Ver todas las convocatorias vigentes</a>
   </div>
   {% endif %}

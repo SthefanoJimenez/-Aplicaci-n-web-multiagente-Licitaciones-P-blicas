@@ -1,5 +1,5 @@
 {
-    "_nota": "Ejemplo del contrato de EN-007, armado con la base 1258029 del SP-006 (Municipalidad Provincial de Ilo). Entidad, departamento, procedimiento, rubro, fecha de publicación y requisitos son reales (vigentes del 17/10 y SP-006); las fechas del sistema, la ejecución y el enlace son ilustrativos. Sirve para que HU-007 y HU-009 trabajen sin base de datos.",
+    "_nota": "Ejemplo del contrato de EN-007, armado con la base 1258029 del SP-006 (Municipalidad Provincial de Ilo). Entidad, departamento, procedimiento, rubro, fecha de publicación y requisitos son reales (vigentes del 17/10 y SP-006); las fechas del sistema, la ejecución y el enlace son ilustrativos. Sirve para que HU-007 y HU-009 trabajen sin base de datos. El conteo por rubro de la ejecución (per_rubro, EN-011) también es ilustrativo.",
     "tender": {
         "ocid": "ocds-dgv273-seacev3-1258029",
         "code": "1258029",
@@ -59,6 +59,11 @@
         "new_count": 7,
         "updated_count": 181,
         "closed_count": 4,
-        "error": null
+        "error": null,
+        "rubros": "1510,2510",
+        "per_rubro": {
+            "1510": 160,
+            "2510": 28
+        }
     }
 }

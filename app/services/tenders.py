@@ -75,11 +75,78 @@ def open_tenders(rubro=None, method=None, department=None):
             if department:
                 query = query.where(db.Tender.department == department)
             rows = session.scalars(query).all()
-            if rubro:
+            if rubro == "sin":          # bienes sin código de rubro en la API (RUBROS_INGESTA=todos)
+                rows = [r for r in rows if not (r.rubros or "").split()]
+            elif rubro:
                 rows = [r for r in rows if rubro in (r.rubros or "").split()]
             return [_to_contract(r) for r in rows]
     except SQLAlchemyError as e:
         raise TendersUnavailable("sin_conexion") from e
+
+
+def rubro_options(fallback):
+    """[(código, etiqueta)] del filtro de rubros: los piloto y los solicitados activos (EN-011).
+
+    Si la base no responde, el filtro muestra solo los piloto (fallback).
+    """
+    from services import rubros
+    try:
+        with _session_factory()() as session:
+            return rubros.options(session)
+    except (TendersUnavailable, SQLAlchemyError):
+        return list(fallback)
+
+
+def rubro_status(code):
+    """Estado de un rubro para la pantalla (HU-013); None si el código no es un rubro."""
+    from services import rubros
+    try:
+        with _session_factory()() as session:
+            return rubros.status(session, code)
+    except rubros.InvalidRubro:
+        return None
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+
+
+def request_rubro(code, company=""):
+    """Guarda la solicitud de un rubro desde la pantalla (HU-013). Lanza rubros.InvalidRubro si no es válido."""
+    from services import rubros
+    try:
+        with _session_factory().begin() as session:
+            return rubros.request_rubro(session, code, company=company).code
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+
+
+def rubro_catalog():
+    """Filas de la pantalla de rubros: el catálogo con vigentes guardadas y estado de cada rubro."""
+    from services import rubros
+    try:
+        with _session_factory()() as session:
+            counts = rubros.open_counts(session)
+            first = set(rubros.ingestion_rubros(session))
+            requested = set(rubros.requested_codes(session))
+            all_names = rubros.names(session)
+            rows = [(r.code, r.tenders_month) for r in rubros.catalog(session)]
+            rows += [(code, 0) for code in rubros.ingestion_rubros(session) if code not in {c for c, _ in rows}]
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+    import config
+    result = []
+    for code, month in rows:
+        open_count = counts.get(code, 0)
+        if open_count:
+            state = "con_datos"
+        elif code in requested:
+            state = "solicitado"
+        elif code in config.PILOT_RUBROS:
+            state = "sin_vigentes"          # se descarga siempre: no hace falta pedirlo
+        else:
+            state = "sin_datos"
+        result.append({"code": code, "name": all_names.get(code), "tenders_month": month,
+                       "open_count": open_count, "state": state, "priority": code in first})
+    return result
 
 
 def tender_by_code(code):
