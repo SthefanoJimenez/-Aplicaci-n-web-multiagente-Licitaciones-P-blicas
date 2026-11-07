@@ -1,13 +1,4 @@
-"""HU-012: elegir rubros adicionales.
 
-Criterios que se prueban:
-1. El catálogo de rubros (familias UNSPSC) sale de las convocatorias de bienes del último mes.
-2. El filtro de rubro muestra el catálogo completo, no solo combustibles y vehículos.
-3. Si un rubro no tiene datos, la pantalla ofrece «Solicitar este rubro» y guarda la solicitud.
-4. Pruebas automatizadas de la solicitud (este archivo).
-
-Usan la API simulada (tests/fake_ocds.py) y SQLite: no necesitan internet ni Neon.
-"""
 from datetime import datetime, timedelta
 
 import pytest
@@ -218,3 +209,21 @@ def test_in_all_rubros_mode_a_request_is_never_pending(factory, source, monkeypa
         rubros.request_rubro(session, "4229")
         info = rubros.status(session, "4229")
     assert info["pending"] is False and info["open_count"] == 1           # ya estaba cargado
+
+
+def test_catalog_command_prints_the_count_per_family(tmp_path, monkeypatch, capsys, source):
+    import ingest_job
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{tmp_path / 'base.db'}")
+    assert ingest_job.main_with(["--catalogo"]) == 1                     # todavía no hay catálogo
+    assert "aún no se generó" in capsys.readouterr().out
+    real_run = ingest.run_ingestion
+    session = ocds_source.session_for(source.base + "/api/v1")
+    monkeypatch.setattr(ingest, "run_ingestion", lambda factory, trigger=None: real_run(
+        factory, now=NOW, fetch=lambda n, m: ocds_source.fetch_rows(n, m, session=session), months=2, trigger=trigger))
+    assert ingest_job.main_with(["--sin-rag"]) == 0
+    assert "Catálogo de rubros: 4 rubros con convocatorias de bienes en los últimos 30 días" in capsys.readouterr().out
+    assert ingest_job.main_with(["--catalogo"]) == 0
+    out = capsys.readouterr().out
+    assert "Catálogo de rubros: 4 rubros · 7 convocatorias de bienes en los últimos 30 días" in out
+    assert "- 3011 · 4 · 0 · sin datos · Ej.: Cemento, arena" in out
+    assert "- 1510 · 1 · 1 · piloto · Combustibles y lubricantes" in out

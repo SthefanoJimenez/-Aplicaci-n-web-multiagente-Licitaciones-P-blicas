@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% set active_nav = "tenders" %}
+{% block title %}{% if tender %}Convocatoria {{ tender.code }}{% else %}Convocatoria{% endif %}{% endblock %}
+{% block content %}
+<nav class="breadcrumb" aria-label="Ruta">
+  <a href="{{ url_for('tenders_list') }}">Convocatorias vigentes</a> › {{ (tender.code if tender else code) }}
+</nav>
+
+{% if unavailable %}
+<h1 class="page-title">Convocatoria {{ code }}</h1>
+<div class="notice notice-warning" role="alert" style="margin-top:16px;">
+  <p><strong>No pudimos consultar la convocatoria en este momento:</strong> la base de datos no respondió. Recargue la página en unos segundos.</p>
+</div>
+{% else %}
+<h1 class="page-title">{{ tender.title or tender.description or "Convocatoria sin título" }}</h1>
+<p class="page-lead">{{ tender.entity or "Entidad no informada" }}</p>
+
+{% if tender.state != "vigente" %}
+<div class="notice notice-warning" role="status" style="margin-top:16px;">
+  <p><strong>Esta convocatoria ya no está vigente.</strong> El portal del OECE dejó de publicarla como convocada{% if tender.closed_at %} el {{ tender.closed_at|date_pe }}{% endif %}.</p>
+</div>
+{% endif %}
+
+<div class="grid-2" style="margin-top:24px; align-items:start;">
+  <figure class="record panel" style="margin:0;">
+    <figcaption>Datos de la convocatoria</figcaption>
+    <dl>
+      <div><dt>Código</dt><dd class="mono">{{ tender.code }}</dd></div>
+      {% if tender.method %}<div><dt>Procedimiento</dt><dd>{{ tender.method }}</dd></div>{% endif %}
+      <div><dt>Departamento</dt><dd>{{ (tender.department or "—")|place }} <span class="muted small">(sede de la entidad)</span></dd></div>
+      {% if rubros %}<div><dt>Rubro</dt><dd>{{ rubros|join(", ") }}</dd></div>{% endif %}
+      <div><dt>Publicación</dt><dd>{{ tender.published_at|date_pe }}{% if days_since == 0 %} <span class="muted small">(hoy)</span>{% elif days_since is not none %} <span class="muted small">(hace {{ days_since }} día{{ "s" if days_since != 1 }})</span>{% endif %}</dd></div>
+      {% if tender.deadline_at %}<div><dt>Fecha límite</dt><dd>{{ tender.deadline_at|date_pe }}</dd></div>{% endif %}
+      <div><dt>Valor estimado</dt><dd>{% if tender.estimated_value and tender.estimated_value > 0 %}{{ tender.estimated_value|pen }}{% else %}<span class="muted">No publicado</span>{% endif %}</dd></div>
+    </dl>
+  </figure>
+  <div class="panel">
+    <p class="panel-title" style="margin-top:0;"><strong>Bases del proceso</strong></p>
+    {% if seace_url %}
+    <p class="muted small" style="margin:0 0 12px;">Las bases oficiales son el documento que vale para postular.</p>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      <a class="button button-primary" href="{{ url_for('tender_bases', code=tender.code) }}">Descargar bases{% if bases_label %} ({{ bases_label }}){% endif %}</a>
+      <a class="button button-secondary" href="{{ seace_url }}" target="_blank" rel="noopener">Enlace original del SEACE</a>
+    </div>
+    {% else %}
+    <p class="muted" style="margin:0;">La convocatoria no publica bases en el portal del OECE.</p>
+    {% endif %}
+    {% if catalog_code %}
+    <p style="margin:16px 0 0;"><a href="{{ url_for('good_sheet', code=catalog_code) }}">Ver precios históricos de este bien (CUBSO {{ catalog_code }})</a></p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="section" id="requisitos">
+  <h2 class="section-title">Requisitos de calificación</h2>
+  {% if reqs.available %}
+  <p class="section-lead">
+    Extraídos automáticamente de las bases{% if reqs.file_name %} (<span class="muted">{{ reqs.file_name }}</span>){% endif %}{% if reqs.pages|length == 1 %}, página {{ reqs.pages[0] }}{% elif reqs.pages %}, páginas {{ reqs.pages[0] }} a {{ reqs.pages[-1] }}{% endif %}.
+    {% if reqs.pages %}La página es la del archivo de las bases (puede no coincidir con el número impreso en el documento).
+    {% else %}Las bases vienen en Word, que no tiene números de página: ubique la sección por su título.{% endif %}
+    Antes de postular, verifíquelos en las bases oficiales.
+  </p>
+  {% if reqs.source == "ocr" %}
+  <div class="notice notice-info" role="note" style="margin:12px 0;">
+    <p>El texto de estas bases venía como imagen y se leyó con reconocimiento óptico (OCR): puede tener letras o números mal reconocidos.</p>
+  </div>
+  {% endif %}
+  {% for block in reqs.blocks %}
+  <article class="panel requirements-page" style="margin-top:12px;">
+    {% if block.page %}<p style="margin:0 0 8px;"><span class="chip">Página {{ block.page }}</span></p>{% endif %}
+    {% for kind, text in block.segments %}
+      {% if kind == "titulo" %}
+      <h3 style="font-size:15px; margin:14px 0 4px;">{{ text }}</h3>
+      {% else %}
+      <p style="margin:0 0 8px; white-space:pre-line; line-height:1.55;">{{ text }}</p>
+      {% endif %}
+    {% endfor %}
+  </article>
+  {% endfor %}
+  {% else %}
+  <div class="notice notice-warning" role="status" style="margin-top:12px;" data-requirements-status="{{ reqs.status }}">
+    <p><strong>{{ reqs.title }}</strong> {{ reqs.detail }}</p>
+    {% if seace_url %}
+    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
+      <a class="button button-primary" href="{{ url_for('tender_bases', code=tender.code) }}">Descargar bases{% if bases_label %} ({{ bases_label }}){% endif %}</a>
+      <a class="button button-secondary" href="{{ seace_url }}" target="_blank" rel="noopener">Enlace original del SEACE</a>
+    </div>
+    {% else %}
+    <p style="margin-top:8px;">La convocatoria no publica bases en el portal del OECE; búsquela en el <a href="https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorConvocatorias/buscadorConvocatorias.xhtml" target="_blank" rel="noopener">buscador del SEACE</a>.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
