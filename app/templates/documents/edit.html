@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% set active_nav = "profile" %}
+{% block title %}Editar documento{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="edit-title">
+  <p class="eyebrow">Documentos de mi empresa</p>
+  <h1 class="page-title" id="edit-title">Editar tipo y vigencia</h1>
+  <p class="page-lead document-filename">{{ document.filename }}</p>
+  <p class="hint">El archivo original se conserva. Para reemplazarlo, adjunte la nueva versión y borre la anterior cuando lo haya comprobado.</p>
+  <form method="post" data-document-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% include "documents/_metadata.html" %}
+    <div class="actions"><button class="button button-primary" type="submit">Guardar cambios</button><a class="button button-secondary" href="{{ url_for('company_documents.index') }}">Cancelar</a></div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/company-documents.js') }}" defer></script>{% endblock %}
