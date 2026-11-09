@@ -13,10 +13,26 @@
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization', minimum=2) }}
     {{ input('email', 'Correo electrónico', values, errors, type='email', autocomplete='email', maximum=254) }}
-    {{ input('password', 'Contraseña', {}, errors, type='password', autocomplete='new-password', hint='Use de 4 a 128 caracteres, con mayúscula (A-Z), minúscula (a-z), número y símbolo.', minimum=4, maximum=128) }}
+    <div class="field">
+      <div class="password-label-row">
+        <label class="label" for="password">Contraseña</label>
+        <details class="password-help" data-password-help>
+          <summary aria-label="Requisitos de la contraseña" aria-controls="password-help-content">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v7M12 7v1"/></svg>
+          </summary>
+          <div class="password-help-card" id="password-help-content">
+            <p id="password-hint">Use de 4 a 128 caracteres, con al menos una mayúscula (A-Z), una minúscula (a-z), un número y un símbolo. Los espacios y las letras acentuadas no cuentan como símbolo.</p>
+          </div>
+        </details>
+      </div>
+      <input id="password" name="password" type="password" required autocomplete="new-password"
+             minlength="4" maxlength="128" aria-describedby="password-hint{% if errors.get('password') %} password-error{% endif %}"
+             {% if errors.get('password') %}aria-invalid="true"{% endif %}>
+      {% if errors.get('password') %}<p class="error" id="password-error">{{ errors['password'] }}</p>{% endif %}
+    </div>
     {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=4, maximum=128) }}
     <div class="actions"><button class="button button-primary button-wide" type="submit" aria-describedby="registration-help">Crear mi cuenta</button></div>
-    <p class="hint" id="registration-help">Complete los cuatro campos. La contraseña debe tener de 4 a 128 caracteres, incluir mayúscula, minúscula, número y símbolo, y coincidir en ambos campos.</p>
+    <p class="hint" id="registration-help">Complete los cuatro campos para crear su cuenta.</p>
     <p class="sr-only" id="registration-announcement" role="status" aria-atomic="true"></p>
   </form>
   <p class="hint">¿Ya tiene una cuenta? <a href="{{ url_for('auth.login', **({'next': next_url} if next_url else {})) }}">Iniciar sesión</a></p>

@@ -3125,6 +3125,61 @@ details.table-view summary {
     color: var(--good);
 }
 
+/* Ayuda de contraseña: accesible por puntero, teclado y pantalla táctil. */
+.password-label-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.password-label-row .label {
+    margin: 0;
+}
+
+.password-help summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: var(--seal);
+    cursor: pointer;
+    list-style: none;
+}
+
+.password-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.password-help summary:hover,
+.password-help[open] summary {
+    background: var(--seal-tint);
+}
+
+.password-help-card {
+    position: absolute;
+    z-index: 10;
+    inset-inline-start: 0;
+    top: 100%;
+    width: min(100%, 350px);
+    padding: 14px 16px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 5px 18px rgba(24, 33, 46, .16);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.password-help-card p {
+    margin: 0;
+}
+
 .account-panel .button[aria-disabled="true"],
 .account-panel .button[aria-disabled="true"]:hover {
     background: var(--rule);

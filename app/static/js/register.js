@@ -14,6 +14,45 @@
     const feedback = new Map();
     let announceTimer;
 
+    // El desplegable nativo sigue funcionando por clic y teclado sin JavaScript.
+    // Con JavaScript también se abre al pasar el puntero y al recibir el foco.
+    const passwordHelp = form.querySelector("[data-password-help]");
+    if (passwordHelp) {
+        const trigger = passwordHelp.querySelector("summary");
+        let pinned = false;
+        let hovered = false;
+        const closeHelp = () => {
+            pinned = false;
+            passwordHelp.open = false;
+        };
+        passwordHelp.addEventListener("mouseenter", () => {
+            // En pantallas táctiles el clic controla la apertura y el cierre.
+            if (window.matchMedia("(hover: hover)").matches) {
+                hovered = true;
+                passwordHelp.open = true;
+            }
+        });
+        passwordHelp.addEventListener("mouseleave", () => {
+            hovered = false;
+            if (!pinned && !passwordHelp.contains(document.activeElement)) passwordHelp.open = false;
+        });
+        passwordHelp.addEventListener("focusin", () => { passwordHelp.open = true; });
+        passwordHelp.addEventListener("focusout", (event) => {
+            if (!pinned && !hovered && !passwordHelp.contains(event.relatedTarget)) passwordHelp.open = false;
+        });
+        trigger.addEventListener("click", (event) => {
+            event.preventDefault();
+            pinned = !pinned;
+            passwordHelp.open = pinned;
+        });
+        document.addEventListener("pointerdown", (event) => {
+            if (!passwordHelp.contains(event.target)) closeHelp();
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && passwordHelp.open) closeHelp();
+        });
+    }
+
     // Se añade sin reemplazar los identificadores ni los mensajes que devuelve Flask.
     for (const name of names) {
         const field = fields[name];
@@ -46,15 +85,22 @@
             }
         } else if (name === "password") {
             const count = length(value);
-            if (!count) return "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo.";
+            const issues = [];
             if (count < 4) {
                 const missing = 4 - count;
-                return missing === 1 ? "Falta 1 carácter para llegar al mínimo de 4." : `Faltan ${missing} caracteres para llegar al mínimo de 4.`;
+                issues.push(missing === 1 ? "Falta 1 carácter para llegar al mínimo de 4." : `Faltan ${missing} caracteres para llegar al mínimo de 4.`);
             }
-            if (count > 128) return "Use como máximo 128 caracteres.";
-            if (!/[A-Z]/u.test(value) || !/[a-z]/u.test(value) || !/[0-9]/u.test(value) || !/[^\p{L}\p{N}\s]/u.test(value)) {
-                return "Incluya al menos una mayúscula (A-Z), una minúscula (a-z), un número y un símbolo.";
+            if (count > 128) issues.push("Use como máximo 128 caracteres.");
+            const missing = [];
+            if (!/[A-Z]/u.test(value)) missing.push("una mayúscula (A-Z)");
+            if (!/[a-z]/u.test(value)) missing.push("una minúscula (a-z)");
+            if (!/[0-9]/u.test(value)) missing.push("un número");
+            if (!/[^\p{L}\p{N}\s]/u.test(value)) missing.push("un símbolo");
+            if (missing.length) {
+                const list = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} y ${missing[missing.length - 1]}`;
+                issues.push(`${missing.length === 1 ? "Falta" : "Faltan"} ${list}.`);
             }
+            return issues.join(" ");
         } else {
             if (!value) return "Repita la contraseña.";
             if (value !== fields.password.value) return "Las contraseñas no coinciden.";
@@ -99,7 +145,7 @@
         button.setAttribute("aria-disabled", String(!ready));
         help.textContent = ready
             ? "Los campos están completos. Ya puede crear su cuenta."
-            : "Complete los cuatro campos. Use de 4 a 128 caracteres con mayúscula, minúscula, número y símbolo, y repita la contraseña igual.";
+            : "Complete los cuatro campos para crear su cuenta.";
         return errors;
     }
 
