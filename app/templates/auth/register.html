@@ -13,10 +13,10 @@
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization', minimum=2) }}
     {{ input('email', 'Correo electrónico', values, errors, type='email', autocomplete='email', maximum=254) }}
-    {{ input('password', 'Contraseña', {}, errors, type='password', autocomplete='new-password', hint='Use entre 12 y 128 caracteres. Puede escribir una frase larga.', minimum=12, maximum=128) }}
-    {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=12, maximum=128) }}
+    {{ input('password', 'Contraseña', {}, errors, type='password', autocomplete='new-password', hint='Use de 4 a 128 caracteres, con mayúscula (A-Z), minúscula (a-z), número y símbolo.', minimum=4, maximum=128) }}
+    {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=4, maximum=128) }}
     <div class="actions"><button class="button button-primary button-wide" type="submit" aria-describedby="registration-help">Crear mi cuenta</button></div>
-    <p class="hint" id="registration-help">Complete los cuatro campos. La contraseña debe tener entre 12 y 128 caracteres y coincidir en ambos campos.</p>
+    <p class="hint" id="registration-help">Complete los cuatro campos. La contraseña debe tener de 4 a 128 caracteres, incluir mayúscula, minúscula, número y símbolo, y coincidir en ambos campos.</p>
     <p class="sr-only" id="registration-announcement" role="status" aria-atomic="true"></p>
   </form>
   <p class="hint">¿Ya tiene una cuenta? <a href="{{ url_for('auth.login', **({'next': next_url} if next_url else {})) }}">Iniciar sesión</a></p>

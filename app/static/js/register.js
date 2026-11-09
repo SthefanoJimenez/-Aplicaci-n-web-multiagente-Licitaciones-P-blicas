@@ -46,12 +46,15 @@
             }
         } else if (name === "password") {
             const count = length(value);
-            if (!count) return "Escriba una contraseña de entre 12 y 128 caracteres.";
-            if (count < 12) {
-                const missing = 12 - count;
-                return missing === 1 ? "Falta 1 carácter para llegar al mínimo de 12." : `Faltan ${missing} caracteres para llegar al mínimo de 12.`;
+            if (!count) return "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo.";
+            if (count < 4) {
+                const missing = 4 - count;
+                return missing === 1 ? "Falta 1 carácter para llegar al mínimo de 4." : `Faltan ${missing} caracteres para llegar al mínimo de 4.`;
             }
             if (count > 128) return "Use como máximo 128 caracteres.";
+            if (!/[A-Z]/u.test(value) || !/[a-z]/u.test(value) || !/[0-9]/u.test(value) || !/[^\p{L}\p{N}\s]/u.test(value)) {
+                return "Incluya al menos una mayúscula (A-Z), una minúscula (a-z), un número y un símbolo.";
+            }
         } else {
             if (!value) return "Repita la contraseña.";
             if (value !== fields.password.value) return "Las contraseñas no coinciden.";
@@ -84,7 +87,7 @@
                 continue;
             }
             const success = !errors[index] && field.value && (name === "password" || name === "password_confirm");
-            message.textContent = show ? (errors[index] || (success ? (name === "password" ? "La contraseña cumple la longitud requerida." : "Las contraseñas coinciden.") : "")) : "";
+            message.textContent = show ? (errors[index] || (success ? (name === "password" ? "La contraseña cumple los requisitos." : "Las contraseñas coinciden.") : "")) : "";
             message.hidden = !message.textContent;
             message.classList.toggle("field-feedback-error", show && Boolean(errors[index]));
             message.classList.toggle("field-feedback-success", show && Boolean(success));
@@ -96,7 +99,7 @@
         button.setAttribute("aria-disabled", String(!ready));
         help.textContent = ready
             ? "Los campos están completos. Ya puede crear su cuenta."
-            : "Complete los cuatro campos correctamente para habilitar Crear mi cuenta. Use entre 12 y 128 caracteres para la contraseña y repítala igual.";
+            : "Complete los cuatro campos. Use de 4 a 128 caracteres con mayúscula, minúscula, número y símbolo, y repita la contraseña igual.";
         return errors;
     }
 

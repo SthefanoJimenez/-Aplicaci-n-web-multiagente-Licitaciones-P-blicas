@@ -148,8 +148,10 @@ def register():
             errors["email"] = "Escriba un correo válido."
         if not 2 <= len(values["company_name"]) <= 200:
             errors["company_name"] = "Escriba el nombre de su empresa (de 2 a 200 caracteres)."
-        if not 12 <= len(password) <= 128:
-            errors["password"] = "Use una contraseña de 12 a 128 caracteres."
+        if (not 4 <= len(password) <= 128 or
+                not all(re.search(pattern, password) for pattern in
+                        (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^\w\s]|_"))):
+            errors["password"] = "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo."
         if password != request.form.get("password_confirm"):
             errors["password_confirm"] = "Las contraseñas no coinciden."
         if not errors:
