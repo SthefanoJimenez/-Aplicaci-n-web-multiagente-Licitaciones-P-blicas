@@ -11,6 +11,7 @@ import documents
 from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, unit_text
+from services.chat_formatting import render_assistant_text
 
 
 app = Flask(__name__)
@@ -28,6 +29,7 @@ app.template_filter("pen")(format_pen)
 app.template_filter("amount")(format_amount)
 app.template_filter("unit_text")(unit_text)
 app.template_filter("place")(analytics.place_label)
+app.template_filter("assistant_text")(render_assistant_text)
 
 
 @app.template_filter("number")

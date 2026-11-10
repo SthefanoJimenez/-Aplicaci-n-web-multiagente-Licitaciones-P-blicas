@@ -118,12 +118,12 @@
     </aside>
 
     <!-- Panel principal: Conversación -->
-    <main class="assistant-chat-pane">
+    <section class="assistant-chat-pane" aria-label="Conversación con LicitaBot">
       <!-- Barra superior del Asistente -->
       <div class="chat-header-bar">
         <div class="chat-assistant-meta">
           <div class="assistant-avatar-wrap">
-            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="assistant-avatar-img" alt="LicitaBot">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="assistant-avatar-img" alt="LicitaBot" width="44" height="44">
             <span class="pulse-status-dot" title="En línea"></span>
           </div>
           <div class="chat-assistant-details">
@@ -144,7 +144,7 @@
         {% if not history %}
         <div class="chat-bubble chat-bubble-ai welcome-card">
           <div class="avatar-ai">
-            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot" width="40" height="40">
           </div>
           <div class="bubble-content">
             <div class="welcome-header">
@@ -191,10 +191,10 @@
           {% else %}
           <div class="chat-bubble chat-bubble-ai">
             <div class="avatar-ai">
-              <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+              <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot" width="40" height="40">
             </div>
             <div class="bubble-content markdown-body">
-              {{ msg.content | replace('\n', '<br>') | safe }}
+              {{ msg.content | assistant_text }}
             </div>
           </div>
           {% endif %}
@@ -205,6 +205,7 @@
       <form class="chat-form" method="post" action="{{ url_for('assistant_ask') }}" id="chat-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="input-wrapper">
+          <label for="chat-input" class="sr-only">Tu consulta al asistente</label>
           <textarea
             id="chat-input"
             name="query"
@@ -222,7 +223,7 @@
           <span class="chat-hint">Presiona <strong>Enter</strong> para enviar, <strong>Shift + Enter</strong> para nueva línea.</span>
         </div>
       </form>
-    </main>
+    </section>
   </div>
 </div>
 
@@ -236,7 +237,7 @@ function fillQuery(text) {
 // Auto-scroll al final del chat al cargar
 document.addEventListener("DOMContentLoaded", function() {
   const container = document.getElementById("chat-messages-container");
-  if (container) {
+  if (container && container.querySelector('.chat-bubble-user')) {
     container.scrollTop = container.scrollHeight;
   }
   
@@ -244,10 +245,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const form = document.getElementById("chat-form");
   if (textarea && form) {
     textarea.addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         if (textarea.value.trim().length > 0) {
-          form.submit();
+          form.requestSubmit();
         }
       }
     });
