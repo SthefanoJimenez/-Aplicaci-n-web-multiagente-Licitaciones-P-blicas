@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "auth/_fields.html" import input, summary %}
+{% from "auth/_fields.html" import input, summary, password_toggle %}
 {% set active_nav = "register" %}
 {% block title %}Crear cuenta{% endblock %}
 {% block content %}
@@ -8,7 +8,7 @@
   <h1 class="page-title" id="account-title">Crear cuenta</h1>
   <p class="page-lead">Guarde el perfil de su empresa para consultarlo y actualizarlo cuando lo necesite.</p>
   {{ summary(errors) }}
-  <form method="post" action="{{ url_for('auth.register') }}" data-registration-form>
+  <form method="post" action="{{ url_for('auth.register') }}" data-registration-form data-email-pattern="{{ email_pattern }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization', minimum=2) }}
@@ -25,9 +25,12 @@
           </div>
         </details>
       </div>
-      <input id="password" name="password" type="password" required autocomplete="new-password"
-             minlength="4" maxlength="128" aria-describedby="password-hint{% if errors.get('password') %} password-error{% endif %}"
-             {% if errors.get('password') %}aria-invalid="true"{% endif %}>
+      <div class="password-input" data-password-wrapper>
+        <input id="password" name="password" type="password" required autocomplete="new-password"
+               minlength="4" maxlength="128" aria-describedby="password-hint{% if errors.get('password') %} password-error{% endif %}"
+               {% if errors.get('password') %}aria-invalid="true"{% endif %}>
+        {{ password_toggle('password') }}
+      </div>
       {% if errors.get('password') %}<p class="error" id="password-error">{{ errors['password'] }}</p>{% endif %}
     </div>
     {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=4, maximum=128) }}
@@ -39,5 +42,6 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/password-visibility.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/register.js') }}" defer></script>
 {% endblock %}

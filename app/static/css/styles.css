@@ -3086,7 +3086,8 @@ details.table-view summary {
 }
 
 .account-panel input[type="email"],
-.account-panel input[type="password"] {
+.account-panel input[type="password"],
+.account-panel .password-input input {
     width: 100%;
     font: 400 16px/1.5 var(--font);
     color: var(--ink);
@@ -3094,6 +3095,44 @@ details.table-view summary {
     border: 1.5px solid var(--rule-strong);
     border-radius: 8px;
     padding: 12px 14px;
+}
+
+.password-input {
+    position: relative;
+}
+
+.account-panel .password-input input {
+    padding-inline-end: 52px;
+}
+
+.password-toggle {
+    position: absolute;
+    inset-inline-end: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--seal);
+    cursor: pointer;
+}
+
+.password-toggle:hover {
+    background: var(--seal-tint);
+}
+
+.password-toggle[hidden],
+.password-toggle [data-password-slash] {
+    display: none;
+}
+
+.password-toggle.is-visible [data-password-slash] {
+    display: block;
 }
 
 .account-panel input[aria-invalid="true"] {

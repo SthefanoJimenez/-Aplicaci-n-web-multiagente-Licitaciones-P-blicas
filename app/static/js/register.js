@@ -8,6 +8,7 @@
     const button = form.querySelector('[type="submit"]');
     const help = document.getElementById("registration-help");
     const announcement = document.getElementById("registration-announcement");
+    const emailPattern = new RegExp(`^(?:${form.dataset.emailPattern})$`, "u");
     const summary = form.previousElementSibling?.matches('[role="alert"]') ? form.previousElementSibling : null;
     const touched = new Set();
     const serverErrors = new Map();
@@ -62,7 +63,7 @@
         message.id = `${name}-feedback`;
         message.className = "field-feedback";
         message.hidden = true;
-        field.insertAdjacentElement("afterend", message);
+        (field.closest("[data-password-wrapper]") || field).insertAdjacentElement("afterend", message);
         const descriptions = new Set((field.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
         descriptions.add(message.id);
         field.setAttribute("aria-describedby", [...descriptions].join(" "));
@@ -80,8 +81,8 @@
         } else if (name === "email") {
             const email = value.trim();
             if (!email) return "Escriba su correo electrónico.";
-            if (length(email) > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
-                return "Escriba un correo válido, por ejemplo: empresa@ejemplo.com.";
+            if (length(email) > 254 || !emailPattern.test(email)) {
+                return "Escriba un correo válido, por ejemplo: empresa@ejemplo.com. Revise los puntos y la terminación del dominio.";
             }
         } else if (name === "password") {
             const count = length(value);
