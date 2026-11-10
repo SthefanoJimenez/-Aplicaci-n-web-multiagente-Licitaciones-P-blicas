@@ -11,7 +11,7 @@ from werkzeug.security import check_password_hash
 from app import app
 from services import accounts
 
-PASSWORD = "Una frase de prueba 2026"
+PASSWORD = "Una frase de prueba 2026!"
 PROFILE = {"company_name": "Materiales del Norte", "business_activity": "Venta de materiales",
            "rubros": "Cemento y acero", "monthly_sales": "15000.50", "experience_years": "5",
            "similar_contracts_amount": "80000.00", "specialized_staff": "Un técnico con tres años de experiencia"}
@@ -35,6 +35,76 @@ def test_register_creates_company_hash_and_session(account_client, account_facto
     with account_client.session_transaction() as sess:
         assert "auth_token" in sess and PASSWORD not in str(dict(sess))
     assert "Mi empresa" in account_client.get("/perfil").text
+
+
+@pytest.mark.parametrize("password", ["Aa1!", "Aa1_", "Aa1" + "!" * 125])
+def test_registration_accepts_password_policy_boundaries(account_client, password):
+    response = register(account_client, password=password, password_confirm=password)
+    assert response.status_code == 302
+    account_client.post("/salir")
+    assert account_client.post("/ingresar", data={"email": "arturo@example.test", "password": password}).status_code == 302
+
+
+@pytest.mark.parametrize("password", ["", "A1!", "aa1!", "AA1!", "Aab!", "Aa12", "Aa1 ", "Aa1é", "Aa1" + "!" * 126])
+def test_registration_rejects_missing_password_requirements(account_client, account_factory, password):
+    response = register(account_client, password=password, password_confirm=password)
+    assert response.status_code == 400
+    assert 'data-error-field="password"' in response.text
+    with account_factory() as db:
+        assert db.scalar(select(accounts.User)) is None
+
+
+def test_existing_passwords_still_work_after_registration_policy_change(account_client, account_factory):
+    legacy = "Una frase antigua sin símbolos"
+    accounts.create_user(account_factory, "anterior@example.test", legacy, "Empresa anterior")
+    response = account_client.post("/ingresar", data={"email": "anterior@example.test", "password": legacy})
+    assert response.status_code == 302 and response.location.endswith("/perfil")
+
+
+def test_password_confirmation_and_email_remain_required(account_client):
+    response = register(account_client, password="Aa1!", password_confirm="Bb2?", email="sin-arroba.example.test")
+    assert response.status_code == 400
+    assert 'data-error-field="email"' in response.text
+    assert 'data-error-field="password_confirm"' in response.text
+
+
+@pytest.mark.parametrize("email", [
+    "persona@empresa.pe", "persona@empresa.cl", "persona@empresa.com",
+    "persona@sub.empresa.com.pe", "nombre.apellido+ventas@empresa.co.uk",
+    "o'connor@empresa.ie", "a@b.co", "persona@empresa.travelersinsurance",
+    "persona@xn--bcher-kva.de", "persona@empresa.xn--p1ai",
+    "a" * 64 + "@empresa.pe", "persona@" + "a" * 63 + ".pe",
+    "persona@empresa." + "a" * 63,
+    "a" * 64 + "@" + "b" * 63 + "." + "c" * 63 + "." + "d" * 61,
+])
+def test_registration_accepts_short_long_and_multilevel_domains(account_client, email):
+    assert register(account_client, email=email).status_code == 302
+
+
+@pytest.mark.parametrize("email", [
+    "dolores@gmail..", "dolores@gmail.", "dolores@gmail...", "dolores@gmail.c",
+    "persona@empresa..com", "persona@.empresa.com", "persona@empresa.com.",
+    "persona@empresa.123", "persona@empresa.c-m", "persona@-empresa.com",
+    "persona@empresa-.com", "persona@em_presa.com", "persona@localhost",
+    ".persona@empresa.com", "persona.@empresa.com", "per..sona@empresa.com",
+    "persona@@empresa.com", "per sona@empresa.com", "persona@em presa.com",
+    "a" * 65 + "@empresa.pe", "persona@" + "a" * 64 + ".pe",
+    "persona@empresa." + "a" * 64,
+    "a" * 64 + "@" + "b" * 63 + "." + "c" * 63 + "." + "d" * 62,
+])
+def test_invalid_email_is_rejected_before_creating_an_account(account_client, account_factory, email):
+    response = register(account_client, email=email)
+    assert response.status_code == 400
+    assert 'data-error-field="email"' in response.text
+    with account_factory() as db:
+        assert db.scalar(select(accounts.User)) is None
+
+
+def test_legacy_email_format_is_not_revalidated_at_login(account_client, account_factory):
+    # Una cuenta creada con una regla anterior sigue pudiendo entrar.
+    accounts.create_user(account_factory, "anterior@empresa..com", PASSWORD, "Empresa anterior")
+    response = account_client.post("/ingresar", data={"email": "anterior@empresa..com", "password": PASSWORD})
+    assert response.status_code == 302 and response.location.endswith("/perfil")
 
 
 def test_profile_survives_logout_login_and_new_browser(account_client, account_factory):

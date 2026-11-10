@@ -99,9 +99,8 @@ def test_db():
 
 
 @pytest.fixture
-def client():
-    app.config["TESTING"] = True
-    return app.test_client()
+def client(signed_in_client):
+    return signed_in_client
 
 
 # ---------------------------------------------------------------------------
@@ -225,3 +224,10 @@ def test_case_10_multiturn_conversation_maintains_profile_and_history(test_db, c
     assert "2001" in html2
     assert "Combustibles y lubricantes" in html2
     assert "Perfil del Proveedor" in html2
+
+
+def test_specific_tender_question_still_uses_its_bases(test_db):
+    result = assistant.ask_assistant("¿Qué información necesito para la convocatoria 2002?")
+    assert result["status"] != "general_guidance"
+    assert [evaluation["code"] for evaluation in result["evaluations"]] == ["2002"]
+    assert "pág. 7" in result["response"]

@@ -3086,7 +3086,8 @@ details.table-view summary {
 }
 
 .account-panel input[type="email"],
-.account-panel input[type="password"] {
+.account-panel input[type="password"],
+.account-panel .password-input input {
     width: 100%;
     font: 400 16px/1.5 var(--font);
     color: var(--ink);
@@ -3094,6 +3095,44 @@ details.table-view summary {
     border: 1.5px solid var(--rule-strong);
     border-radius: 8px;
     padding: 12px 14px;
+}
+
+.password-input {
+    position: relative;
+}
+
+.account-panel .password-input input {
+    padding-inline-end: 52px;
+}
+
+.password-toggle {
+    position: absolute;
+    inset-inline-end: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--seal);
+    cursor: pointer;
+}
+
+.password-toggle:hover {
+    background: var(--seal-tint);
+}
+
+.password-toggle[hidden],
+.password-toggle [data-password-slash] {
+    display: none;
+}
+
+.password-toggle.is-visible [data-password-slash] {
+    display: block;
 }
 
 .account-panel input[aria-invalid="true"] {
@@ -3125,6 +3164,61 @@ details.table-view summary {
     color: var(--good);
 }
 
+/* Ayuda de contraseña: accesible por puntero, teclado y pantalla táctil. */
+.password-label-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.password-label-row .label {
+    margin: 0;
+}
+
+.password-help summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: var(--seal);
+    cursor: pointer;
+    list-style: none;
+}
+
+.password-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.password-help summary:hover,
+.password-help[open] summary {
+    background: var(--seal-tint);
+}
+
+.password-help-card {
+    position: absolute;
+    z-index: 10;
+    inset-inline-start: 0;
+    top: 100%;
+    width: min(100%, 350px);
+    padding: 14px 16px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 5px 18px rgba(24, 33, 46, .16);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.password-help-card p {
+    margin: 0;
+}
+
 .account-panel .button[aria-disabled="true"],
 .account-panel .button[aria-disabled="true"]:hover {
     background: var(--rule);
@@ -3150,7 +3244,7 @@ details.table-view summary {
 .topbar-inner .nav {
     justify-content: center;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     min-width: 0;
 }
 
@@ -3302,6 +3396,7 @@ details.table-view summary {
         white-space: normal;
         padding: 8px;
     }
+}
 
 /* ===================================================================   Asistente Inteligente de Postulacion a Licitaciones (HU-010 / HU-014)
    Diseno moderno inspirado en ChatGPT / Claude / Gemini
@@ -3526,6 +3621,7 @@ details.table-view summary {
     flex-direction: column;
     height: 720px;
     overflow: hidden;
+    min-width: 0;
 }
 
 /* Header bar del chat */
@@ -3554,6 +3650,7 @@ details.table-view summary {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .assistant-avatar-img {
@@ -3584,6 +3681,7 @@ details.table-view summary {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .assistant-bot-name {
@@ -3621,6 +3719,7 @@ details.table-view summary {
 /* Chat Container */
 .chat-container {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 24px;
     display: flex;
@@ -3634,6 +3733,19 @@ details.table-view summary {
     gap: 12px;
     max-width: 90%;
     animation: fadeInBubble 0.25s ease-out;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.assistant-title-group,
+.chat-assistant-details,
+.assistant-page .bubble-content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.assistant-page .welcome-card {
+    max-width: 100%;
 }
 
 @keyframes fadeInBubble {
@@ -3714,6 +3826,8 @@ details.table-view summary {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .welcome-header h3 {
@@ -3790,6 +3904,7 @@ details.table-view summary {
 
 .chat-input {
     flex: 1;
+    min-width: 0;
     border: 1.5px solid #cbd5e1;
     border-radius: 12px;
     padding: 12px 16px;
@@ -3867,6 +3982,11 @@ details.table-view summary {
     padding-left: 22px;
 }
 
+.markdown-body ol {
+    margin: 0 0 12px;
+    padding-left: 22px;
+}
+
 .markdown-body li {
     margin-bottom: 4px;
 }
@@ -3879,4 +3999,54 @@ details.table-view summary {
     border-radius: 0 8px 8px 0;
     color: var(--ink-2);
     font-style: italic;
+}
+
+@media (max-width: 680px) {
+    .assistant-header {
+        flex-direction: column;
+    }
+
+    .assistant-layout {
+        gap: 16px;
+    }
+
+    .assistant-page .card-profile,
+    .assistant-page .chat-header-bar,
+    .assistant-page .chat-container,
+    .assistant-page .chat-form {
+        padding: 16px;
+    }
+
+    .assistant-page .profile-item {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .assistant-page .chat-bubble {
+        max-width: 100%;
+        gap: 8px;
+    }
+
+    .assistant-page .chat-bubble-ai .bubble-content {
+        padding: 12px;
+    }
+
+    .assistant-page .input-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .assistant-page .chat-input {
+        width: 100%;
+    }
+
+    .assistant-page .btn-send {
+        justify-content: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .assistant-page .chat-bubble {
+        animation: none;
+    }
 }

@@ -19,3 +19,6 @@
   <p class="hint">Puede consultar el <a href="{{ url_for('overview') }}">panorama del mercado</a> y las <a href="{{ url_for('tenders_list') }}">convocatorias vigentes</a> sin iniciar sesión.</p>
 </section>
 {% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/password-visibility.js') }}" defer></script>
+{% endblock %}

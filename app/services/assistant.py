@@ -19,6 +19,7 @@ Estructura del grafo:
 """
 from typing import Any, Dict, List, Optional, TypedDict
 import re
+import unicodedata
 
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
@@ -132,6 +133,17 @@ def check_profile_node(state: AssistantState) -> Dict[str, Any]:
     profile = state.get("profile", {})
     query = state.get("query", "").lower()
 
+    # Una pregunta de preparación general no requiere conocer el rubro primero.
+    normalized = "".join(
+        char for char in unicodedata.normalize("NFD", query)
+        if unicodedata.category(char) != "Mn"
+    )
+    asks_for_material = re.search(r"\bque\s+(?:informacion|datos|documentos)\b", normalized)
+    asks_to_prepare = re.search(r"\b(?:tener|preparar|necesito|necesita|necesitan|necesitamos)\b", normalized)
+    has_specific_code = re.search(r"\b\d{4,8}\b", query)
+    if asks_for_material and asks_to_prepare and not has_specific_code:
+        return {"missing_data": None, "status": "general_guidance"}
+
     # Si la consulta pregunta a qué postular pero no conocemos el rubro ni la actividad
     if not profile.get("rubro") and not any(w in query for w in ("1510", "2510", "3011", "combustible", "vehiculo", "vehículo", "cemento")):
         # Verificar si menciona un código específico de convocatoria (ej. "1001" o "1256397")
@@ -148,6 +160,8 @@ def check_profile_node(state: AssistantState) -> Dict[str, Any]:
 
 
 def route_after_profile_check(state: AssistantState) -> str:
+    if state.get("status") == "general_guidance":
+        return "preparation_guide"
     if state.get("status") == "need_data":
         return "request_data"
     return "search_tenders"
@@ -156,6 +170,22 @@ def route_after_profile_check(state: AssistantState) -> str:
 def request_data_node(state: AssistantState) -> Dict[str, Any]:
     missing = state.get("missing_data", "Por favor indica qué bienes ofrece tu empresa.")
     return {"response": missing}
+
+
+def preparation_guide_node(state: AssistantState) -> Dict[str, Any]:
+    """Responde preguntas generales de preparación sin consultar ni evaluar procesos."""
+    return {"response": (
+        "### Qué tener listo para revisar una convocatoria\n\n"
+        "- **Convocatoria:** su código o enlace, las bases y sus anexos, y el plazo de presentación.\n"
+        "- **Empresa y productos:** giro, rubros y descripción de lo que ofrece tu empresa.\n"
+        "- **Experiencia:** contratos similares, montos facturados y documentos que los sustenten.\n"
+        "- **Registros y habilitaciones:** información del RNP y de las autorizaciones que correspondan según las bases.\n"
+        "- **Documentos:** constancias, certificados y sus fechas de vigencia para contrastarlos con lo solicitado.\n"
+        "- **Consorcio, si corresponde:** integrantes, aportes y documentación de cada participante.\n\n"
+        "Esta es una lista de preparación; **todavía no es un veredicto de cumplimiento**. "
+        "Cada requisito debe comprobarse en las bases de la convocatoria concreta.\n\n"
+        "Para continuar, comparte el **código de la convocatoria** o indica **qué producto vende tu empresa**."
+    )}
 
 
 def search_tenders_node(state: AssistantState) -> Dict[str, Any]:
@@ -451,6 +481,7 @@ def build_assistant_graph():
     graph.add_node("start", start_node)
     graph.add_node("check_profile", check_profile_node)
     graph.add_node("request_data", request_data_node)
+    graph.add_node("preparation_guide", preparation_guide_node)
     graph.add_node("search_tenders", search_tenders_node)
     graph.add_node("evaluate_tenders", evaluate_tenders_node)
     graph.add_node("generate_response", generate_response_node)
@@ -462,10 +493,12 @@ def build_assistant_graph():
         route_after_profile_check,
         {
             "request_data": "request_data",
+            "preparation_guide": "preparation_guide",
             "search_tenders": "search_tenders",
         }
     )
     graph.add_edge("request_data", END)
+    graph.add_edge("preparation_guide", END)
     graph.add_edge("search_tenders", "evaluate_tenders")
     graph.add_edge("evaluate_tenders", "generate_response")
     graph.add_edge("generate_response", END)
