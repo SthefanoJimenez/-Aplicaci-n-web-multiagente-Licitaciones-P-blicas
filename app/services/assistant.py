@@ -521,7 +521,7 @@ ASSISTANT_GRAPH = build_assistant_graph()
 
 
 def ask_assistant(query: str, history: Optional[List[Dict[str, str]]] = None, profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Punto de entrada principal para consultar al asistente interactivo."""
+    """Compatibilidad del grafo original; la web autenticada usa eligibility_chat.answer (HU-010)."""
     history = history or []
     profile = profile or {}
 

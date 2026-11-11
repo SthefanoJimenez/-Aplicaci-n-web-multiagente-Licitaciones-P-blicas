@@ -327,7 +327,9 @@ def normalize_release(release):
     party = _buyer_party(release)
     items, item_status = [], []
     for item in tender.get("items", []):
-        items.append({"description": item.get("description"), "classifications": _classifications(item)})
+        items.append({"description": item.get("description"), "classifications": _classifications(item),
+                      "quantity": item.get("quantity"), "unit": item.get("unit") or {},
+                      "status": item.get("statusDetails") or item.get("status")})
         item_status.append(str(item.get("statusDetails") or item.get("status") or "").strip())
     documents = [
         {"title": d.get("title"), "type": d.get("documentType"), "format": d.get("format"), "url": d.get("url")}

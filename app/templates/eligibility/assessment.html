@@ -1,0 +1,96 @@
+<section class="section eligibility" id="elegibilidad" aria-labelledby="eligibility-title">
+  <h2 class="section-title" id="eligibility-title">Elegibilidad de mi empresa</h2>
+  {% if not current_user %}
+  <div class="notice"><p><a href="{{ url_for('auth.login', next=url_for('tender_sheet', code=tender.code)) }}">Inicie sesión</a> para contrastar esta convocatoria con su perfil y documentos.</p></div>
+  {% elif eligibility_error %}
+  <div class="notice notice-warning" role="status"><p>{{ eligibility_error }}</p></div>
+  {% elif assessment %}
+  <div class="panel eligibility-summary" data-eligibility-color="{{ assessment.color }}">
+    <span class="eligibility-badge eligibility-{{ assessment.color }}">{{ assessment.color|capitalize }} · {{ assessment.label }}</span>
+    <p><strong>Qué decide el color:</strong> {{ assessment.reason }}</p>
+    <p class="muted small">Evaluación preliminar de {{ current_user.company_name }} con su perfil guardado y sus documentos al {{ assessment.on_date }} ({{ assessment.date_basis }}). Los datos son declarados; la carga de un PDF no verifica su autenticidad ni su contenido.</p>
+    <div class="eligibility-metrics">
+      <div><strong>Monto evaluado</strong><br>{% if assessment.amount is not none %}{{ assessment.amount|pen_total }}<br><span class="muted small">{{ assessment.amount_source }}</span>{% else %}<span>Falta el monto</span>{% endif %}</div>
+      <div><strong>Garantía orientativa de fiel cumplimiento</strong><br>{% if assessment.guarantee.amount is not none %}{{ assessment.guarantee.amount|pen_total }}{% else %}Pendiente de datos{% endif %}<br><span class="muted small">Se recalcula sobre el monto contractual.</span></div>
+      <div><strong>Otras garantías orientativas</strong><br>Accesorias: {% if assessment.guarantee.accessory is not none %}{{ assessment.guarantee.accessory|pen_total }}{% else %}Pendiente{% endif %}<br>Adelantos: {% if assessment.guarantee.advance is not none %}{{ assessment.guarantee.advance|pen_total }}{% else %}Pendiente{% endif %}</div>
+    </div>
+    {% if assessment.estimate %}
+    <details class="eligibility-details"><summary>Cómo se estimó el monto</summary>
+      <p class="muted small">Estimación con precios históricos de 2023–2025; no representa un precio vigente ni el monto publicado. Se exige el mismo CUBSO y unidad de medida, sin conversión.</p>
+      <ul>{% for item in assessment.estimate %}<li>{{ item.name }} (CUBSO {{ item.code }}): {{ item.quantity|quantity }} {{ item.unit }} × mediana {{ item.median|pen }} = {{ item.amount|pen_total }}. {{ item.n }} adjudicaciones, {{ item.year_from }}–{{ item.year_to }}.</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+    <details class="eligibility-details"><summary>Documentos considerados por tipo y vigencia</summary>
+      <ul>{% for kind, counts in assessment.inventory.items() %}<li>{{ {'rnp':'RNP','experiencia':'Experiencia','personal':'Personal','otro':'Otro'}[kind] }}: {{ counts.current|length }} vigentes, {{ counts.expired|length }} vencidos y {{ counts.future|length }} aún no vigentes.</li>{% endfor %}</ul>
+      <a href="{{ url_for('company_documents.index') }}">Revisar documentos de mi empresa</a>
+    </details>
+    <p class="small"><a href="{{ assessment.guarantee.source }}" target="_blank" rel="noopener">Garantías: arts. 113 y 114</a> · <a href="{{ assessment.guarantee.exemption_source }}" target="_blank" rel="noopener">Excepciones: art. 139</a> · <a href="{{ assessment.guarantee.uit_source }}" target="_blank" rel="noopener">UIT 2026</a>. La condición MYPE permite retención en los supuestos aplicables; no reduce el porcentaje.</p>
+    <a class="button button-secondary" href="{{ url_for('assistant_chat', convocatoria=tender.code) }}">Consultar esta convocatoria al asistente</a>
+  </div>
+
+  <div class="eligibility-checks">
+    {% for check in assessment.checks %}
+    <article class="panel eligibility-check">
+      <h3>{{ check.label }} <span class="eligibility-check-state">{{ {'pass':'Compatible','pending':'Por revisar','fail':'Incumplimiento','consortium':'Solo en consorcio','correctable':'Falta subsanable declarada'}[check.status] }}</span></h3>
+      <p>{{ check.reason }}</p>
+      {% if check.text %}
+      <details><summary>Ver requisito de las bases{% if check.page %} · página {{ check.page }}{% else %} · sin página identificada{% endif %}</summary>
+        {% if check.file_name %}<p class="muted small">{{ check.file_name }}</p>{% endif %}
+        <blockquote class="eligibility-source">{{ check.text }}</blockquote>
+      </details>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+
+  <details class="panel eligibility-form" {% if assessment.color != 'verde' %}open{% endif %}>
+    <summary><strong>Completar datos y revisar requisitos</strong></summary>
+    <p>El perfil y los documentos se consultan al recalcular. <a href="{{ url_for('auth.profile') }}">Actualizar Mi empresa</a>. Confirme las condiciones de esta convocatoria en sus bases; lo que no pueda comprobar debe quedar por revisar.</p>
+    <form method="post" action="{{ url_for('eligibility_save', code=tender.code) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <fieldset><legend>Datos para el cálculo de garantías</legend>
+        <div class="profile-grid">
+          <div><label for="elig-regime">Régimen indicado en las bases</label><select name="regime" id="elig-regime"><option value="">Por confirmar</option><option value="32069" {% if saved_inputs.get('regime') == '32069' %}selected{% endif %}>Ley 32069</option><option value="30225" {% if saved_inputs.get('regime') == '30225' %}selected{% endif %}>Ley 30225: requiere revisión de reglas</option></select></div>
+          <div><label for="elig-rnp">Situación declarada del RNP</label><select name="rnp" id="elig-rnp"><option value="">Por confirmar</option><option value="yes" {% if saved_inputs.get('rnp') == 'yes' %}selected{% endif %}>Cuento con RNP</option><option value="no" {% if saved_inputs.get('rnp') == 'no' %}selected{% endif %}>No cuento con RNP</option></select></div>
+          <div><label for="elig-method">Modalidad prevista de garantía</label><select name="guarantee_method" id="elig-method"><option value="">Por confirmar</option><option value="coverage" {% if saved_inputs.get('guarantee_method') == 'coverage' %}selected{% endif %}>Carta fianza, seguro u otra cobertura admisible</option><option value="retention" {% if saved_inputs.get('guarantee_method') == 'retention' %}selected{% endif %}>Retención de pago, si corresponde</option></select></div>
+          <div><label for="elig-capacity">Cobertura disponible para garantías (S/)</label><input id="elig-capacity" name="guarantee_capacity" type="number" min="0" step="0.01" value="{{ saved_inputs.get('guarantee_capacity','') }}"><p class="field-help">Capacidad de cobertura declarada; no se deduce de sus ventas.</p></div>
+          <div><label for="elig-accessory">Monto contractual de prestaciones accesorias (S/)</label><input id="elig-accessory" name="accessory_amount" type="number" min="0" step="0.01" value="{{ saved_inputs.get('accessory_amount','') }}"><p class="field-help">Solo si las bases exigen garantía por estas prestaciones.</p></div>
+          <div><label for="elig-advance">Adelanto que solicitaría (S/)</label><input id="elig-advance" name="advance_amount" type="number" min="0" step="0.01" value="{{ saved_inputs.get('advance_amount','') }}"><p class="field-help">La garantía por adelanto cubre el mismo monto, incluso si se usa retención para fiel cumplimiento.</p></div>
+        </div>
+        <label class="eligibility-checkbox"><input type="checkbox" name="mype" value="1" {% if saved_inputs.get('mype') %}checked{% endif %}> Mi empresa califica como micro o pequeña empresa.</label>
+        <label class="eligibility-checkbox"><input type="checkbox" name="whole_contract" value="1" {% if saved_inputs.get('whole_contract') %}checked{% endif %}> Confirmé que el monto evaluado comprende todos los ítems o contratos que se me adjudicarían en este proceso.</label>
+        <label class="eligibility-checkbox"><input type="checkbox" name="accessory_required" value="1" {% if saved_inputs.get('accessory_required') %}checked{% endif %}> Las bases exigen garantía por prestaciones accesorias.</label>
+      </fieldset>
+      <fieldset><legend>Si no hay monto ni cantidades suficientes en la fuente</legend>
+        <p class="small">Puede declarar la cantidad y el CUBSO exacto de un único bien que abarque el contrato evaluado. Para varios bienes se usan todos los ítems de la fuente; no use aquí una cantidad parcial. La mediana se calcula automáticamente.</p>
+        {% if assessment.item_count > 1 %}<p>La fuente contiene varios ítems. Se calcula la suma de todos; no se sustituye por una cantidad parcial declarada.</p>{% else %}
+        <div class="profile-grid">
+          <div><label for="elig-code">CUBSO exacto del catálogo histórico</label><input id="elig-code" name="catalog_code" type="text" inputmode="numeric" maxlength="20" value="{{ saved_inputs.get('catalog_code','') }}">{% if catalog_code %}<p class="field-help">Posible coincidencia por descripción: <a href="{{ url_for('good_sheet', code=catalog_code) }}">{{ catalog_code }} · revisar el bien y su unidad</a>. Confírmela en las bases.</p>{% endif %}</div>
+          <div><label for="elig-quantity">Cantidad total en la unidad del catálogo</label><input id="elig-quantity" name="quantity" type="number" min="0.0001" step="0.0001" value="{{ saved_inputs.get('quantity','') }}"></div>
+        </div>
+        {% endif %}
+      </fieldset>
+      <fieldset><legend>Personal y eventual consorcio</legend>
+        <div class="profile-grid">
+          <div><label for="elig-staff">Cantidad de personal que cumple la especialidad exigida</label><input id="elig-staff" name="staff_count" type="number" min="0" max="999999" step="1" value="{{ saved_inputs.get('staff_count','') }}"></div>
+          <div><label for="elig-partner-exp">Experiencia que aportaría el socio (S/)</label><input id="elig-partner-exp" name="partner_experience" type="number" min="0" step="0.01" value="{{ saved_inputs.get('partner_experience','') }}"></div>
+          <div><label for="elig-partner-doc">Documento del aporte del socio guardado en mi empresa</label><select id="elig-partner-doc" name="partner_document"><option value="">Sin sustento seleccionado</option>{% for doc in owned_documents %}<option value="{{ doc.id }}" {% if saved_inputs.get('partner_document') == doc.id %}selected{% endif %}>{{ doc.filename }} · {{ doc.type_label }}</option>{% endfor %}</select></div>
+        </div>
+        <label class="eligibility-checkbox"><input type="checkbox" name="consortium_confirmed" value="1" {% if saved_inputs.get('consortium_confirmed') %}checked{% endif %}> Revisé las reglas de consorcio de estas bases y confirmo que el aporte, la participación y las obligaciones declaradas son admisibles.</label>
+        <p class="field-help">No se supone que las autorizaciones o las condiciones de cada integrante puedan sumarse. La evaluación no consulta cuentas de otras empresas.</p>
+      </fieldset>
+      <fieldset><legend>Revisión del contenido de los requisitos</legend>
+        <p class="small">Los importes y la vigencia se contrastan con los datos guardados. Revise además el contenido y la correspondencia de sus documentos con cada requisito. Esta declaración no reemplaza la revisión oficial.</p>
+        {% for req in assessment.requirements %}
+        <div class="eligibility-review">
+          <label for="review-{{ req.key }}">Requisito {{ loop.index }}{% if req.page %} · página {{ req.page }}{% else %} · sin página identificada{% endif %}</label>
+          <blockquote class="eligibility-source">{{ req.text }}</blockquote>
+          <select id="review-{{ req.key }}" name="review_{{ req.key }}">{% for value, label in review_options.items() %}<option value="{{ value }}" {% if saved_inputs.get('reviews',{}).get(req.key,'pending') == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </div>
+        {% else %}<p>La fuente no tiene requisitos extraídos para revisar; el resultado permanecerá amarillo hasta disponer de ellos.</p>{% endfor %}
+      </fieldset>
+      <button class="button button-primary" type="submit">Guardar datos y recalcular elegibilidad</button>
+    </form>
+  </details>
+  {% endif %}
+</section>

@@ -26,7 +26,7 @@ EMAIL_PATTERN = rf"(?=.{{1,64}}@){EMAIL_ATOM}(?:\.{EMAIL_ATOM})*@(?:{EMAIL_LABEL
 
 PRIVATE_ENDPOINTS = {"describe", "candidates", "back_to_candidates", "confirm", "market",
                      "cost", "verdict", "verdict_without_cost", "auth.profile"}
-PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente")
+PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente", "/elegibilidad")
 
 
 def store():

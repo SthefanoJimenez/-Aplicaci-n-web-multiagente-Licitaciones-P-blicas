@@ -78,6 +78,7 @@ def _apply_row(tender, row, now, run_id):
     tender.published_at = as_utc(ocds_source.parse_date(row.get("published")))
     tender.deadline_at = as_utc(ocds_source.parse_date(row.get("deadline")))
     tender.estimated_value = row.get("value")
+    tender.items = row.get("items") or []
     tender.currency = row.get("currency")
     tender.last_seen_at = now
     tender.last_run_id = run_id

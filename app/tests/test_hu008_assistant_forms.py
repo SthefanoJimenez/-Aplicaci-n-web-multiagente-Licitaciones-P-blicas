@@ -2,7 +2,7 @@
 from html.parser import HTMLParser
 
 from app import app
-from services import accounts, assistant, tenders
+from services import accounts, eligibility_chat, tenders
 
 
 class Forms(HTMLParser):
@@ -34,11 +34,11 @@ def test_chat_and_reset_submit_the_tokens_rendered_in_their_forms(account_factor
     monkeypatch.setattr(tenders, "availability", lambda: {"ok": False})
     calls = []
 
-    def reply(query, history=None, profile=None):
+    def reply(query, *args, history=None, profile=None):
         calls.append(query)
         return {"response": "Respuesta de integración", "profile": {"rubro": "3011"}}
 
-    monkeypatch.setattr(assistant, "ask_assistant", reply)
+    monkeypatch.setattr(eligibility_chat, "answer", reply)
     forms = Forms(client.get("/asistente").text).forms
     token = forms["/asistente"]["csrf_token"]
     assert token

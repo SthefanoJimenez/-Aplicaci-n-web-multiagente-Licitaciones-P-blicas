@@ -1,11 +1,8 @@
-"""Pruebas automatizadas y evaluación de 10 casos para el Asistente de Postulación (HU-010 / HU-014).
+"""Regresiones del grafo original HU-014 y de sus formularios.
 
-Criterios de Aceptación:
-- [x] El asistente usa el perfil guardado, los documentos, el consorcio si existe y los requisitos de las bases.
-- [x] Responde con una lista de convocatorias y su semáforo, y explica cada caso citando el requisito y la página de las bases.
-- [x] Si falta un dato del perfil (por ejemplo, el rubro o producto que vende), lo pide en lugar de suponerlo.
-- [x] Solo menciona convocatorias que existen en la base de datos (con su código real).
-- [x] Se evalúa con 10 preguntas de prueba con respuesta esperada.
+El recorrido autenticado de HU-010 se comprueba en test_hu010.py: usa el perfil
+persistido, los documentos propios, el cálculo de garantías y la misma regla en
+ficha, listado y asistente. Estos casos antiguos no prueban esa integración por sí solos.
 """
 from datetime import datetime, timedelta, timezone
 

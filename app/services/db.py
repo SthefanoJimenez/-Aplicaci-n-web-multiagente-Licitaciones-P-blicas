@@ -98,6 +98,8 @@ class Tender(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     estimated_value: Mapped[float | None] = mapped_column(Float)
+    # HU-010: cantidades y clasificación de los ítems; diferida para leer bases anteriores a la migración.
+    items: Mapped[list | None] = mapped_column(JSON, deferred=True)
     currency: Mapped[str | None] = mapped_column(String(10))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -210,7 +212,7 @@ def create_tables(engine):
 
 
 # Columnas agregadas a tablas que ya existían en Neon: create_all no las agrega por su cuenta.
-ADDED_COLUMNS = {"actualizaciones": ("rubros", "per_rubro")}       # EN-011
+ADDED_COLUMNS = {"actualizaciones": ("rubros", "per_rubro"), "convocatorias": ("items",)}
 
 
 def _add_missing_columns(engine):

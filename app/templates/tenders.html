@@ -93,7 +93,7 @@
 
 <div class="section">
   <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
-    <h2 class="section-title">Resultados ({{ tenders|length }} convocatorias vigentes)</h2>
+    <h2 class="section-title">Resultados ({{ total_items }} convocatorias vigentes)</h2>
     <span class="muted small">Ordenadas de la más reciente a la más antigua</span>
   </div>
 
@@ -109,6 +109,7 @@
           <th>Publicación</th>
           <th class="num">Antigüedad</th>
           <th class="num">Valor estimado</th>
+          <th>Elegibilidad de mi empresa</th>
           <th style="min-width: 170px;">Acciones</th>
         </tr>
       </thead>
@@ -166,6 +167,12 @@
             {% endif %}
           </td>
           <td>
+            {% set e = eligibility_results.get(t.code) %}
+            {% if e %}<a class="eligibility-badge eligibility-{{ e.color }}" href="{{ url_for('tender_sheet', code=t.code, _anchor='elegibilidad') }}">{{ e.color|capitalize }} · {{ e.label }}</a><p class="small">{{ e.reason }}</p>
+            {% elif current_user %}<span class="muted">Evaluación no disponible</span>
+            {% else %}<span class="muted">Inicie sesión para evaluar</span>{% endif %}
+          </td>
+          <td>
             <div style="display:flex; flex-direction:column; gap:6px;">
               {% if t.code %}
               <a class="button button-sm button-secondary" href="{{ url_for('tender_sheet', code=t.code) }}" title="Ficha de la convocatoria con sus requisitos de calificación">Ver requisitos</a>
@@ -196,6 +203,12 @@
     <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Ver todas las convocatorias vigentes</a>
   </div>
   {% endif %}
+  {% if total_pages > 1 %}<nav class="eligibility-pagination" aria-label="Páginas de convocatorias">
+    {% if page_number > 1 %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number-1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Anterior</a>{% endif %}
+    <span>Página {{ page_number }} de {{ total_pages }}</span>
+    {% if page_number < total_pages %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number+1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Siguiente</a>{% endif %}
+  </nav>{% endif %}
+  {% if eligibility_error %}<p class="notice notice-warning" role="status">{{ eligibility_error }}</p>{% endif %}
 </div>
 
 <!-- Modal / Toast de ayuda para buscar en SEACE -->
