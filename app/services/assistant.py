@@ -32,6 +32,16 @@ class Message(TypedDict):
     content: str
 
 
+# Frases de ventas al Estado. La negación se evalúa primero porque «nunca le he vendido
+# al Estado» contiene a su vez «he vendido al estado».
+_NEGATIVE_SALES = re.compile(
+    r"\b(?:nunca|jam[aá]s|no)\b[^.;\n]{0,40}?\b(?:vendid[oa]s?|vendo|vende|ventas?)\b"
+)
+_POSITIVE_SALES = re.compile(
+    r"\b(?:he|hemos|ya|vengo)\s+vendid[oa]s?\b|\bvendo al estado\b|\bproveedor(?: habitual)?\b"
+)
+
+
 class AssistantState(TypedDict, total=False):
     query: str
     messages: List[Dict[str, str]]
@@ -60,9 +70,10 @@ def extract_profile_updates(text: str, current_profile: Dict[str, Any]) -> Dict[
         p["has_rnp"] = True
 
     # Ventas al estado / experiencia previa
-    if "nunca he vendido" in text_lower or "sin ventas al estado" in text_lower or "primera vez" in text_lower:
+    if (_NEGATIVE_SALES.search(text_lower) or "sin ventas al estado" in text_lower
+            or "primera vez" in text_lower):
         p["sold_to_state"] = False
-    elif "he vendido al estado" in text_lower or "vendo al estado" in text_lower:
+    elif _POSITIVE_SALES.search(text_lower):
         p["sold_to_state"] = True
 
     # Experiencia acumulada (S/ o soles)

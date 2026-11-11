@@ -3302,6 +3302,7 @@ details.table-view summary {
         white-space: normal;
         padding: 8px;
     }
+}
 
 /* ===================================================================   Asistente Inteligente de Postulacion a Licitaciones (HU-010 / HU-014)
    Diseno moderno inspirado en ChatGPT / Claude / Gemini
@@ -3879,4 +3880,21 @@ details.table-view summary {
     border-radius: 0 8px 8px 0;
     color: var(--ink-2);
     font-style: italic;
+}
+
+/* --- Estado de envío del chat y contención de respuestas largas --- */
+.chat-form.is-sending .btn-send,
+.btn-send:disabled {
+    opacity: 0.65;
+    cursor: progress;
+}
+
+.chat-bubble .bubble-content {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.chat-bubble .bubble-content img {
+    max-width: 100%;
+    height: auto;
 }

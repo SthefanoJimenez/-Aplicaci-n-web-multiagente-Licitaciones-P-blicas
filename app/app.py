@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 import re
 
-from flask import Flask, Response, abort, redirect, render_template, request, session, stream_with_context, url_for
+from flask import Flask, Response, abort, flash, redirect, render_template, request, session, stream_with_context, url_for
 
 import config
 import orchestrator
@@ -10,7 +10,7 @@ import auth
 import documents
 from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, tenders
-from services.formatting import format_amount, format_pen, unit_text
+from services.formatting import format_amount, format_pen, markdown, unit_text
 
 
 app = Flask(__name__)
@@ -27,6 +27,7 @@ def common_context():
 app.template_filter("pen")(format_pen)
 app.template_filter("amount")(format_amount)
 app.template_filter("unit_text")(unit_text)
+app.template_filter("markdown")(markdown)
 app.template_filter("place")(analytics.place_label)
 
 
@@ -485,6 +486,39 @@ def tender_bases(code):
 # ---------------------------------------------------------------------------
 # Asistente de Postulación con LangGraph (HU-010 / HU-014)
 # ---------------------------------------------------------------------------
+# La conversación vive en la cookie de sesión (4 KB en los navegadores): se guarda solo
+# lo último y cada mensaje se recorta para que el asistente siga funcionando tras varias consultas.
+ASSISTANT_MAX_QUERY = 1000
+ASSISTANT_HISTORY_MESSAGES = 8
+ASSISTANT_MESSAGE_CHARS = 1800
+# Presupuesto total del historial: la cookie de sesión admite ~4 KB y también lleva
+# la cuenta, el token CSRF y el perfil. Con 2200 caracteres queda margen de sobra.
+ASSISTANT_HISTORY_MAX_CHARS = 2200
+
+
+def _trim_history(messages):
+    """Conserva los últimos mensajes dentro del presupuesto de la cookie.
+
+    Primero recorta cada mensaje y luego va descartando los más antiguos hasta que
+    el texto total cabe en ASSISTANT_HISTORY_MAX_CHARS.
+    """
+    trimmed = [
+        {"role": m.get("role", "user"), "content": str(m.get("content", ""))[:ASSISTANT_MESSAGE_CHARS]}
+        for m in messages
+    ][-ASSISTANT_HISTORY_MESSAGES:]
+    kept, total = [], 0
+    for message in reversed(trimmed):
+        size = len(message["content"])
+        if kept and total + size > ASSISTANT_HISTORY_MAX_CHARS:
+            break
+        if total + size > ASSISTANT_HISTORY_MAX_CHARS:       # el último mensaje solo, recortado
+            message["content"] = message["content"][:max(0, ASSISTANT_HISTORY_MAX_CHARS - total)]
+            size = len(message["content"])
+        kept.append(message)
+        total += size
+    return list(reversed(kept))
+
+
 @app.get("/asistente")
 def assistant_chat():
     """Pantalla del asistente de postulación con historial de conversación y perfil de la sesión."""
@@ -505,19 +539,29 @@ def assistant_chat():
 def assistant_ask():
     """Procesa una consulta del usuario mediante el grafo de LangGraph."""
     from services import assistant
-    query = request.form.get("query", "").strip()
+    query = request.form.get("query", "").strip()[:ASSISTANT_MAX_QUERY]
     if not query:
         return redirect(url_for("assistant_chat"))
 
     history = session.get("assistant_history", [])
     profile = session.get("supplier_profile", {})
 
-    result = assistant.ask_assistant(query, history=history, profile=profile)
+    try:
+        result = assistant.ask_assistant(query, history=history, profile=profile)
+    except Exception:
+        # La conversación nunca debe romper la pantalla: se avisa y se conserva el historial.
+        app.logger.exception("Falló el asistente de postulación")
+        flash("No se pudo completar la consulta en este momento. Vuelva a intentarlo en unos segundos.", "error")
+        return redirect(url_for("assistant_chat"))
 
-    # Actualizar historial
-    history.append({"role": "user", "content": query})
-    history.append({"role": "assistant", "content": result["response"]})
-    session["assistant_history"] = history
+    # Actualizar historial. Se guarda recortado: la sesión viaja en una cookie y un
+    # historial largo la haría superar el límite del navegador (4 KB).
+    session["assistant_history"] = _trim_history(
+        history + [
+            {"role": "user", "content": query},
+            {"role": "assistant", "content": result["response"][:ASSISTANT_MESSAGE_CHARS]},
+        ]
+    )
     session["supplier_profile"] = result["profile"]
 
     return redirect(url_for("assistant_chat"))

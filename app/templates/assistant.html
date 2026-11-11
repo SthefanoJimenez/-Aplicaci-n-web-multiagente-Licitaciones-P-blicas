@@ -18,6 +18,7 @@
     </div>
     {% if history %}
     <form method="post" action="{{ url_for('assistant_clear') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn-clean" title="Reiniciar conversación y perfil">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
         <span>Reiniciar chat</span>
@@ -122,7 +123,7 @@
       <div class="chat-header-bar">
         <div class="chat-assistant-meta">
           <div class="assistant-avatar-wrap">
-            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="assistant-avatar-img" alt="LicitaBot">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="assistant-avatar-img" alt="LicitaBot" width="44" height="44">
             <span class="pulse-status-dot" title="En línea"></span>
           </div>
           <div class="chat-assistant-details">
@@ -143,7 +144,7 @@
         {% if not history %}
         <div class="chat-bubble chat-bubble-ai welcome-card">
           <div class="avatar-ai">
-            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+            <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot" width="40" height="40">
           </div>
           <div class="bubble-content">
             <div class="welcome-header">
@@ -190,10 +191,10 @@
           {% else %}
           <div class="chat-bubble chat-bubble-ai">
             <div class="avatar-ai">
-              <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot">
+              <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot" width="40" height="40">
             </div>
             <div class="bubble-content markdown-body">
-              {{ msg.content | replace('\n', '<br>') | safe }}
+              {{ msg.content | markdown | safe }}
             </div>
           </div>
           {% endif %}
@@ -202,6 +203,7 @@
 
       <!-- Formulario de envío -->
       <form class="chat-form" method="post" action="{{ url_for('assistant_ask') }}" id="chat-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="input-wrapper">
           <textarea
             id="chat-input"
@@ -227,8 +229,10 @@
 <script>
 function fillQuery(text) {
   const input = document.getElementById('chat-input');
+  if (!input) return;
   input.value = text;
   input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
 }
 
 // Auto-scroll al final del chat al cargar
@@ -237,19 +241,54 @@ document.addEventListener("DOMContentLoaded", function() {
   if (container) {
     container.scrollTop = container.scrollHeight;
   }
-  
+
   const textarea = document.getElementById("chat-input");
   const form = document.getElementById("chat-form");
-  if (textarea && form) {
-    textarea.addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (textarea.value.trim().length > 0) {
+  const button = document.getElementById("btn-submit");
+  const hint = document.querySelector(".chat-hint");
+  const hintOriginal = hint ? hint.innerHTML : "";
+  if (!textarea || !form) return;
+
+  function setSending(sending) {
+    if (button) {
+      button.disabled = sending;
+      const label = button.querySelector("span");
+      if (label) label.textContent = sending ? "Analizando…" : "Consultar";
+    }
+    form.classList.toggle("is-sending", sending);
+    if (hint) {
+      hint.innerHTML = sending
+        ? "Evaluando tu perfil contra las bases del SEACE…"
+        : hintOriginal;
+    }
+  }
+
+  form.addEventListener("submit", function(e) {
+    if (form.dataset.sending === "1") {   // evita el doble envío
+      e.preventDefault();
+      return;
+    }
+    if (!textarea.value.trim()) {
+      e.preventDefault();
+      textarea.focus();
+      return;
+    }
+    form.dataset.sending = "1";
+    setSending(true);
+  });
+
+  textarea.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (textarea.value.trim().length > 0) {
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit();
+        } else {
           form.submit();
         }
       }
-    });
-  }
+    }
+  });
 });
 </script>
 {% endblock %}
