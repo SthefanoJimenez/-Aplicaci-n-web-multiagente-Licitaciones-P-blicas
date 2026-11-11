@@ -100,6 +100,10 @@ def test_db():
 
 @pytest.fixture
 def client(signed_in_client):
+
+
+    """Pantalla /asistente: desde HU-008 exige una cuenta con sesión iniciada."""
+    app.config["TESTING"] = True
     return signed_in_client
 
 
@@ -231,3 +235,36 @@ def test_specific_tender_question_still_uses_its_bases(test_db):
     assert result["status"] != "general_guidance"
     assert [evaluation["code"] for evaluation in result["evaluations"]] == ["2002"]
     assert "pág. 7" in result["response"]
+
+
+def test_case_11_assistant_forms_send_the_session_token(client):
+    """Caso 11 (regresión): los dos formularios de la pantalla deben llevar el token de la sesión.
+
+    Sin el campo oculto, el navegador recibía 400 «El formulario venció» al pulsar
+    «Consultar» o «Reiniciar chat»; las pruebas no lo detectaban porque el cliente de
+    pruebas añade el token por su cuenta.
+    """
+    html = client.get("/asistente").get_data(as_text=True)
+    assert 'class="chat-form"' in html
+    assert html.count('name="csrf_token"') >= 2
+
+
+def test_case_12_markdown_of_the_answer_is_rendered_as_html():
+    """Caso 12 (regresión): la respuesta se mostraba con los asteriscos y los «>» a la vista."""
+    from services.formatting import markdown
+
+    rendered = markdown("### Título\n\n- **Entidad:** Municipalidad\n> aviso `DATABASE_URL`\n---")
+    assert "<h3>Título</h3>" in rendered
+    assert "<li><strong>Entidad:</strong> Municipalidad</li>" in rendered
+    assert "<blockquote>" in rendered and "<code>DATABASE_URL</code>" in rendered
+    assert "<hr>" in rendered
+    # El texto del usuario nunca puede convertirse en etiquetas
+    assert "<script>" not in markdown("<script>alert(1)</script>")
+
+
+def test_case_13_negated_sales_are_not_read_as_previous_sales():
+    """Caso 13 (regresión): «nunca le he vendido al Estado» se leía como proveedor habitual."""
+    assert assistant.extract_profile_updates(
+        "Vendo combustible diésel, nunca le he vendido al Estado", {})["sold_to_state"] is False
+    assert assistant.extract_profile_updates(
+        "He vendido al Estado durante cinco años", {})["sold_to_state"] is True

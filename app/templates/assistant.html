@@ -230,8 +230,10 @@
 <script>
 function fillQuery(text) {
   const input = document.getElementById('chat-input');
+  if (!input) return;
   input.value = text;
   input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
 }
 
 // Auto-scroll al final del chat al cargar
@@ -240,19 +242,54 @@ document.addEventListener("DOMContentLoaded", function() {
   if (container && container.querySelector('.chat-bubble-user')) {
     container.scrollTop = container.scrollHeight;
   }
-  
+
   const textarea = document.getElementById("chat-input");
   const form = document.getElementById("chat-form");
-  if (textarea && form) {
-    textarea.addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        if (textarea.value.trim().length > 0) {
+  const button = document.getElementById("btn-submit");
+  const hint = document.querySelector(".chat-hint");
+  const hintOriginal = hint ? hint.innerHTML : "";
+  if (!textarea || !form) return;
+
+  function setSending(sending) {
+    if (button) {
+      button.disabled = sending;
+      const label = button.querySelector("span");
+      if (label) label.textContent = sending ? "Analizando…" : "Consultar";
+    }
+    form.classList.toggle("is-sending", sending);
+    if (hint) {
+      hint.innerHTML = sending
+        ? "Evaluando tu perfil contra las bases del SEACE…"
+        : hintOriginal;
+    }
+  }
+
+  form.addEventListener("submit", function(e) {
+    if (form.dataset.sending === "1") {   // evita el doble envío
+      e.preventDefault();
+      return;
+    }
+    if (!textarea.value.trim()) {
+      e.preventDefault();
+      textarea.focus();
+      return;
+    }
+    form.dataset.sending = "1";
+    setSending(true);
+  });
+
+  textarea.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if (textarea.value.trim().length > 0) {
+        if (typeof form.requestSubmit === "function") {
           form.requestSubmit();
+        } else {
+          form.submit();
         }
       }
-    });
-  }
+    }
+  });
 });
 </script>
 {% endblock %}
