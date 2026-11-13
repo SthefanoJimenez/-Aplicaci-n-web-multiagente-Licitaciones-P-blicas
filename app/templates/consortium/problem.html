@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% set active_nav = "consortium" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}<section class="panel" aria-labelledby="problem-title"><h1 class="page-title" id="problem-title">{{ title }}</h1><p class="page-lead" role="alert">{{ message }}</p><a class="button button-primary" href="{{ url_for('consortium.index') }}">Volver a mis consorcios</a></section>{% endblock %}

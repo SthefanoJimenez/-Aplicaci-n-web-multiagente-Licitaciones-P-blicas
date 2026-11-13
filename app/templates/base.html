@@ -32,6 +32,7 @@
       <div class="nav-account" role="group" aria-label="Cuenta y ayuda">
         {% if current_user %}
         <a href="{{ url_for('auth.profile') }}" {% if active_nav == "profile" %}aria-current="page"{% endif %}>Mi empresa</a>
+        <a href="{{ url_for('consortium.index') }}" {% if active_nav == "consortium" %}aria-current="page"{% endif %}>Consorcios</a>
         <form class="nav-session" method="post" action="{{ url_for('auth.logout') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="nav-signout" type="submit">Cerrar sesión</button>

@@ -3,13 +3,36 @@ import io
 import sys
 
 
+MAX_MEMORY = 512 * 1024 * 1024
+MAX_CPU_SECONDS = 6
+
+
+def limit_resources(platform=None, resource=None):
+    """Límites del proceso que revisa el PDF. Cada uno es opcional y su falla no rechaza el PDF:
+    Windows no tiene el módulo resource y macOS no permite limitar el espacio de direcciones
+    (RLIMIT_AS), así que ahí solo queda el de CPU. En todos los casos el proceso padre mantiene
+    el tiempo máximo (8 s) y el tamaño máximo del archivo (5 MB)."""
+    platform = platform or sys.platform
+    if resource is None:
+        try:
+            import resource
+        except ImportError:
+            return []
+    limits = [("cpu", resource.RLIMIT_CPU, MAX_CPU_SECONDS)]
+    if platform != "darwin":
+        limits.insert(0, ("memoria", resource.RLIMIT_AS, MAX_MEMORY))
+    applied = []
+    for name, which, value in limits:
+        try:
+            resource.setrlimit(which, (value, value))
+            applied.append(name)
+        except (ValueError, OSError):
+            pass
+    return applied
+
+
 def main():
-    try:
-        import resource
-        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-        resource.setrlimit(resource.RLIMIT_CPU, (6, 6))
-    except ImportError:  # Windows: el padre mantiene el límite de tiempo y tamaño.
-        pass
+    limit_resources()
     from pypdf import PdfReader
     from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
     content = sys.stdin.buffer.read(5 * 1024 * 1024 + 1)

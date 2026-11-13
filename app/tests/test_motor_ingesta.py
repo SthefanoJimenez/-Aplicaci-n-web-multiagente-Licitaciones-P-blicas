@@ -1,4 +1,3 @@
-
 import os
 import shutil
 import subprocess
@@ -153,11 +152,16 @@ def test_daily_script_runs_the_job_from_app_with_its_origin_and_one_at_a_time(tm
         f.chmod(0o755)
     env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", LICITAFACIL_PYTHON=str(bin_dir / "pyfake"))
     env.pop("INGEST_TRIGGER", None)
-    first = subprocess.Popen(["bash", str(repo / "scripts/imac/ingesta_diaria.sh")], env=env)
+    first = subprocess.Popen(["bash", str(repo / "scripts/imac/ingesta_diaria.sh")], env=env,
+                             stderr=subprocess.PIPE, text=True)
     import time
     time.sleep(0.4)
-    second = subprocess.run(["bash", str(repo / "scripts/imac/ingesta_diaria.sh")], env=env)
+    second = subprocess.run(["bash", str(repo / "scripts/imac/ingesta_diaria.sh")], env=env,
+                            stderr=subprocess.PIPE, text=True)
     assert first.wait(timeout=10) == 0 and second.returncode == 0
+    # Ningún error fuera del registro (el 10/11/2026 una línea suelta al inicio del script daba
+    # "No such file or directory" en cada ejecución)
+    assert first.stderr.read() == "" and second.stderr == ""
     log = next((repo / "app/logs").glob("ingesta_*.log")).read_text()
     assert "job ingest_job.py origen=programada_imac en app" in log
     assert "Ya hay una ingesta en curso; esta se omite." in log       # la segunda no se superpuso

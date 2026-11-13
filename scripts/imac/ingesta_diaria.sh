@@ -1,4 +1,4 @@
-   app/logs/ingesta_AAAA-MM-DD.log
+#!/bin/bash
 set -u
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"

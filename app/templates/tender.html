@@ -45,6 +45,7 @@
     {% else %}
     <p class="muted" style="margin:0;">La convocatoria no publica bases en el portal del OECE.</p>
     {% endif %}
+    <p style="margin:16px 0 0;"><a href="{{ url_for('consortium.index', convocatoria=tender.code) }}">¿No llega sola? Evalúe esta convocatoria con un consorcio</a></p>
     {% if catalog_code %}
     <p style="margin:16px 0 0;"><a href="{{ url_for('good_sheet', code=catalog_code) }}">Ver precios históricos de este bien (CUBSO {{ catalog_code }})</a></p>
     {% endif %}

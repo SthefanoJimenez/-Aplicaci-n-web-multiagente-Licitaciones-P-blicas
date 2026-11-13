@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active_nav = "consortium" %}
+{% block title %}Eliminar consorcio{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="delete-title">
+  <p class="eyebrow">Consorcios</p>
+  <h1 class="page-title" id="delete-title">¿Eliminar este consorcio?</h1>
+  <p class="page-lead">{{ c.name }}</p>
+  <p>Se eliminarán el consorcio, sus integrantes y las invitaciones pendientes. Los perfiles y los documentos de cada empresa no cambian.</p>
+  <p>Esta acción no se puede deshacer.</p>
+  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="actions"><button class="button document-delete-confirm" type="submit">Sí, eliminar consorcio</button><a class="button button-secondary" href="{{ url_for('consortium.detail', consortium_id=c.id) }}">Conservar consorcio</a></div>
+  </form>
+</section>
+{% endblock %}

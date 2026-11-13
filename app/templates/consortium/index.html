@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% set active_nav = "consortium" %}
+{% block title %}Consorcios{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+{% block content %}
+<section class="panel" aria-labelledby="consortium-title">
+  <p class="eyebrow">Mi empresa · Consorcios</p>
+  <h1 class="page-title" id="consortium-title">Consorcios</h1>
+  <p class="page-lead">Arme un consorcio con otras empresas registradas para saber si juntas cubren lo que piden las bases de una convocatoria a la que no llegan solas.</p>
+  <p class="hint">Cada empresa aporta lo que declaró en su perfil. Una empresa invitada solo se suma si acepta, y recién entonces las demás ven sus datos.</p>
+  {% if tender %}
+  <div class="notice notice-info" role="note">
+    <p>Va a comparar con la convocatoria <strong>{{ tender.code }}</strong>: {{ tender.title or tender.description }}. Elija uno de sus consorcios o cree uno.</p>
+  </div>
+  {% endif %}
+  <p><a href="{{ url_for('auth.profile') }}">Volver al perfil de mi empresa</a></p>
+</section>
+
+{% if data.invitations %}
+<section class="panel" aria-labelledby="invitations-title">
+  <h2 class="section-title" id="invitations-title">Invitaciones recibidas</h2>
+  <p class="hint">Si acepta, las otras integrantes del consorcio verán las ventas mensuales, el monto facturado, los años de experiencia y el personal declarados en el perfil de su empresa. Sus documentos siguen siendo privados.</p>
+  <ul class="document-list">
+    {% for inv in data.invitations %}
+    <li class="document-card">
+      <div class="document-heading"><h3>{{ inv.name }}</h3><span class="document-state document-state-future">Pendiente</span></div>
+      <p class="hint">Invitación de {{ inv.leader }}, líder del consorcio.</p>
+      <div class="actions document-actions">
+        <form method="post" action="{{ url_for('consortium.respond', member_id=inv.id, action='aceptar') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="button button-primary" type="submit">Aceptar e integrar el consorcio</button>
+        </form>
+        <form method="post" action="{{ url_for('consortium.respond', member_id=inv.id, action='rechazar') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="button button-secondary" type="submit">Rechazar</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="mine-title">
+  <h2 class="section-title" id="mine-title">Mis consorcios</h2>
+  {% if data.led or data.joined %}
+  <ul class="document-list">
+    {% for c in data.led %}
+    <li class="document-card">
+      <div class="document-heading"><h3><a href="{{ url_for('consortium.detail', consortium_id=c.id, convocatoria=code) }}">{{ c.name }}</a></h3><span class="document-state document-state-current">Líder</span></div>
+      <p class="hint">{{ c.members }} empresa{% if c.members != 1 %}s{% endif %} integrada{% if c.members != 1 %}s{% endif %}, incluida la suya.</p>
+    </li>
+    {% endfor %}
+    {% for c in data.joined %}
+    <li class="document-card">
+      <div class="document-heading"><h3><a href="{{ url_for('consortium.detail', consortium_id=c.id, convocatoria=code) }}">{{ c.name }}</a></h3><span class="document-state document-state-future">Integrante</span></div>
+      <p class="hint">Líder: {{ c.leader }}.</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="document-empty"><p><strong>Su empresa aún no integra ningún consorcio.</strong></p><p>Cree uno abajo e invite a las empresas con las que piensa postular.</p></div>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="create-title">
+  <h2 class="section-title" id="create-title">Crear un consorcio</h2>
+  <form method="post" action="{{ url_for('consortium.index') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if code %}<input type="hidden" name="convocatoria" value="{{ code }}">{% endif %}
+    <div class="field">
+      <label class="label" for="name">Nombre del consorcio</label>
+      <input id="name" name="name" type="text" required minlength="3" maxlength="120" value="{{ values.get('name', '') }}"
+             aria-describedby="name-hint{% if errors.get('name') %} name-error{% endif %}" {% if errors.get('name') %}aria-invalid="true"{% endif %}>
+      <p class="hint" id="name-hint">Por ejemplo: Consorcio Combustibles del Norte. Su empresa será la líder y podrá invitar a las demás.</p>
+      {% if errors.get('name') %}<p class="error" id="name-error">{{ errors.name }}</p>{% endif %}
+    </div>
+    <div class="actions"><button class="button button-primary" type="submit">Crear consorcio</button></div>
+  </form>
+</section>
+{% endblock %}

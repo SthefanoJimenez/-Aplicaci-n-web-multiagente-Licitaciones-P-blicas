@@ -1,4 +1,4 @@
-
+#!/bin/bash
 set -eu
 
 HOUR="${1:-08}"

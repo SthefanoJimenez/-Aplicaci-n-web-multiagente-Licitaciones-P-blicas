@@ -8,6 +8,7 @@ import orchestrator
 import rules
 import auth
 import documents
+import consortium
 from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, tenders
 from services.formatting import format_amount, format_pen, markdown, unit_text
@@ -17,6 +18,7 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 auth.init_app(app)
 documents.init_app(app)
+consortium.init_app(app)
 
 
 @app.context_processor

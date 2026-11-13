@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% set active_nav = "consortium" %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block page_class %}page-documents{% endblock %}
+
+{% macro show(value, kind) -%}
+  {%- if value is none -%}—
+  {%- elif kind == "monto" -%}S/ {{ "{:,.2f}".format(value) }}
+  {%- elif kind == "años" -%}{{ value }} año{% if value != 1 %}s{% endif %}
+  {%- else -%}{{ value }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro state(ok, yes="Cumple", no="No cumple") -%}
+  <span class="document-state {{ 'document-state-current' if ok else 'document-state-expired' }}">{{ yes if ok else no }}</span>
+{%- endmacro %}
+
+{% block content %}
+<section class="panel" aria-labelledby="consortium-title">
+  <p class="eyebrow">Consorcio · {{ "Su empresa es la líder" if c.role == "lider" else "Su empresa es integrante" }}</p>
+  <h1 class="page-title" id="consortium-title">{{ c.name }}</h1>
+  <p class="page-lead">{{ c.members|length }} empresa{% if c.members|length != 1 %}s{% endif %} integrada{% if c.members|length != 1 %}s{% endif %}. Las capacidades salen del perfil que declaró cada una.</p>
+  <p><a href="{{ url_for('consortium.index', convocatoria=code) }}">Volver a mis consorcios</a></p>
+</section>
+
+<section class="panel" aria-labelledby="members-title">
+  <h2 class="section-title" id="members-title">Integrantes y capacidades</h2>
+  <p class="hint">Las ventas, el monto facturado y el personal se suman. Los años de experiencia no se suman: el consorcio toma los de la integrante con más años.</p>
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption class="sr-only">Capacidades de cada integrante y del consorcio</caption>
+      <thead>
+        {% set short = {"monthly_sales": "Ventas mensuales", "similar_contracts_amount": "Monto facturado", "experience_years": "Años de experiencia", "staff_count": "Personal"} %}
+        <tr><th scope="col">Empresa</th>{% for key, label, how, kind in capabilities %}<th scope="col" class="num" style="white-space:normal;" title="{{ label }}">{{ short.get(key, label) }}</th>{% endfor %}<th scope="col"><span class="sr-only">Acciones</span></th></tr>
+      </thead>
+      <tbody>
+        {% for m in c.members %}
+        <tr>
+          <td class="name">{{ m.name }}{% if m.company_id == c.company_id %} (su empresa){% endif %}<br><span class="muted small">{{ "Líder" if m.role == "lider" else "Integrante" }}{% if not m.has_profile %} · Perfil incompleto: no se suma{% endif %}</span></td>
+          {% for key, label, how, kind in capabilities %}<td class="num">{{ show(m[key], kind) if m.has_profile else "—" }}</td>{% endfor %}
+          <td>
+            {% if m.member_id and (c.role == "lider" or m.company_id == c.company_id) %}
+            <form method="post" action="{{ url_for('consortium.remove', consortium_id=c.id, member_id=m.member_id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="button button-secondary" type="submit">{{ "Quitar" if c.role == "lider" else "Retirarme" }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr class="highlight">
+          <td class="name"><strong>Consorcio</strong></td>
+          {% for key, label, how, kind in capabilities %}<td class="num"><strong>{{ show(totals[key], kind) }}</strong></td>{% endfor %}
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% for m in c.members if m.staff_lines %}
+  {% if loop.first %}<details class="table-view"><summary>Personal especializado declarado por cada integrante</summary><ul>{% endif %}
+    <li><strong>{{ m.name }}:</strong> {{ m.staff_lines|join("; ") }}</li>
+  {% if loop.last %}</ul></details>{% endif %}
+  {% endfor %}
+  <p class="hint">El personal cuenta cada línea del campo «Personal especializado» del perfil como un perfil declarado.</p>
+</section>
+
+{% if c.role == "lider" %}
+<section class="panel" aria-labelledby="invite-title">
+  <h2 class="section-title" id="invite-title">Invitar empresas</h2>
+  {% if c.invitations %}
+  <ul class="document-list">
+    {% for inv in c.invitations %}
+    <li class="document-card">
+      <div class="document-heading"><h3>{{ inv.email }}</h3>
+        <span class="document-state {{ 'document-state-expired' if inv.status == 'rechazada' else 'document-state-future' }}">{{ "Rechazó la invitación" if inv.status == "rechazada" else "Invitación pendiente" }}</span></div>
+      <form method="post" action="{{ url_for('consortium.remove', consortium_id=c.id, member_id=inv.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="actions document-actions"><button class="button button-secondary" type="submit">{{ "Quitar de la lista" if inv.status == "rechazada" else "Cancelar invitación" }}</button></div>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if c.slots_left > 0 %}
+  <form method="post" action="{{ url_for('consortium.invite', consortium_id=c.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label class="label" for="email">Correo de la cuenta de la empresa</label>
+      <input id="email" name="email" type="text" inputmode="email" autocapitalize="off" spellcheck="false" required maxlength="254" autocomplete="off" value="{{ invite_email }}"
+             aria-describedby="email-hint{% if invite_error %} email-error{% endif %}" {% if invite_error %}aria-invalid="true"{% endif %}>
+      <p class="hint" id="email-hint">La empresa verá la invitación al ingresar con ese correo; si aún no tiene cuenta, al registrarse con él. Sus datos se suman solo cuando acepta. Puede invitar a {{ c.slots_left }} empresa{% if c.slots_left != 1 %}s{% endif %} más.</p>
+      {% if invite_error %}<p class="error" id="email-error" role="alert">{{ invite_error }}</p>{% endif %}
+    </div>
+    <div class="actions"><button class="button button-primary" type="submit">Invitar</button></div>
+  </form>
+  {% else %}
+  <p class="hint">El consorcio llegó al máximo de {{ max_partners + 1 }} empresas.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="evaluate-title" id="evaluar">
+  <h2 class="section-title" id="evaluate-title">¿Juntas cubren lo que piden las bases?</h2>
+  <p class="hint">Escriba lo que exigen las bases. Puede dejar en blanco lo que no le pidan.</p>
+  {% if tender %}
+  <div class="notice notice-info" role="note">
+    <p>Convocatoria <a href="{{ url_for('tender_sheet', code=tender.code) }}">{{ tender.code }}</a>: {{ tender.title or tender.description }}.</p>
+    {% if from_bases %}
+    <p>Las bases piden un monto facturado de <strong>S/ {{ "{:,.2f}".format(from_bases.amount) }}</strong>{% if from_bases.page %} (página {{ from_bases.page }}){% endif %}: «{{ from_bases.excerpt }}». Se cargó abajo; verifíquelo en las bases.</p>
+    {% else %}
+    <p>No se encontró el monto facturado en los requisitos leídos de sus bases. Escríbalo a mano.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+  <form method="get" action="{{ url_for('consortium.detail', consortium_id=c.id) }}#evaluar">
+    {% if code %}<input type="hidden" name="convocatoria" value="{{ code }}">{% endif %}
+    <div class="profile-grid">
+      {% for param, label, hint in [
+          ("facturado", "Monto facturado exigido (S/)", "Experiencia del postor en la especialidad."),
+          ("ventas", "Ventas mensuales mínimas (S/)", "Solo si las bases o usted quieren compararlas."),
+          ("anios", "Años de experiencia exigidos", "Número entero."),
+          ("personal", "Personal especializado requerido", "Número de profesionales o perfiles.")] %}
+      <div class="field">
+        <label class="label" for="req-{{ param }}">{{ label }}</label>
+        <input id="req-{{ param }}" name="{{ param }}" type="text" inputmode="decimal" maxlength="17" value="{{ form_values.get(param, '') }}"
+               aria-describedby="req-{{ param }}-hint{% if form_errors.get(param) %} req-{{ param }}-error{% endif %}" {% if form_errors.get(param) %}aria-invalid="true"{% endif %}>
+        <p class="hint" id="req-{{ param }}-hint">{{ hint }}</p>
+        {% if form_errors.get(param) %}<p class="error" id="req-{{ param }}-error">{{ form_errors[param] }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="actions"><button class="button button-primary" type="submit">Evaluar</button></div>
+  </form>
+
+  {% if result %}
+  <div class="table-wrap" style="margin-top:20px;">
+    <table class="data-table">
+      <caption class="sr-only">Resultado de la evaluación</caption>
+      <thead><tr><th scope="col">Requisito</th><th scope="col" class="num">Exigido</th><th scope="col" class="num">Su empresa sola</th><th scope="col" class="num">Consorcio</th></tr></thead>
+      <tbody>
+        {% for r in result.rows %}
+        <tr>
+          <td class="name">{{ r.label }}</td>
+          <td class="num">{{ show(r.required, r.kind) }}</td>
+          <td class="num">{{ show(r.own_value, r.kind) }} {{ state(r.own_meets) }}</td>
+          <td class="num">{{ show(r.total, r.kind) }} {{ state(r.total_meets) }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="highlight">
+          <td class="name"><strong>Resultado</strong></td><td></td>
+          <td class="num" data-result="alone">{{ state(result.alone_meets) }}</td>
+          <td class="num" data-result="consortium">{{ state(result.consortium_meets) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="notice {{ 'notice-info' if result.consortium_meets else 'notice-warning' }}" role="status" style="margin-top:16px;">
+    {% if result.consortium_meets and result.alone_meets %}
+    <p><strong>Su empresa ya cubre sola estos requisitos.</strong> El consorcio también los cubre.</p>
+    {% elif result.consortium_meets and result.nobody_alone %}
+    <p><strong>Ninguna integrante cubre estos requisitos por separado, pero el consorcio sí.</strong></p>
+    {% elif result.consortium_meets %}
+    <p><strong>El consorcio cubre estos requisitos; su empresa sola no.</strong></p>
+    {% else %}
+    <p><strong>Ni su empresa sola ni el consorcio cubren todos estos requisitos.</strong> Revise abajo cuánto falta e invite a otra empresa si es posible.</p>
+    {% endif %}
+    {% if result.missing_profiles %}<p>No se sumó a {{ result.missing_profiles|join(", ") }} porque su perfil está incompleto.</p>{% endif %}
+    {% if not result.own_has_profile %}<p>Su empresa no tiene el perfil completo: <a href="{{ url_for('auth.profile') }}">complételo</a> para evaluarla sola.</p>{% endif %}
+  </div>
+
+  <h3 class="section-title" style="font-size:18px; margin-top:24px;">Aporte de cada integrante</h3>
+  {% for r in result.rows %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <caption>{{ r.label }}: exigido {{ show(r.required, r.kind) }}, consorcio {{ show(r.total, r.kind) }}{% if not r.total_meets %} (faltan {{ show(r.required - r.total, r.kind) }}){% endif %}</caption>
+      <thead><tr><th scope="col">Empresa</th><th scope="col" class="num">Aporte</th>{% if r.how == "suma" %}<th scope="col" class="num">Del total</th>{% endif %}<th scope="col" class="num">¿Cubre sola?</th></tr></thead>
+      <tbody>
+        {% for a in r.contributions %}
+        <tr>
+          <td class="name">{{ a.name }}{% if a.own %} (su empresa){% endif %}</td>
+          <td class="num">{{ show(a.value, r.kind) }}</td>
+          {% if r.how == "suma" %}<td class="num">{{ "%.1f"|format(a.share) if a.share is not none else "—" }}{% if a.share is not none %}%{% endif %}</td>{% endif %}
+          <td class="num">{{ state(a.meets, "Sí", "No") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% endif %}
+  <p class="hint" style="margin-top:16px;">Esta evaluación usa lo que cada empresa declaró en su perfil, no verifica sus documentos. Las bases pueden fijar un número máximo de integrantes, un porcentaje mínimo de participación o qué integrantes pueden aportar experiencia: revise lo que dicen sobre consorcios antes de postular.</p>
+</section>
+
+<section class="panel" aria-labelledby="manage-title">
+  <h2 class="section-title" id="manage-title">Administrar</h2>
+  {% if c.role == "lider" %}
+  <a class="button button-secondary document-delete" href="{{ url_for('consortium.delete', consortium_id=c.id) }}">Eliminar consorcio</a>
+  {% else %}
+  <p class="hint">Solo la líder puede invitar empresas o eliminar el consorcio. Puede retirar a su empresa con el botón «Retirarme» de la tabla.</p>
+  {% endif %}
+</section>
+{% endblock %}
