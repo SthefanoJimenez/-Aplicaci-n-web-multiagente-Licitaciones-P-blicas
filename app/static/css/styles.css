@@ -4097,28 +4097,16 @@ details.table-view summary {
 .eligibility-chat-context { padding: 10px 20px; background: var(--seal-tint); border-bottom: 1px solid var(--rule); font-size: 13px; flex-shrink: 0; }
 @media(max-width:680px) { .eligibility-metrics { grid-template-columns: minmax(0,1fr); } .eligibility-form fieldset { padding:12px; } }
 
-/* Convocatorias: datos agrupados y tarjetas al ampliar o reducir la pantalla. */
-.page-tenders {
-    max-width: 1440px;
-}
+/* Convocatorias: nueve columnas originales y acciones mediante iconos. */
+.page-tenders { max-width: 1440px; }
 
 .tender-filters {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
     gap: 16px;
 }
-
 .tender-filters > div,
-.tender-filters select {
-    min-width: 0;
-    width: 100%;
-}
-
-.tender-filter-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
+.tender-filters select { min-width: 0; width: 100%; }
+.tender-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .tender-results-heading {
     display: flex;
     flex-wrap: wrap;
@@ -4128,204 +4116,70 @@ details.table-view summary {
     margin-bottom: 12px;
 }
 
-.tender-signin {
-    margin: 0 0 16px;
-    color: var(--ink-2);
-}
-
-.tender-table {
-    table-layout: fixed;
-    background: var(--surface);
-}
-
-.tender-table th:nth-child(1) { width: 30%; }
-.tender-table th:nth-child(2) { width: 21%; }
-.tender-table th:nth-child(3) { width: 13%; }
-.tender-table th:nth-child(4) { width: 20%; }
-.tender-table th:nth-child(5) { width: 16%; }
-
+/* El desplazamiento queda dentro de la tabla; ninguna columna se oculta. */
+.tender-list { max-width: 100%; }
+.tender-list:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+.tender-scroll-hint { display: none; margin: 0 0 10px; }
+.tender-table { min-width: 1280px; table-layout: fixed; }
+.tender-col-code { width: 8%; }
+.tender-col-title { width: 17%; }
+.tender-col-entity { width: 17%; }
+.tender-col-department { width: 9%; }
+.tender-col-published { width: 9%; }
+.tender-col-age { width: 7%; }
+.tender-col-value { width: 9%; }
+.tender-col-eligibility { width: 15%; }
+.tender-col-actions { width: 9%; }
 .tender-table th,
 .tender-table td,
 .tender-table th:first-child,
 .tender-table td:first-child {
-    padding: 20px 16px;
+    padding: 12px 8px;
     vertical-align: top;
     white-space: normal;
     overflow-wrap: anywhere;
 }
-
-.tender-table th {
-    background: var(--seal-tint);
-    color: var(--ink-2);
-    padding-block: 14px;
-}
-
-.tender-meta {
-    display: flex;
-    flex-wrap: wrap;
+.tender-table th { overflow-wrap: normal; }
+.tender-table .num { white-space: normal; overflow-wrap: anywhere; }
+.tender-table .chip { max-width: 100%; white-space: normal; }
+.tender-table .tag { white-space: normal; }
+.tender-table .eligibility-badge { max-width: 100%; }
+.tender-eligibility p { margin: 8px 0 0; }
+.tender-actions { display: grid; grid-template-columns: repeat(2, 44px); gap: 8px; }
+.tender-actions .tender-icon {
+    display: inline-flex;
     align-items: center;
-    gap: 8px 12px;
-    margin-bottom: 12px;
-}
-
-.tender-meta .chip {
-    max-width: 100%;
-    white-space: normal;
-}
-
-.tender-name {
-    font-size: 16px;
-    line-height: 1.5;
-}
-
-.tender-entity-name,
-.tender-value {
-    margin: 0 0 8px;
-}
-
-.tender-value {
-    font-weight: 700;
-}
-
-.tender-dates {
-    margin: 0 0 10px;
-}
-
-.tender-dates > div + div {
-    margin-top: 10px;
-}
-
-.tender-dates dt {
-    font-size: 13px;
-    color: var(--ink-3);
-}
-
-.tender-dates dd {
-    margin: 2px 0 0;
-}
-
-.tender-eligibility {
-    display: grid;
-    justify-items: start;
-    gap: 8px;
-    margin-top: 16px;
-}
-
-.tender-reason {
-    margin: 0;
-}
-
-.tender-actions {
-    display: grid;
-    gap: 8px;
-}
-
-.tender-actions > * {
-    min-width: 0;
-    max-width: 100%;
-}
-
-.tender-actions .button {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
     min-height: 44px;
-    padding: 10px 12px;
-    font-size: 14px;
+    padding: 0;
+    border-radius: 6px;
+}
+.tender-icon svg { width: 20px; height: 20px; flex-shrink: 0; }
+.tender-icon:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+.tender-action-tooltip {
+    position: fixed;
+    z-index: 1100;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: white;
+    font-size: 13px;
     line-height: 1.4;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
 }
+.tender-action-tooltip[hidden] { display: none; }
 
-.tender-actions .button svg {
-    flex-shrink: 0;
+@media (max-width: 1327px) {
+    .tender-scroll-hint { display: block; }
 }
-
-.tender-mobile-label {
-    display: none;
-}
-
 @media (max-width: 1100px) {
-    .tender-filters {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tender-table,
-    .tender-table tbody {
-        display: block;
-    }
-
-    /* Los encabezados siguen disponibles para lectores de pantalla. */
-    .tender-table thead {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        overflow: hidden;
-        clip-path: inset(50%);
-    }
-
-    .tender-table {
-        background: transparent;
-    }
-
-    .tender-table tbody tr {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        margin-bottom: 20px;
-        border: 1px solid var(--rule);
-        border-radius: var(--radius);
-        background: var(--surface);
-        box-shadow: var(--shadow);
-    }
-
-    .tender-table tbody td {
-        display: block;
-        min-width: 0;
-        border: 0;
-        box-shadow: none;
-    }
-
-    .tender-table .tender-identity {
-        grid-column: 1 / -1;
-        border-bottom: 1px solid var(--rule);
-    }
-
-    .tender-mobile-label {
-        display: block;
-        margin-bottom: 8px;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--ink-2);
-    }
-
-    .tender-table tbody tr:hover td,
-    .tender-table tbody tr:focus-within td {
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-    }
+    .tender-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
 @media (max-width: 600px) {
-    .tender-filters,
-    .tender-table tbody tr {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .tender-filter-actions .button {
-        flex: 1;
-    }
-
-    .tender-actions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tender-actions > a:not(.button) {
-        grid-column: 1 / -1;
-        order: 1;
-    }
-}
-
-@media (max-width: 380px) {
-    .tender-actions {
-        grid-template-columns: minmax(0, 1fr);
-    }
+    .tender-filters { grid-template-columns: minmax(0, 1fr); }
+    .tender-filter-actions .button { flex: 1; }
 }
