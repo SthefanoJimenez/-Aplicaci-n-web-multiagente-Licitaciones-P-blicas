@@ -25,7 +25,7 @@ EMAIL_TLD = r"(?:[A-Za-z]{2,63}|[xX][nN]--[A-Za-z0-9](?:[A-Za-z0-9-]{0,57}[A-Za-
 EMAIL_PATTERN = rf"(?=.{{1,64}}@){EMAIL_ATOM}(?:\.{EMAIL_ATOM})*@(?:{EMAIL_LABEL}\.)+{EMAIL_TLD}"
 
 PRIVATE_ENDPOINTS = {"describe", "candidates", "back_to_candidates", "confirm", "market",
-                     "cost", "verdict", "verdict_without_cost", "auth.profile"}
+                     "cost", "verdict", "verdict_without_cost", "auth.profile", "evaluate_company_product"}
 PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente", "/elegibilidad")
 
 

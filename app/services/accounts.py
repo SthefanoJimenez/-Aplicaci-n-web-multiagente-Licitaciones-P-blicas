@@ -50,6 +50,14 @@ class CompanyProfile(AccountBase):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class CompanyProduct(AccountBase):
+    """Último bien confirmado; el costo y la descripción libre no se almacenan."""
+    __tablename__ = "productos_empresa"
+    company_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    catalog_code: Mapped[int] = mapped_column(Integer)
+    profile_key: Mapped[str] = mapped_column(String(64))
+
+
 class LoginSession(AccountBase):
     __tablename__ = "sesiones_usuario"
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -169,6 +177,35 @@ def get_profile(factory, user_id):
                           "similar_contracts_amount", "specialized_staff"):
                 values[field] = getattr(profile, field)
         return values
+
+
+def _product_profile_key(profile):
+    values = (getattr(profile, key, "") or "" for key in ("business_activity", "rubros"))
+    return digest("\x1f".join(value.strip() for value in values))
+
+
+def get_company_product(factory, user_id):
+    """Recupera el bien de la cuenta; cambiar giro o rubros exige confirmar de nuevo."""
+    with factory() as db:
+        company = db.scalar(select(Company).where(Company.user_id == user_id))
+        product = db.get(CompanyProduct, company.id)
+        profile = db.get(CompanyProfile, company.id)
+        if product and product.profile_key == _product_profile_key(profile):
+            return product.catalog_code
+    return None
+
+
+def remember_company_product(factory, user_id, catalog_code):
+    """Asocia el código confirmado al usuario autenticado, nunca a un ID del formulario."""
+    with factory.begin() as db:
+        company = db.scalar(select(Company).where(Company.user_id == user_id))
+        profile = db.get(CompanyProfile, company.id)
+        product = db.get(CompanyProduct, company.id)
+        if product is None:
+            product = CompanyProduct(company_id=company.id)
+            db.add(product)
+        product.catalog_code = catalog_code
+        product.profile_key = _product_profile_key(profile)
 
 
 def save_profile(factory, user_id, values):

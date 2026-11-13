@@ -4183,3 +4183,6 @@ details.table-view summary {
     .tender-filters { grid-template-columns: minmax(0, 1fr); }
     .tender-filter-actions .button { flex: 1; }
 }
+
+/* HU-008: entrada a evaluación con los datos guardados de la empresa. */
+.company-product-context { overflow-wrap: anywhere; }

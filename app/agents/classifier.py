@@ -29,6 +29,27 @@ _matrix = _vectorizer.fit_transform(
 _catalog_codes = data.CATALOG["codigoitem"].astype(int).tolist()
 
 
+def profile_candidates(business_activity, rubros):
+    """Coincidencias locales del perfil, sin enviar datos privados al modelo ni a trazas."""
+    general_words = {"venta", "ventas", "comercio", "comercializacion", "distribucion",
+                     "empresa", "de", "del", "la", "el", "los", "las", "y", "al", "por",
+                     "mayor", "menor"}
+    query = " ".join(word for word in normalize(business_activity + " " + rubros).split()
+                     if word not in general_words)
+    if not query:
+        return []
+    query_words = {word.rstrip("s") for word in query.split() if len(word) >= 3}
+    similarity = cosine_similarity(_vectorizer.transform([query]), _matrix).ravel()
+    indices = np.argsort(-similarity, kind="stable")
+    # Exige al menos un término compartido: un fragmento accidental como «xxx»
+    # no debe hacer pasar una talla XXL por un producto del giro de la empresa.
+    codes = [_catalog_codes[i] for i in indices if similarity[i] > 0
+             and _catalog_codes[i] in data.VALID_CODES
+             and query_words.intersection(word.rstrip("s") for word in
+                 normalize(data.GOODS[_catalog_codes[i]]["name"]).split())][:MAX_CANDIDATES]
+    return [data.GOODS[code] for code in codes]
+
+
 @traceable(run_type="tool", name="Preselect candidates")
 def preselect(*texts):
     """Une los bienes más parecidos a cada texto, sin repetir, en orden de parecido."""

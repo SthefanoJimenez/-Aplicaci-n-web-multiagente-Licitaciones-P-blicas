@@ -14,9 +14,9 @@
         Datos abiertos del OECE, {{ y0 }}–{{ y1 }}
       </p>
       <h1 class="hero-title" id="hero-title">Sepa si le conviene venderle al Estado antes de preparar su propuesta</h1>
-      <p class="hero-lead">Describa su producto y compare su costo con lo que el Estado pagó por el mismo bien. Vea dónde se compra, qué entidades lo compran, quiénes ganan y por qué montos. No necesita saber de analítica.</p>
+      <p class="hero-lead">Use el perfil de su empresa para elegir su producto y comparar su costo con lo que el Estado pagó por el mismo bien. Vea dónde se compra, qué entidades lo compran, quiénes ganan y por qué montos. No necesita saber de analítica.</p>
       <div class="hero-actions">
-        <a class="button button-primary button-lg" href="{{ url_for('describe') }}" data-tour="1" data-tour-title="Empiece aquí" data-tour-text="Haga clic en «Evaluar mi producto» para describir el bien que vende. El recorrido continuará en la siguiente pantalla." data-tour-click>Evaluar mi producto</a>
+        <a class="button button-primary button-lg" href="{{ url_for('evaluate_company_product') }}" data-tour="1" data-tour-title="Empiece aquí" data-tour-text="Haga clic en «Evaluar mi producto» para usar el perfil de su empresa y consultar el mercado del bien que confirme." data-tour-click>Evaluar mi producto</a>
         <a class="button button-secondary button-lg" href="{{ url_for('overview') }}">Ver el panorama del mercado</a>
       </div>
       <button type="button" class="tour-start" data-tour-start>
@@ -25,7 +25,7 @@
       </button>
       <p class="hero-note">
         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
-        Sin registro. Su costo no se guarda ni se envía a ningún modelo de lenguaje.
+        Su perfil se conserva en su cuenta. Su costo no se guarda ni se envía a ningún modelo de lenguaje.
       </p>
     </div>
 

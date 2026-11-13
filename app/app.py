@@ -77,6 +77,31 @@ def home():
 # ---------------------------------------------------------------------------
 # Flujo de evaluación: 5 pasos
 # ---------------------------------------------------------------------------
+@app.get("/evaluar/mi-producto")
+def evaluate_company_product():
+    """Entrada con el perfil guardado y recuperación del último bien confirmado."""
+    try:
+        factory = auth.store()
+        profile = accounts.get_profile(factory, g.current_user["id"])
+        code = accounts.get_company_product(factory, g.current_user["id"])
+    except SQLAlchemyError:
+        return render_template("auth/unavailable.html"), 503
+    if code in data.VALID_CODES and not request.args.get("cambiar"):
+        session["code"] = code
+        session["description"] = data.GOODS[code]["name"]
+        session["candidates"] = [code]
+        return redirect(url_for("market"))
+
+    matches = classifier.profile_candidates(profile.get("business_activity", ""), profile.get("rubros", ""))
+    session.pop("code", None)
+    # Solo información pública del catálogo y una etiqueta genérica pasan a la cookie.
+    session["description"] = "Bienes del perfil de la empresa"
+    session["candidates"] = [item["code"] for item in matches]
+    description = (profile.get("rubros") or profile.get("business_activity") or "")[:config.MAX_DESCRIPTION_LENGTH]
+    return render_template("company_product.html", profile=profile, candidates=matches,
+                           description=description, n_awards=data.N_AWARDS)
+
+
 @app.get("/evaluar")
 def describe():
     """Paso 1: descripción del bien."""
@@ -163,6 +188,10 @@ def confirm():
     code = request.form.get("code", type=int)
     if code not in session.get("candidates", []) or code not in data.VALID_CODES:
         return redirect(url_for("describe"))
+    try:
+        accounts.remember_company_product(auth.store(), g.current_user["id"], code)
+    except SQLAlchemyError:
+        return render_template("auth/unavailable.html"), 503
     session["code"] = code
     return redirect(url_for("market"))
 

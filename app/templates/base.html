@@ -23,7 +23,7 @@
         {{ app_name }}
       </a>
       <nav class="nav" aria-label="Secciones">
-        <a href="{{ url_for('describe') }}" {% if active_nav == "evaluate" %}aria-current="page"{% endif %}>Evaluar mi producto</a>
+        <a href="{{ url_for('evaluate_company_product') }}" {% if active_nav == "evaluate" %}aria-current="page"{% endif %}>Evaluar mi producto</a>
         <a href="{{ url_for('overview') }}" {% if active_nav == "overview" %}aria-current="page"{% endif %}>Panorama del mercado</a>
         <a href="{{ url_for('tenders_list') }}" {% if active_nav == "tenders" %}aria-current="page"{% endif %}>Convocatorias vigentes</a>
         <a href="{{ url_for('assistant_chat') }}" {% if active_nav == "assistant" %}aria-current="page"{% endif %}>Asistente de Postulación</a>
