@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% set active_nav = "tenders" %}
 {% block title %}Convocatorias vigentes{% endblock %}
+{% block page_class %}page-tenders{% endblock %}
 {% block content %}
 <h1 class="page-title">Convocatorias vigentes de bienes</h1>
 <p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto y en los que solicitan las empresas. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
@@ -11,7 +12,7 @@
   <p><strong>Aviso sobre la ubicación:</strong> El departamento mostrado corresponde a la sede de la entidad compradora convocante, no necesariamente al lugar final de entrega de los bienes.</p>
 </div>
 
-<form class="filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
+<form class="filters tender-filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
   <div>
     <label for="f-rubro">Rubro</label>
     <select id="f-rubro" name="rubro">
@@ -39,10 +40,12 @@
       {% endfor %}
     </select>
   </div>
-  <button type="submit" class="button button-primary">Aplicar</button>
-  {% if f.rubro or f.department or f.method %}
-  <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
-  {% endif %}
+  <div class="tender-filter-actions">
+    <button type="submit" class="button button-primary">Aplicar</button>
+    {% if f.rubro or f.department or f.method %}
+    <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
+    {% endif %}
+  </div>
 </form>
 <p class="muted small" style="margin-top:8px;">¿No encuentra lo que vende? <a href="{{ url_for('rubro_catalog') }}">Vea el catálogo completo de rubros</a> y solicite el suyo.</p>
 
@@ -92,40 +95,42 @@
 {% endif %}
 
 <div class="section">
-  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
+  <div class="tender-results-heading">
     <h2 class="section-title">Resultados ({{ total_items }} convocatorias vigentes)</h2>
     <span class="muted small">Ordenadas de la más reciente a la más antigua</span>
   </div>
 
   {% if tenders %}
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Código</th>
-          <th>Objeto y Convocatoria</th>
-          <th>Entidad compradora</th>
-          <th>Departamento</th>
-          <th>Publicación</th>
-          <th class="num">Antigüedad</th>
-          <th class="num">Valor estimado</th>
-          <th>Elegibilidad de mi empresa</th>
-          <th style="min-width: 170px;">Acciones</th>
+  {% if not current_user %}
+  <p class="tender-signin"><a href="{{ url_for('auth.login', next=url_for('tenders_list', rubro=f.rubro, departamento=f.department, metodo=f.method, pagina=page_number)) }}">Inicie sesión</a> para consultar la elegibilidad de su empresa.</p>
+  {% endif %}
+  <div class="tender-list">
+    <table class="data-table tender-table" role="table">
+      <caption class="sr-only">Convocatorias vigentes con entidad, fechas, valor y acciones disponibles.</caption>
+      <thead role="rowgroup">
+        <tr role="row">
+          <th scope="col" role="columnheader">Convocatoria</th>
+          <th scope="col" role="columnheader">Entidad y ubicación</th>
+          <th scope="col" role="columnheader">Fechas</th>
+          <th scope="col" role="columnheader">{% if current_user %}Valor y elegibilidad{% else %}Valor estimado{% endif %}</th>
+          <th scope="col" role="columnheader">Acciones</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {% for t in tenders %}
-        <tr>
-          <td>
-            <span class="chip">{{ t.code or t.ocid }}</span>
-            {% if t.method %}<br><span class="muted small">{{ t.method }}</span>{% endif %}
-          </td>
-          <td>
+        <tr role="row">
+          <td class="tender-identity" role="cell">
+            <div class="tender-meta">
+              <span class="chip">{{ t.code or t.ocid }}</span>
+              {% if t.method %}<span class="muted small">{{ t.method }}</span>{% endif %}
+            </div>
+            <div class="tender-name">
             {% if t.code %}
             <a href="{{ url_for('tender_sheet', code=t.code) }}" style="color:inherit;"><strong>{{ t.title or "Sin título" }}</strong></a>
             {% else %}
             <strong>{{ t.title or "Sin título" }}</strong>
             {% endif %}
+            </div>
             {% if t.catalog_code %}
             <div style="margin-top:6px;">
               <a class="tag" href="{{ url_for('good_sheet', code=t.catalog_code) }}" target="_blank" rel="noopener" title="Ver precios históricos del bien">
@@ -135,18 +140,18 @@
             </div>
             {% endif %}
           </td>
-          <td>{{ t.entity or "—" }}</td>
-          <td>
-            {{ (t.department or "—")|place }}
-            <br><span class="muted small" title="Sede de la entidad compradora">Entidad</span>
+          <td class="tender-entity" role="cell">
+            <span class="tender-mobile-label" aria-hidden="true">Entidad y ubicación</span>
+            <p class="tender-entity-name">{{ t.entity or "—" }}</p>
+            <span class="muted small" title="Sede de la entidad compradora">{{ (t.department or "—")|place }} · Sede de la entidad</span>
           </td>
-          <td>
-            {{ t.published_at|date_pe }}
-            {% if t.deadline_at %}
-            <br><span class="muted small">Límite: {{ t.deadline_at|date_pe }}</span>
-            {% endif %}
-          </td>
-          <td class="num">
+          <td class="tender-timeline" role="cell">
+            <span class="tender-mobile-label" aria-hidden="true">Fechas</span>
+            <dl class="tender-dates">
+              <div><dt>Publicación</dt><dd>{{ t.published_at|date_pe }}</dd></div>
+              {% if t.deadline_at %}<div><dt>Límite</dt><dd>{{ t.deadline_at|date_pe }}</dd></div>{% endif %}
+            </dl>
+            <span class="muted small">
             {% if t.days_since is not none %}
               {% if t.days_since == 0 %}
                 <span class="tag tag-good">Hoy</span>
@@ -158,22 +163,29 @@
             {% else %}
               —
             {% endif %}
+            </span>
           </td>
-          <td class="num">
+          <td class="tender-assessment" role="cell">
+            <span class="tender-mobile-label" aria-hidden="true">Valor estimado</span>
+            <p class="tender-value">
             {% if t.estimated_value and t.estimated_value > 0 %}
               {{ t.estimated_value|pen }}
             {% else %}
               <span class="muted">No publicado</span>
             {% endif %}
-          </td>
-          <td>
+            </p>
+            {% if current_user %}
+            <div class="tender-eligibility">
+            <span class="muted small">Elegibilidad de mi empresa</span>
             {% set e = eligibility_results.get(t.code) %}
-            {% if e %}<a class="eligibility-badge eligibility-{{ e.color }}" href="{{ url_for('tender_sheet', code=t.code, _anchor='elegibilidad') }}">{{ e.color|capitalize }} · {{ e.label }}</a><p class="small">{{ e.reason }}</p>
-            {% elif current_user %}<span class="muted">Evaluación no disponible</span>
-            {% else %}<span class="muted">Inicie sesión para evaluar</span>{% endif %}
+            {% if e %}<a class="eligibility-badge eligibility-{{ e.color }}" href="{{ url_for('tender_sheet', code=t.code, _anchor='elegibilidad') }}">{{ e.color|capitalize }} · {{ e.label }}</a><p class="small tender-reason">{{ e.reason }}</p>
+            {% else %}<span class="muted small">Evaluación no disponible</span>{% endif %}
+            </div>
+            {% endif %}
           </td>
-          <td>
-            <div style="display:flex; flex-direction:column; gap:6px;">
+          <td class="tender-action-cell" role="cell">
+            <span class="tender-mobile-label" aria-hidden="true">Acciones</span>
+            <div class="tender-actions">
               {% if t.code %}
               <a class="button button-sm button-secondary" href="{{ url_for('tender_sheet', code=t.code) }}" title="Ficha de la convocatoria con sus requisitos de calificación">Ver requisitos</a>
               {% endif %}
