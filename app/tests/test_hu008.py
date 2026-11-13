@@ -12,7 +12,7 @@ from app import app
 from services import accounts
 
 PASSWORD = "Una frase de prueba 2026!"
-PROFILE = {"company_name": "Materiales del Norte", "business_activity": "Venta de materiales",
+PROFILE = {"ruc": "20123456789", "company_name": "Materiales del Norte", "business_activity": "Venta de materiales",
            "rubros": "Cemento y acero", "monthly_sales": "15000.50", "experience_years": "5",
            "similar_contracts_amount": "80000.00", "specialized_staff": "Un técnico con tres años de experiencia"}
 
@@ -171,7 +171,7 @@ def test_two_companies_cannot_read_or_overwrite_each_other(account_client, accou
     account_client.post("/salir")
     register(account_client, email="otra@example.test")
     assert "15000.50" not in account_client.get("/perfil?company_id=1&user_id=1").text
-    account_client.post("/perfil", data=PROFILE | {"monthly_sales": "42", "company_name": "Otra empresa", "company_id": "1", "user_id": "1"})
+    account_client.post("/perfil", data=PROFILE | {"ruc": "20987654321", "monthly_sales": "42", "company_name": "Otra empresa", "company_id": "1", "user_id": "1"})
     with account_factory() as db:
         first = db.scalar(select(accounts.CompanyProfile).where(accounts.CompanyProfile.company_id == 1))
         second = db.scalar(select(accounts.CompanyProfile).where(accounts.CompanyProfile.company_id == 2))

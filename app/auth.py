@@ -43,7 +43,7 @@ def store():
             Path(current_app.instance_path).mkdir(parents=True, exist_ok=True)
             url = "sqlite:///" + str(Path(current_app.instance_path) / "cuentas.sqlite3")
         engine = db.make_engine(url)
-        accounts.AccountBase.metadata.create_all(engine)
+        accounts.initialize_schema(engine)
         factory = db.make_session_factory(engine)
         current_app.extensions["accounts_factory"] = factory
     return factory
@@ -214,11 +214,16 @@ def logout():
 
 def validate_profile(form):
     values, errors = {}, {}
+    values["ruc"] = form.get("ruc", "").strip()
+    if not accounts.valid_ruc(values["ruc"]):
+        errors["ruc"] = "Escriba los 11 dígitos del RUC, sin espacios ni guiones."
     for key, maximum in (("company_name", 200), ("business_activity", 300), ("rubros", 500), ("specialized_staff", 3000)):
         value = form.get(key, "").strip()
         if not value or len(value) > maximum:
             errors[key] = f"Complete este campo (máximo {maximum} caracteres)."
         values[key] = value
+    if len(values["company_name"]) < 2:
+        errors["company_name"] = "Escriba la razón social (de 2 a 200 caracteres)."
     for key in ("monthly_sales", "similar_contracts_amount"):
         raw = form.get(key, "").strip()
         try:
@@ -245,9 +250,12 @@ def profile():
         if request.method == "POST":
             values, errors = validate_profile(request.form)
             if not errors:
-                accounts.save_profile(store(), g.current_user["id"], values)
-                flash("Perfil guardado. Puede actualizarlo cuando lo necesite.", "success")
-                return redirect(target or url_for("auth.profile"))
+                try:
+                    accounts.save_profile(store(), g.current_user["id"], values)
+                    flash("Perfil guardado. Puede actualizarlo cuando lo necesite.", "success")
+                    return redirect(target or url_for("auth.profile"))
+                except accounts.RucTaken as error:
+                    errors["ruc"] = str(error)
         else:
             values = accounts.get_profile(store(), g.current_user["id"])
     except SQLAlchemyError:

@@ -57,7 +57,7 @@ def main():
             private = auth.store()
             user = accounts.create_user(private, "demo-hu010@example.test", "Demo_hu010_2026!", "Empresa ficticia HU-010")
             accounts.save_profile(private, user, {"company_name":"Empresa ficticia HU-010",
-                "business_activity":"Venta de barras de acero y cemento", "rubros":"3011",
+                "ruc":"20123456789", "business_activity":"Venta de barras de acero y cemento", "rubros":"3011",
                 "monthly_sales":Decimal("15000.50"), "experience_years":5,
                 "similar_contracts_amount":Decimal("250000"), "specialized_staff":"Dos técnicos especializados"})
             for kind in ("rnp", "experiencia", "personal", "otro"):

@@ -20,7 +20,7 @@ def business(account_factory, monkeypatch):
     monkeypatch.setattr(company_documents, "today", lambda: TODAY)
     user = accounts.create_user(account_factory, "elegible@example.test", "Solo prueba 7!", "Empresa de prueba")
     accounts.save_profile(account_factory, user, {
-        "company_name": "Empresa de prueba", "business_activity": "Venta de barras de acero y cemento",
+        "ruc": "20123456789", "company_name": "Empresa de prueba", "business_activity": "Venta de barras de acero y cemento",
         "rubros": "3011", "monthly_sales": Decimal("15000.50"), "experience_years": 5,
         "similar_contracts_amount": Decimal("250000"), "specialized_staff": "Dos técnicos especializados",
     })

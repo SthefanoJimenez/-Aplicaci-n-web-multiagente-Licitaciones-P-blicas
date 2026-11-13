@@ -297,6 +297,7 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
     color = "rojo" if any(c["status"] == "fail" for c in checks) else "amarillo" if any(c["status"] != "pass" for c in checks) else "verde"
     decisive = [c["reason"] for c in checks if c["status"] == "fail"] or [c["reason"] for c in checks if c["status"] != "pass"]
     return {"code": tender["code"], "title": tender["title"], "color": color, "label": LABELS[color],
+            "company": {"name": profile.get("company_name", ""), "ruc": profile.get("ruc", "")},
             "reason": decisive[0] if decisive else "Todos los requisitos revisados y los controles disponen de sustento declarado compatible.",
             "checks": checks, "amount": amount, "amount_source": amount_source, "estimate": details,
             "guarantee": guarantee, "inventory": inventory, "on_date": on_date,

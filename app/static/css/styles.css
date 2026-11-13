@@ -3229,7 +3229,7 @@ details.table-view summary {
 /* Los enlaces de cuenta se mantienen juntos; los de secciones bajan como grupo. */
 .topbar-inner {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     max-width: 1440px;
     min-height: 72px;
     padding: 12px 24px;
@@ -3242,18 +3242,30 @@ details.table-view summary {
 }
 
 .topbar-inner .nav {
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: stretch;
+    gap: 6px;
+    border-top: 1px solid var(--rule);
+    padding-top: 8px;
     min-width: 0;
 }
 
 .topbar-inner .nav a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
     padding: 8px 10px;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
 }
 
 .nav-account {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -3342,25 +3354,6 @@ details.table-view summary {
 .page-documents .notice ul { margin: 8px 0 0; }
 .page-documents .notice { display: block; }
 
-@media (max-width: 1350px) {
-    .topbar-inner {
-        grid-template-columns: auto minmax(0, 1fr);
-    }
-
-    .topbar-inner .nav {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        justify-content: flex-start;
-        border-top: 1px solid var(--rule);
-        padding-top: 8px;
-    }
-
-    .nav-account {
-        grid-column: 2;
-        grid-row: 1;
-    }
-}
-
 @media (max-width: 680px) {
     .profile-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -3395,6 +3388,10 @@ details.table-view summary {
         min-height: 44px;
         white-space: normal;
         padding: 8px;
+    }
+
+    .topbar-inner .nav a:last-child {
+        grid-column: 1 / -1;
     }
 }
 
@@ -3526,6 +3523,9 @@ details.table-view summary {
 }
 
 .profile-val {
+    min-width: 0;
+    max-width: 65%;
+    overflow-wrap: anywhere;
     text-align: right;
 }
 

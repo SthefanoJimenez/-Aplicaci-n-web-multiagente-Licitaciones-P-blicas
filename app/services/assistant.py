@@ -91,7 +91,7 @@ def extract_profile_updates(text: str, current_profile: Dict[str, Any]) -> Dict[
             p["experience_amount"] = val
         except ValueError:
             pass
-    elif "sin experiencia" in text_lower or "cero experiencia" in text_lower or "0 experiencia" in text_lower or "0 soles" in text_lower:
+    elif any(phrase in text_lower for phrase in ("sin experiencia", "no tengo experiencia", "cero experiencia", "0 experiencia", "0 soles")):
         p["experience_amount"] = 0.0
 
     # Rubro o actividad
@@ -109,10 +109,10 @@ def extract_profile_updates(text: str, current_profile: Dict[str, Any]) -> Dict[
         p["rubro_name"] = "Equipos informáticos"
 
     # Habilitaciones específicas
-    if "osinergmin" in text_lower or "registro de hidrocarburos" in text_lower:
-        p["has_osinergmin"] = True
-    elif "sin osinergmin" in text_lower or "no tengo osinergmin" in text_lower:
+    if "sin osinergmin" in text_lower or "no tengo osinergmin" in text_lower:
         p["has_osinergmin"] = False
+    elif "osinergmin" in text_lower or "registro de hidrocarburos" in text_lower:
+        p["has_osinergmin"] = True
 
     # Consorcio
     if "sin consorcio" in text_lower or "no tengo consorcio" in text_lower or "sin socio" in text_lower or "solo" in text_lower or "por mi cuenta" in text_lower:
@@ -277,6 +277,8 @@ def evaluate_tenders_node(state: AssistantState) -> Dict[str, Any]:
     tenders_list = state.get("tenders_found", [])
     evaluations = []
 
+    from services import eligibility
+
     user_exp = profile.get("experience_amount", None)
     has_rnp = profile.get("has_rnp", None)
     has_consortium = profile.get("has_consortium", False)
@@ -291,38 +293,31 @@ def evaluate_tenders_node(state: AssistantState) -> Dict[str, Any]:
         value = t.get("estimated_value")
 
         # Buscar requisitos específicos en los fragmentos de las bases
-        page_ref = 3
-        quote_text = "Requisitos de calificación según Capítulo III de las Bases"
-        req_exp_amount = 0.0
+        page_ref = None
+        quote_text = "No hay requisitos de las bases disponibles para comprobar."
+        req_exp_amount = None
+        experience_required = False
         req_osinergmin = False
+        req_rnp = False
 
         for c in chunks:
             c_text = c["text"]
+            if re.search(r"\brnp\b|registro nacional de proveedores", c_text, re.I):
+                req_rnp = True
             if "osinergmin" in c_text.lower() or "registro de hidrocarburos" in c_text.lower():
                 req_osinergmin = True
-                page_ref = c.get("page") or 3
-                quote_text = "Inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN"
-            exp_match = re.search(r"s\/?\.?\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:\.[0-9]+)?|[0-9]+)\s*(?:soles)?", c_text.lower())
-            if "facturaci" in c_text.lower() or "experiencia" in c_text.lower():
-                page_ref = c.get("page") or page_ref
+                page_ref = c.get("page")
                 quote_text = c_text[:250].strip()
-                if exp_match:
-                    try:
-                        req_exp_amount = float(exp_match.group(1).replace(",", ""))
-                    except ValueError:
-                        pass
+            if "facturaci" in c_text.lower() or "experiencia" in c_text.lower():
+                experience_required = True
+                page_ref = c.get("page")
+                quote_text = c_text[:250].strip()
+                minimum = eligibility._minimum(c_text, "experiencia|facturacion", value)
+                if minimum is not None:
+                    req_exp_amount = minimum
 
-        # Si no hay chunks indexados, generar requisitos estándar según tipo de objeto/valor
-        if not chunks:
-            if "diesel" in title.lower() or "combustible" in title.lower() or "1510" in (t.get("rubros") or ""):
-                req_osinergmin = True
-                quote_text = "Registro de Hidrocarburos vigente (OSINERGMIN) y experiencia mínima en venta de combustibles."
-                page_ref = 4
-                req_exp_amount = round(value * 0.5) if value else 100000.0
-            else:
-                quote_text = "Experiencia del postor en la especialidad y cumplimiento de especificaciones técnicas."
-                page_ref = 3
-                req_exp_amount = round(value * 0.5) if value else 50000.0
+        # Sin bases o sin umbral interpretable no se inventan montos ni páginas.
+        incomplete = not chunks or (experience_required and req_exp_amount is None)
 
         # Lógica de Semáforo
         # 1. RNP: Si no tiene RNP y va solo -> ROJO (el RNP es requisito indispensable de la Ley de Contrataciones)
@@ -332,12 +327,17 @@ def evaluate_tenders_node(state: AssistantState) -> Dict[str, Any]:
         #    - Si puede consorciarse con socio con experiencia -> AMARILLO
         #    - Si cumple habilitación y experiencia (o monto menor) -> VERDE
 
-        semaphore = "verde"
-        reasons = []
+        semaphore = "amarillo" if incomplete else "verde"
+        reasons = (["Falta revisar las bases o interpretar el requisito de experiencia; no se asume un umbral fijo ni un porcentaje del valor."]
+                   if incomplete else [])
 
-        if has_rnp is False and not has_consortium:
+        if req_rnp and has_rnp is False:
             semaphore = "rojo"
-            reasons.append("No cuentas con inscripción vigente en el RNP (Registro Nacional de Proveedores), requisito obligatorio e insubsanable para contratar con el Estado.")
+            reasons.append("Declara no contar con el RNP exigido en las bases; el consorcio no sustituye la inscripción propia.")
+        elif req_rnp and has_rnp is None:
+            if semaphore != "rojo":
+                semaphore = "amarillo"
+            reasons.append("Falta confirmar el RNP exigido en las bases.")
 
         if req_osinergmin:
             if has_osinergmin is False and not (has_consortium and profile.get("consortium_habilitation")):
@@ -345,11 +345,19 @@ def evaluate_tenders_node(state: AssistantState) -> Dict[str, Any]:
                 reasons.append(f"Se exige Registro de Hidrocarburos ante OSINERGMIN (Bases, pág. {page_ref}), con el cual indicas no contar.")
             elif has_osinergmin is True or (has_consortium and profile.get("consortium_habilitation")):
                 reasons.append(f"Cumples con la habilitación legal de OSINERGMIN exigida en las Bases (pág. {page_ref}).")
+            else:
+                if semaphore != "rojo":
+                    semaphore = "amarillo"
+                reasons.append("Falta confirmar la habilitación de OSINERGMIN que mencionan las bases.")
 
         # Evaluación de experiencia
         effective_exp = user_exp if user_exp is not None else 0.0
-        if req_exp_amount > 0:
-            if effective_exp >= req_exp_amount:
+        if req_exp_amount is not None and req_exp_amount > 0:
+            if user_exp is None:
+                if semaphore != "rojo":
+                    semaphore = "amarillo"
+                reasons.append("Falta declarar la experiencia facturada para contrastarla con el mínimo de las bases.")
+            elif effective_exp >= req_exp_amount:
                 reasons.append(f"Tu facturación acreditada (S/ {effective_exp:,.2f}) supera el requisito mínimo de S/ {req_exp_amount:,.2f} (Bases, pág. {page_ref}).")
             else:
                 # Falta experiencia
@@ -393,45 +401,8 @@ def generate_response_node(state: AssistantState) -> Dict[str, Any]:
     status = state.get("status")
 
     if status == "db_unavailable":
-        reason = state.get("db_reason", "sin_configurar")
-        lines = []
-        if reason == "sin_configurar":
-            lines.append("> ⚠️ **Aviso del Sistema:** *La base de datos de convocatorias del SEACE aún no está conectada o configurada (`DATABASE_URL`). Para consultar convocatorias vigentes en tiempo real, asegúrate de configurar la variable de entorno `DATABASE_URL` (en Render o en tu archivo .env local).*")
-        else:
-            lines.append("> ⚠️ **Aviso del Sistema:** *No se pudo establecer conexión con la base de datos de convocatorias del SEACE en este momento.*")
-
-        lines.append("\n### ⚖️ Asesoría Estratégica para tu Perfil (Ley de Contrataciones N° 30225)\n")
-        lines.append("A pesar de que las convocatorias del día no se pudieron consultar en vivo, evalúo tu situación legal y competitiva:\n")
-
-        has_rnp = profile.get("has_rnp")
-        sold_to_state = profile.get("sold_to_state")
-        has_consortium = profile.get("has_consortium", False)
-        rubro = profile.get("rubro")
-
-        # 1. Habilitación técnica
-        if rubro == "1510":
-            lines.append("- **Habilitación Técnica (Combustibles):** Para vender hidrocarburos al Estado es **indispensable** contar con inscripción vigente en el **Registro de Hidrocarburos de OSINERGMIN**. Sin este registro, las entidades públicas rechazan la oferta de plano.")
-        elif rubro == "2510":
-            lines.append("- **Habilitación Técnica (Vehículos):** Las bases exigen acreditar representación autorizada del fabricante o distribuidor oficial, y contar con taller de mantenimiento autorizado en la región.")
-
-        # 2. RNP
-        if has_rnp is False:
-            lines.append("- 🔴 **RNP (Registro Nacional de Proveedores):** Indicas no contar con RNP. **Atención:** Para cualquier contratación con el Estado mayor a 1 UIT (S/ 5,150), contar con inscripción vigente en el RNP es un requisito **innegociable e insubsanable**. Tu primer paso debe ser tramitarlo en el portal del OECE/OSCE.")
-        elif has_rnp is True:
-            lines.append("- 🟢 **RNP:** Cuentas con RNP vigente, lo que te habilita formalmente para presentar ofertas a nivel nacional.")
-
-        # 3. Experiencia y Consorcio
-        if sold_to_state is False or profile.get("experience_amount") == 0:
-            if has_consortium:
-                lines.append("- 🟡 **Postulación en Consorcio:** ¡Estrategia recomendada! La **Directiva de Consorcios de OSCE** permite asociarte con otra empresa donde tu socio aporte la facturación histórica requerida en las bases y tú aportes la capacidad logística o el bien.")
-            else:
-                lines.append("- 🔴 **Experiencia del Postor:** Al no contar con facturación previa, en Licitaciones Públicas y Adjudicaciones Simplificadas corres alto riesgo de descalificación por experiencia.")
-                lines.append("- 💡 **Alternativa para novatos:** Postula a procedimientos de **Subasta Inversa Electrónica (SIE)**. En la SIE, por ley, **no se califica experiencia**: únicamente se evalúa el cumplimiento de la Ficha Técnica y el menor precio.")
-        elif profile.get("experience_amount"):
-            lines.append(f"- 🟢 **Facturación Acreditada:** Cuentas con un monto registrado de S/ {profile.get('experience_amount'):,.2f}, lo que te otorga solvencia para licitaciones medianas.")
-
-        lines.append("\n---\n📌 *Apenas la base de datos de convocatorias esté conectada, el asistente evaluará automáticamente tu perfil contra los requisitos específicos y páginas exactas de cada proceso vigente.*")
-        return {"response": "\n".join(lines)}
+        guide = preparation_guide_node({})["response"]
+        return {"response": "No se pudo consultar la base de convocatorias. Todavía no es posible emitir un veredicto para un proceso concreto.\n\n" + guide}
 
     if not evaluations:
         resp = (
@@ -463,7 +434,8 @@ def generate_response_node(state: AssistantState) -> Dict[str, Any]:
         lines.append(f"- **Procedimiento:** {e['method']}")
         if e['estimated_value']:
             lines.append(f"- **Valor referencial:** S/ {e['estimated_value']:,.2f}")
-        lines.append(f"- **Requisito en Bases:** *«{e['quote']}»* (**Bases, pág. {e['page_ref']}**)")
+        source = f"Bases, pág. {e['page_ref']}" if e.get("page_ref") else "Bases, sin página identificada"
+        lines.append(f"- **Requisito en Bases:** *«{e['quote']}»* (**{source}**)")
         lines.append(f"- **Diagnóstico:** {' '.join(e['reasons'])}\n")
 
     # Resumen y recomendación para empresarios nuevos

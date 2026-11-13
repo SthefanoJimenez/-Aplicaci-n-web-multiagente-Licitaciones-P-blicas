@@ -22,6 +22,7 @@
          pattern="[0-9]{1,14}([.,][0-9]{1,2})?"
          title="Use hasta 14 cifras enteras y dos decimales, con un solo punto o coma y sin separadores de miles."{% endif %}
          {% if name == 'experience_years' %}inputmode="numeric"{% endif %}
+         {% if name == 'ruc' %}inputmode="numeric" pattern="[0-9]{11}" title="Escriba exactamente 11 dígitos, sin espacios ni guiones."{% endif %}
          {% if errors.get(name) %}aria-invalid="true"{% endif %}
          {% if hint or errors.get(name) %}aria-describedby="{{ name }}-hint{% if errors.get(name) %} {{ name }}-error{% endif %}"{% endif %}>
   {% if type == 'password' %}

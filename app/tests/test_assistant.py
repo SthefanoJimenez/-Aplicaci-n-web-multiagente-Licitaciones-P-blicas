@@ -56,7 +56,7 @@ def test_db():
         t1.chunks.append(db.RequirementChunk(
             chunk_index=0,
             page=4,
-            text="Requisito: Copia de la constancia de inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. Experiencia mínima de S/ 150,000 en venta de combustibles.",
+            text="Requisito: RNP vigente. Copia de la constancia de inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. Experiencia mínima de S/ 150,000 en venta de combustibles.",
             source="pdf",
             file_name="bases_2001.pdf",
             embedding=[0.1] * 768,
@@ -83,7 +83,7 @@ def test_db():
         t2.chunks.append(db.RequirementChunk(
             chunk_index=0,
             page=7,
-            text="Experiencia del postor en la especialidad: acreditación de facturación acumulada por S/ 200,000.00 en venta de vehículos similares.",
+            text="RNP vigente. Experiencia del postor en la especialidad: acreditación de facturación acumulada por S/ 200,000.00 en venta de vehículos similares.",
             source="pdf",
             file_name="bases_2002.pdf",
             embedding=[0.2] * 768,

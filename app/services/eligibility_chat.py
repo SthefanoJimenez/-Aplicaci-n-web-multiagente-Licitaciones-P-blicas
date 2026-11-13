@@ -12,6 +12,7 @@ def sidebar(profile, previous=None):
     if profile.get("similar_contracts_amount") is not None:
         result["experience_amount"] = float(profile["similar_contracts_amount"])
     result["company_name"] = profile.get("company_name", "")
+    result["ruc"] = profile.get("ruc", "")
     return result
 
 
@@ -62,7 +63,9 @@ def answer(query, account_factory, user_id, history=None, profile=None):
     results = list(eligibility.evaluate_many(account_factory, user_id, codes).values())
     if not results:
         return {"response": "No encontré ese código en las convocatorias guardadas. Compruebe el código en Convocatorias vigentes.", "profile": context, "evaluations": []}
-    lines = ["### Elegibilidad de su empresa", "Resultado preliminar según el perfil guardado, las declaraciones y los documentos de su cuenta.\n"]
+    lines = ["### Elegibilidad de su empresa",
+             f"**Empresa:** {company.get('company_name') or 'Por completar'} · **RUC:** {company.get('ruc') or 'Pendiente en Mi empresa'}.",
+             "Resultado preliminar según el perfil guardado, las declaraciones y los documentos de su cuenta.\n"]
     for result in results:
         color = result["color"].capitalize()
         lines += [f"#### {color} · Convocatoria {result['code']}", f"**{result['label']}**", result["title"] or "", ""]
@@ -72,6 +75,7 @@ def answer(query, account_factory, user_id, history=None, profile=None):
             lines.append("- **Monto:** falta el monto; no se inventa un valor.")
         if result["guarantee"]["amount"] is not None:
             lines.append(f"- **Garantía de fiel cumplimiento orientativa:** {format_pen_total(result['guarantee']['amount'])}.")
+            lines.append("- **Sustento del cálculo:** Reglamento de la Ley 32069 (DS 009-2025-EF y modificatorias): art. 113, garantías; art. 114, retención; art. 139, excepciones. Confirme su aplicación en las bases.")
         lines.append(f"- **Documentos evaluados al {result['on_date']}:** {result['date_basis']}.")
         for check in result["checks"]:
             location = f" (bases, página {check['page']})" if check.get("page") else " (bases, sin página identificada)" if check.get("text") else ""

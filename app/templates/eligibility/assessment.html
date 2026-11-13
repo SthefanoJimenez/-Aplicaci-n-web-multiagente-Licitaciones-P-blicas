@@ -1,5 +1,6 @@
 <section class="section eligibility" id="elegibilidad" aria-labelledby="eligibility-title">
   <h2 class="section-title" id="eligibility-title">Elegibilidad de mi empresa</h2>
+  {% if assessment and current_user %}<p class="eligibility-company"><strong>{{ assessment.company.name }}</strong> · RUC: {{ assessment.company.ruc or 'Pendiente en Mi empresa' }}</p>{% endif %}
   {% if not current_user %}
   <div class="notice"><p><a href="{{ url_for('auth.login', next=url_for('tender_sheet', code=tender.code)) }}">Inicie sesión</a> para contrastar esta convocatoria con su perfil y documentos.</p></div>
   {% elif eligibility_error %}

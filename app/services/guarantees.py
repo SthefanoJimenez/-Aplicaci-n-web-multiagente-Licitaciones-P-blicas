@@ -1,6 +1,6 @@
 """Garantías orientativas para bienes bajo Ley 32069; parámetros versionados y configurables.
 
-Fuentes revisadas el 11/11/2026: DS 009-2025-EF arts. 113, 114 y 139,
+Fuentes revisadas el 13/11/2026: DS 009-2025-EF arts. 113, 114 y 139,
 modificado por DS 001-2026-EF; UIT 2026, DS 301-2025-EF.
 Una MYPE puede optar por retención: no se reduce el porcentaje por ser MYPE.
 """

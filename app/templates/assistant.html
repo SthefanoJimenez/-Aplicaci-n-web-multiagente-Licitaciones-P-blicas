@@ -42,6 +42,8 @@
         </div>
         
         <ul class="profile-list">
+          <li class="profile-item"><span class="profile-label">Razón social:</span><span class="profile-val">{{ profile.company_name or 'Por completar en Mi empresa' }}</span></li>
+          <li class="profile-item"><span class="profile-label">RUC:</span><span class="profile-val">{{ profile.ruc or 'Por completar en Mi empresa' }}</span></li>
           <li class="profile-item">
             <span class="profile-label">Rubro principal:</span>
             <span class="profile-val">
