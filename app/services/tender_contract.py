@@ -38,6 +38,7 @@ class TenderDocument:
     doc_type: Optional[str] = None       # documentType de OCDS, por ejemplo "biddingDocuments"
     doc_format: Optional[str] = None     # formato declarado por la fuente (puede no coincidir con el real)
     is_bases: bool = False               # True en el documento que leerá HU-009 (integradas > administrativas)
+    published_at: Optional[datetime] = None      # datePublished de OCDS, si la fuente lo trae (HU-018)
 
 
 @dataclass
@@ -87,6 +88,18 @@ class Tender:
     last_seen_at: Optional[datetime] = None      # última ejecución en que la fuente la traía vigente
     closed_at: Optional[datetime] = None         # cuándo pasó a no_vigente
     requirements_status: str = "pendiente"       # lo actualiza HU-009
+    # HU-018 (services/schedule.py): etapa según los documentos y cronograma leído de las bases
+    stage: Optional[str] = None                  # "administrativas", "absolucion", "integradas", "buena_pro" o vacío
+    stage_changed_at: Optional[datetime] = None
+    schedule_status: Optional[str] = None        # "leido", "remite_seace", "no_encontrado", "no_legible"; vacío = sin leer
+    schedule: list = field(default_factory=list) # [{"key","name","start","end","page","text"}]: solo fechas escritas en las bases
+    schedule_page: Optional[int] = None          # página de la sección del cronograma
+    schedule_file: Optional[str] = None          # archivo de lo descargado donde está
+    schedule_read_at: Optional[datetime] = None  # «Cronograma actualizado al…»
+    schedule_stage: Optional[str] = None         # etapa cuando se leyó
+    schedule_due: Optional[bool] = None          # True: cambió la etapa y se volverá a leer en la siguiente ingesta
+    enquiry_start: Optional[datetime] = None     # plazo de consultas y observaciones según la API (enquiryPeriod);
+    enquiry_end: Optional[datetime] = None       # en las Subastas Inversas no viene
     documents: list = field(default_factory=list)       # [TenderDocument]
     requirements: list = field(default_factory=list)    # [Requirement]
 

@@ -21,13 +21,25 @@
         "last_seen_at": "2026-10-28T13:42:00+00:00",
         "closed_at": null,
         "requirements_status": "extraido",
+        "stage": "administrativas",
+        "stage_changed_at": "2026-10-30T13:30:00+00:00",
+        "schedule_status": "remite_seace",
+        "schedule": [],
+        "schedule_page": 20,
+        "schedule_file": "bases.pdf",
+        "schedule_read_at": "2026-10-30T14:05:00+00:00",
+        "schedule_stage": "administrativas",
+        "schedule_due": false,
+        "enquiry_start": "2026-10-31T05:01:00+00:00",
+        "enquiry_end": "2026-11-06T04:59:00+00:00",
         "documents": [
             {
                 "title": "Bases Administrativas",
                 "url": "<enlace de descarga del SEACE>",
                 "doc_type": "biddingDocuments",
                 "doc_format": "rar",
-                "is_bases": true
+                "is_bases": true,
+                "published_at": null
             }
         ],
         "requirements": [

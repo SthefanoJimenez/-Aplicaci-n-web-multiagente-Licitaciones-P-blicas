@@ -1,4 +1,3 @@
-
 import re
 import time
 
@@ -6,7 +5,7 @@ from sqlalchemy import case, or_, select
 from sqlalchemy.orm import selectinload
 
 import config
-from services import bases_download, bases_reader, db, llm
+from services import bases_download, bases_reader, db, llm, schedule
 
 CHUNK_CHARS = 1200        # unos 300 tokens por fragmento
 CHUNK_OVERLAP = 200       # para no cortar un requisito entre dos fragmentos
@@ -86,6 +85,8 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
         tender.requirements_status = "error"
         return {"status": "error", "chunks": 0, "tokens": 0, "detail": e.reason}
     result = bases_reader.read_bases(content, use_ocr=use_ocr)
+    if result.schedule is not None:          # HU-018: el cronograma sale de la misma lectura
+        schedule.save(tender, result.schedule, document, db.utcnow())
     if result.status != "extraido":
         if tender.requirements_status == "extraido" and tender.chunks:
             # Una lectura peor no borra una buena: pasó el 07/11/2026 al releer en una PC sin OCR unas bases
@@ -201,6 +202,65 @@ def index_pending(session_factory, limit=None, fetch=None, embed=None, use_ocr=N
             progress(number, len(ids), code, result["status"], time.perf_counter() - started)
     with session_factory() as session:
         summary["remaining"] = len(pending_ids(session, None))
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Cronograma (HU-018)
+# ---------------------------------------------------------------------------
+def due_schedule_ids(session, limit=None):
+    """Convocatorias vigentes cuyo cronograma hay que leer: nunca se leyó o cambió la etapa. Mismo orden
+    que las bases pendientes: primero los rubros piloto y solicitados, luego de la más reciente a la más antigua."""
+    from services import rubros
+    priority = [db.Tender.rubros.like(f"%{code}%") for code in rubros.ingestion_rubros(session)]
+    first = case((or_(*priority), 0), else_=1) if priority else None
+    order = ([first] if first is not None else []) + [db.Tender.stage_changed_at.desc(), db.Tender.published_at.desc()]
+    query = (select(db.Tender.id).where(db.Tender.state == "vigente")
+             .where(db.Tender.schedule_due.is_(True)).order_by(*order))
+    if limit:
+        query = query.limit(limit)
+    return list(session.scalars(query))
+
+
+def read_due_schedules(session_factory, limit=None, fetch=None, progress=None):
+    """Lee el cronograma de las bases de hasta `limit` convocatorias (sin OCR ni Gemini). Devuelve el resumen.
+
+    Si la descarga falla, la convocatoria queda para la siguiente ejecución; nunca se guarda una fecha
+    que no esté escrita en las bases.
+    """
+    limit = config.SCHEDULE_MAX_PER_RUN if limit is None else limit
+    fetch = fetch or (lambda url: bases_download.open_bases(url, max_bytes=config.RAG_MAX_BASES_MB * 1024 * 1024))
+    summary = {"processed": 0, "error": 0, "sin_bases": 0, "details": []}
+    summary.update({status: 0 for status in schedule.SCHEDULE_STATUSES})
+    with session_factory() as session:
+        ids = due_schedule_ids(session, limit)
+    for number, tender_id in enumerate(ids, 1):
+        started, code = time.perf_counter(), None
+        try:
+            with session_factory.begin() as session:
+                tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents)])
+                code, document = tender.code, _bases_of(tender)
+                if document is None:
+                    tender.schedule_due = False
+                    status, detail = "sin_bases", "la convocatoria no publica bases"
+                else:
+                    try:
+                        content = _download(document.url, fetch)
+                    except bases_download.BasesUnavailable as e:
+                        status, detail = "error", e.reason            # queda para la siguiente ejecución
+                    else:
+                        result = bases_reader.read_schedule(content)
+                        schedule.save(tender, result, document, db.utcnow())
+                        status, detail = result.status, result.detail
+        except Exception as e:      # un archivo raro no detiene las demás
+            status, detail = "error", f"{type(e).__name__}: {e}"[:200]
+        summary["processed"] += 1
+        summary[status] += 1
+        summary["details"].append((code, status, detail))
+        if progress:
+            progress(number, len(ids), code, status, time.perf_counter() - started)
+    with session_factory() as session:
+        summary["remaining"] = len(due_schedule_ids(session))
     return summary
 
 

@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 import config
-from services import db, ocds_source
+from services import db, ocds_source, schedule
 from services import rubros as rubros_service
 
 
@@ -77,6 +77,9 @@ def _apply_row(tender, row, now, run_id):
     tender.item_status = (row.get("item_status") or None)
     tender.published_at = as_utc(ocds_source.parse_date(row.get("published")))
     tender.deadline_at = as_utc(ocds_source.parse_date(row.get("deadline")))
+    enquiry_start, enquiry_end = row.get("enquiry") or (None, None)      # HU-018
+    tender.enquiry_start = as_utc(ocds_source.parse_date(enquiry_start))
+    tender.enquiry_end = as_utc(ocds_source.parse_date(enquiry_end))
     tender.estimated_value = row.get("value")
     tender.currency = row.get("currency")
     tender.last_seen_at = now
@@ -104,6 +107,7 @@ def _sync_documents(tender, row):
         current.title = doc.get("title")
         current.doc_type = doc.get("type")
         current.doc_format = doc.get("format")
+        current.published_at = as_utc(ocds_source.parse_date(doc.get("published")))
     for url, current in by_url.items():
         current.is_bases = bool(bases and url == bases.get("url"))
     return added
@@ -180,7 +184,7 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
             # convocatoria), y con todos los rubros eran ~1 700 idas y vueltas a Neon (ejecución 15: 481 s)
             existing = {t.ocid: t for t in session.query(db.Tender).options(selectinload(db.Tender.documents))
                         .filter((db.Tender.ocid.in_(open_ocids)) | (db.Tender.state == "vigente")).all()}
-            new_count = updated_count = closed_count = documents_added = 0
+            new_count = updated_count = closed_count = documents_added = stage_changes = 0
             new_rubros = []
             for row in pilot:
                 tender = existing.get(row["ocid"])
@@ -196,6 +200,11 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
                 tender.closed_at = None
                 _apply_row(tender, row, now_utc, run_id)
                 documents_added += _sync_documents(tender, row)
+                # HU-018: etapa según los documentos; si llegó el pliego o las bases integradas, el
+                # cronograma queda para leerse otra vez (services/schedule.py)
+                previous_stage = tender.stage
+                if schedule.mark_stage(tender, tender.documents, now_utc) and previous_stage is not None:
+                    stage_changes += 1
             for ocid, tender in existing.items():
                 if ocid not in open_ocids and tender.state == "vigente":
                     tender.state = "no_vigente"
@@ -225,7 +234,7 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
     new_by_rubro = count_by_rubro(new_rubros, codes, all_rubros)
     return {"run_id": run_id, "status": "ok", "source_open_goods": len(open_goods), "source_open_pilot": len(pilot),
             "saved_open": saved_open, "new": new_count, "updated": updated_count, "closed": closed_count,
-            "documents_added": documents_added, "skipped_months": skipped, "rubros": codes, "all_rubros": all_rubros,
+            "documents_added": documents_added, "stage_changes": stage_changes, "skipped_months": skipped, "rubros": codes, "all_rubros": all_rubros,
             "catalog": catalog_size,
             # por rubro: (vigentes en la fuente, vigentes guardadas tras la ejecución, nuevas en esta ejecución)
             "by_rubro": {c: (source_by_rubro[c], saved_by_rubro[c], new_by_rubro[c]) for c in saved_by_rubro}}

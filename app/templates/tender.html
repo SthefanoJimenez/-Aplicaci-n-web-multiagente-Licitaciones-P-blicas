@@ -52,6 +52,82 @@
   </div>
 </div>
 
+{# HU-018: etapa según los documentos publicados y cronograma leído de las bases (services/schedule.py) #}
+<div class="section" id="cronograma">
+  <h2 class="section-title">Etapa y cronograma</h2>
+  <div class="grid-2" style="align-items:start;">
+    <div class="panel" data-stage="{{ timeline.stage or 'sin_bases' }}">
+      <p class="panel-title" style="margin-top:0;"><strong>Etapa:</strong> {{ timeline.stage_name or "sin bases publicadas" }}</p>
+      {% if timeline.stage %}
+      <ol class="stepper" style="position:static;" aria-label="Etapas de las bases">
+        {% for name, state in timeline.steps %}
+        <li class="{{ 'done' if state == 'hecha' else ('current' if state == 'actual' else '') }}"{% if state == 'actual' %} aria-current="step"{% endif %}>{{ name }}</li>
+        {% endfor %}
+      </ol>
+      <p class="stepper-mobile">Etapa actual: {{ timeline.stage_name }}</p>
+      <p class="muted small" style="margin:8px 0 0;">{{ timeline.stage_help }}</p>
+      <p class="muted small" style="margin:8px 0 0;">La etapa sale de los documentos publicados en el portal del OECE (al lado, con su fecha).{% if timeline.stage_changed %} Cambió el {{ timeline.stage_changed }}.{% endif %}</p>
+      {% else %}
+      <p class="muted" style="margin:0;">La convocatoria no publica bases en el portal del OECE, así que no se puede saber su etapa.</p>
+      {% endif %}
+    </div>
+    <div class="panel" data-schedule-status="{{ timeline.status or 'sin_leer' }}">
+      <p class="panel-title" style="margin-top:0;"><strong>Cronograma</strong></p>
+      <h3 style="font-size:15px; margin:0 0 6px;">Según la API del OECE</h3>
+      {% if timeline.enquiry or timeline.stage_documents %}
+      <div class="table-wrap" data-api-dates>
+        <table class="data-table">
+          <caption class="sr-only">Fechas publicadas en la API del OECE</caption>
+          <thead><tr><th scope="col">Qué</th><th scope="col">Fecha</th></tr></thead>
+          <tbody>
+            {% if timeline.enquiry %}
+            <tr><td class="name">Plazo para formular consultas y observaciones</td><td>Del {{ timeline.enquiry.start }} al {{ timeline.enquiry.end }}</td></tr>
+            {% endif %}
+            {% for d in timeline.stage_documents %}
+            <tr><td class="name">Publicación de «{{ d.title }}»</td><td style="white-space:nowrap;">{{ d.published or "sin fecha en la API" }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="muted" style="margin:0 0 8px;">La API no publica fechas de esta convocatoria.</p>
+      {% endif %}
+      <h3 style="font-size:15px; margin:16px 0 6px;">Según las bases</h3>
+      {% if timeline.status == "leido" %}
+      <p style="margin:0 0 8px;"><strong>Cronograma actualizado al {{ timeline.read_at }}</strong>{% if timeline.read_stage %}, con las bases en la etapa «{{ timeline.read_stage }}»{% endif %}.</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <caption class="sr-only">Cronograma leído de las bases</caption>
+          <thead><tr><th scope="col">Etapa</th><th scope="col">Fecha</th><th scope="col" class="num">Página</th></tr></thead>
+          <tbody>
+            {% for e in timeline.events %}
+            <tr><td class="name">{{ e.name }}</td><td>{{ e.start }}{% if e.end %} al {{ e.end }}{% endif %}</td><td class="num">{{ e.page or "—" }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small" style="margin:8px 0 0;">Leído de {% if timeline.source %}«{{ timeline.source }}»{% else %}las bases{% endif %}{% if timeline.page %}, sección del cronograma en la página {{ timeline.page }}{% endif %}. Solo se muestran las fechas escritas en las bases.</p>
+      {% elif timeline.status == "remite_seace" %}
+      <p style="margin:0 0 8px;"><strong>Las bases no traen las fechas:</strong> remiten al cronograma de la ficha de selección del SEACE{% if timeline.page %} (página {{ timeline.page }}{% if timeline.source %} de «{{ timeline.source }}»{% endif %}){% elif timeline.source %} («{{ timeline.source }}»){% endif %}.</p>
+      <p class="muted small" style="margin:0 0 8px;">Revisado el {{ timeline.read_at }}{% if timeline.read_stage %}, con las bases en la etapa «{{ timeline.read_stage }}»{% endif %}. Consulte las fechas en el SEACE.</p>
+      {% elif timeline.status in ("no_encontrado", "no_legible") %}
+      <p style="margin:0 0 8px;"><strong>No se pudo leer el cronograma de las bases</strong> ({{ "las bases no tienen esa sección o no trae fechas reconocibles" if timeline.status == "no_encontrado" else "las bases no tienen texto legible" }}). Revisado el {{ timeline.read_at }}.</p>
+      {% else %}
+      <p style="margin:0 0 8px;"><strong>El cronograma aún no se ha leído.</strong>{% if timeline.stage %} Se leerá de las bases en la próxima ingesta.{% endif %}</p>
+      {% endif %}
+      {% if timeline.reread_pending %}
+      <div class="notice notice-info" role="note" style="margin:8px 0;">
+        <p>La convocatoria pasó a «{{ timeline.stage_name }}»{% if timeline.stage_changed %} el {{ timeline.stage_changed }}{% endif %}. El cronograma se volverá a leer en la próxima ingesta.</p>
+      </div>
+      {% endif %}
+      <div class="notice notice-warning" role="note" style="margin:8px 0 0;">
+        <p>El cronograma oficial es el de la ficha del SEACE y la entidad puede modificarlo, por ejemplo si absuelve las consultas fuera de plazo. Confírmelo antes de presentar consultas u ofertas.</p>
+      </div>
+      <p style="margin:12px 0 0;"><a href="{{ timeline.seace_search_url }}" target="_blank" rel="noopener">Ver el cronograma en el buscador del SEACE</a>{% if tender.entity %} <span class="muted small">(búsquela por la entidad: {{ tender.entity }})</span>{% endif %}</p>
+    </div>
+  </div>
+</div>
+
 <div class="section" id="requisitos">
   <h2 class="section-title">Requisitos de calificación</h2>
   {% if reqs.available %}

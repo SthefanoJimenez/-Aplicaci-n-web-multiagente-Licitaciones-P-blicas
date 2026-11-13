@@ -31,6 +31,12 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
     python ingest_job.py --requisitos [CÓDIGO ...]
                                           requisitos de calificación como los muestra la ficha; sin códigos,
                                           sugiere convocatorias para probar (PDF con texto, OCR, Word, sin leer)
+    python ingest_job.py --cronogramas [N]
+                                          lee el cronograma de hasta N bases pendientes (HU-018: nuevas o cuya
+                                          etapa cambió), sin OCR ni Gemini; la ingesta completa ya lo hace
+    python ingest_job.py --etapas [N]     consulta en la API N convocatorias vigentes (por defecto 10) y muestra
+                                          sus documentos (título, documentType, fechas) y la etapa que les asigna
+                                          la regla de HU-018; no guarda nada
 
 La ingesta diaria se ejecuta en una computadora del equipo (scripts/imac/ o scripts/windows/): el portal del
 OECE responde 403 a la red de GitHub Actions. INGEST_TRIGGER da el origen que queda registrado
@@ -145,6 +151,88 @@ def run_rag(factory, codes=None):
         elif status != "extraido":
             lines.append(f"- {code}: {status} ({detail})")
     return lines
+
+
+def run_schedules(factory, limit=None):
+    """Lee el cronograma de las bases pendientes (HU-018) y devuelve las líneas del resumen. No hace fallar la ingesta."""
+    from services import rag
+
+    def show(number, total, code, status, seconds):
+        print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
+
+    print("Leyendo cronogramas pendientes (etapa nueva o sin leer)…", flush=True)
+    result = rag.read_due_schedules(factory, limit=limit, progress=show)
+    lines = [f"Cronogramas (HU-018): {result['processed']} revisados · con fechas en las bases: {result['leido']} · "
+             f"remiten a la ficha del SEACE: {result['remite_seace']} · sin la sección: {result['no_encontrado']} · "
+             f"no legibles sin OCR: {result['no_legible']} · sin bases: {result['sin_bases']} · "
+             f"con error: {result['error']} · quedan por leer: {result['remaining']}"]
+    for code, status, detail in result["details"]:
+        if status == "error":
+            lines.append(f"- {code}: error ({scrub(detail)}); se reintentará en la próxima ejecución")
+    return lines
+
+
+def show_stages(factory, limit=10):
+    """HU-018, actividad 1: qué documentos y fechas publica la API en cada etapa. Consulta /record/{ocid}."""
+    from collections import Counter
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from services import ocds_source, schedule
+    with factory() as session:
+        rows = session.scalars(select(db.Tender).where(db.Tender.state == "vigente")
+                               .options(selectinload(db.Tender.documents))
+                               .order_by(db.Tender.published_at.desc())).all()
+        # Muestra variada: se reparten por la etapa que dan los documentos ya guardados
+        groups = {}
+        for t in rows:
+            groups.setdefault(schedule.stage_of(t.documents), []).append((t.code, t.ocid, t.method, t.entity))
+    picked = []
+    while len(picked) < limit and any(groups.values()):
+        for key in (schedule.INTEGRADAS, schedule.ABSOLUCION, schedule.ADMINISTRATIVAS, None):
+            if groups.get(key) and len(picked) < limit:
+                picked.append(groups[key].pop(0))
+    if not picked:
+        print("No hay convocatorias vigentes guardadas. Ejecute antes la ingesta.")
+        return 1
+    print(f"Documentos y fechas que publica la API en {len(picked)} convocatorias vigentes (HU-018):")
+    api = ocds_source.session_for()
+    kinds, period_keys, answered = Counter(), Counter(), 0
+    for code, ocid, method, entity in picked:
+        print(f"\n{code} · {method or '?'} · {(entity or '')[:60]}")
+        try:
+            compiled, releases = ocds_source.fetch_record(ocid, api)
+        except ocds_source.SourceError as e:
+            print(f"  La API no respondió: {e}")
+            continue
+        answered += 1
+        tender = compiled.get("tender") or {}
+        for key in ("tenderPeriod", "enquiryPeriod", "awardPeriod"):
+            if tender.get(key):
+                period_keys[key] += 1
+                print(f"  {key}: {tender[key]}")
+        if tender.get("milestones"):
+            period_keys["milestones"] += 1
+            print(f"  milestones: {tender['milestones']}")
+        documents = (tender.get("documents") or []) + (compiled.get("documents") or [])
+        for d in documents:
+            kinds[(d.get("title") or "(sin título)", d.get("documentType") or "(sin tipo)")] += 1
+            print(f"  - «{d.get('title')}» · documentType: {d.get('documentType')} · datePublished: "
+                  f"{d.get('datePublished')} · dateModified: {d.get('dateModified')}")
+        if releases:
+            print(f"  Entregas (releases): {len(releases)} · " + ", ".join(
+                f"{str(r.get('date', '?'))[:10]} ({len((r.get('tender') or {}).get('documents') or [])} doc.)"
+                for r in releases[-6:]))
+        stage = schedule.stage_of([{"title": d.get("title"), "type": d.get("documentType")} for d in documents])
+        print(f"  Etapa según la regla de HU-018: {schedule.STAGE_NAMES.get(stage, 'sin bases publicadas')}")
+        time.sleep(ocds_source.REQUEST_PAUSE_SECONDS)
+    print(f"\nResumen de {answered} respuestas: documentos por título y documentType:")
+    for (title, kind), count in kinds.most_common():
+        print(f"- {count} × «{title}» · {kind}")
+    pliego = [t for (t, k) in kinds if schedule.PLIEGO.search(ocds_source.normalize(t)) or k == "clarifications"]
+    print("¿Publica el pliego de absolución? " + (f"sí: {', '.join(sorted(set(pliego)))}" if pliego else
+                                                  "no apareció en esta muestra"))
+    print("Fechas del proceso en la API: " + (", ".join(f"{k} en {v}" for k, v in period_keys.items()) or "ninguna"))
+    return 0
 
 
 def priority_line(factory, codes):
@@ -483,6 +571,8 @@ def parse(args):
     parser.add_argument("--requisitos", nargs="*")
     parser.add_argument("--releer", nargs="+")
     parser.add_argument("--ocr", action="store_true")
+    parser.add_argument("--cronogramas", nargs="?", type=int, const=0)
+    parser.add_argument("--etapas", nargs="?", type=int, const=10)
     # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
     return parser.parse_args(args)
 
@@ -515,6 +605,14 @@ def main(args=None):
         code = show_requirements(factory, options.requisitos)
         engine.dispose()
         return code
+    if options.etapas:
+        code = show_stages(factory, options.etapas)
+        engine.dispose()
+        return code
+    if options.cronogramas is not None:
+        print("\n".join(run_schedules(factory, options.cronogramas or None)))
+        engine.dispose()
+        return 0
     if options.muestra_bases:
         code = show_bases_sample(factory)
         engine.dispose()
@@ -545,7 +643,8 @@ def main(args=None):
         options.solo_rag = True
     if options.solo_rag:
         lines = run_rag(factory)
-        print("\n".join(lines))
+        print("\n".join(lines), flush=True)
+        print("\n".join(run_schedules(factory)))
         engine.dispose()
         return 0
     trigger = run_origin()
@@ -568,6 +667,9 @@ def main(args=None):
             f"Vigentes guardadas: {result['saved_open']:,} · nuevas: {result['new']:,} · actualizadas: "
             f"{result['updated']:,} · pasaron a no vigentes: {result['closed']:,} · documentos nuevos: {result['documents_added']:,}",
         ]
+        if result.get("stage_changes"):
+            lines.append(f"Convocatorias que cambiaron de etapa (pliego o bases integradas): {result['stage_changes']:,}. "
+                         "Su cronograma se vuelve a leer.")
         lines += rubro_lines(result, labels, priority)
         if result.get("catalog"):
             lines.append(f"Catálogo de rubros: {result['catalog']} rubros con convocatorias de bienes "
@@ -580,6 +682,9 @@ def main(args=None):
             started = time.perf_counter()
             lines += run_rag(factory)
             lines.append(f"Lectura de bases en {time.perf_counter() - started:.0f} s.")
+            started = time.perf_counter()
+            lines += run_schedules(factory)
+            lines.append(f"Lectura de cronogramas en {time.perf_counter() - started:.0f} s.")
     else:
         lines = [f"Ejecución {result['run_id']}: FALLIDA. Se conservan los datos anteriores.",
                  f"Motivo: {scrub(result['error'])}"]

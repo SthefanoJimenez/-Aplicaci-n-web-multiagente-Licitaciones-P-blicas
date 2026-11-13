@@ -315,6 +315,19 @@ def _valid_deadline(tender):
     return None
 
 
+def _enquiry_period(tender):
+    """(inicio, fin) del plazo de consultas y observaciones (enquiryPeriod), o (None, None).
+
+    El 13/11/2026 venía en 6 de 10 vigentes (las Licitaciones Públicas Abreviadas, no las Subastas
+    Inversas), por ejemplo del 04/11 00:01 al 06/11 23:59 (HU-018).
+    """
+    period = tender.get("enquiryPeriod") or {}
+    start, end = parse_date(period.get("startDate")), parse_date(period.get("endDate"))
+    if start and end and end >= start:
+        return period.get("startDate"), period.get("endDate")
+    return None, None
+
+
 def _amount(value):
     """Valor estimado; 0 se trata como no publicado."""
     amount = (value or {}).get("amount")
@@ -330,7 +343,8 @@ def normalize_release(release):
         items.append({"description": item.get("description"), "classifications": _classifications(item)})
         item_status.append(str(item.get("statusDetails") or item.get("status") or "").strip())
     documents = [
-        {"title": d.get("title"), "type": d.get("documentType"), "format": d.get("format"), "url": d.get("url")}
+        {"title": d.get("title"), "type": d.get("documentType"), "format": d.get("format"), "url": d.get("url"),
+         "published": d.get("datePublished")}
         for d in (tender.get("documents") or []) + (release.get("documents") or [])
     ]
     return {
@@ -344,6 +358,7 @@ def normalize_release(release):
         "method": tender.get("procurementMethodDetails"),
         "published": tender.get("datePublished") or (tender.get("tenderPeriod") or {}).get("startDate") or release.get("date"),
         "deadline": _valid_deadline(tender),
+        "enquiry": _enquiry_period(tender),
         "value": _amount(tender.get("value")),
         "currency": (tender.get("value") or {}).get("currency"),
         "entity": (release.get("buyer") or {}).get("name") or party.get("name"),
@@ -459,6 +474,29 @@ def fetch_rows(now, months=None, session=None, folder=None):
             objects.extend(read_ocds_file(path))
     rows = [normalize_release(r) for r in compiled_releases(objects)]
     return rows, [p.name for p in paths], skipped
+
+
+def fetch_record(ocid, session=None):
+    """Un proceso completo desde /api/v1/record/{ocid}: (versión consolidada, [entregas con su fecha]).
+
+    Lo usa `python ingest_job.py --etapas` (HU-018) para ver qué documentos y fechas publica la API en
+    cada etapa. Lanza SourceError si el portal no responde 200.
+    """
+    session = session or session_for()
+    url = session.base_url + RECORD_PATH.format(ocid=ocid)
+    try:
+        response = session.get(url, timeout=TIMEOUT_SECONDS)
+    except requests.RequestException as e:
+        raise SourceError(f"{url}: sin respuesta ({type(e).__name__})") from e
+    if response.status_code != 200:
+        raise SourceError(f"{url}: {describe_rejection(response)}", status=response.status_code)
+    data = response.json()
+    records = data.get("records") if isinstance(data, dict) else None
+    record = (records or [data])[0] if isinstance(data, dict) else {}
+    releases = record.get("releases") or data.get("releases") or []
+    releases = [r for r in releases if isinstance(r, dict) and r.get("tender")]
+    compiled = record.get("compiledRelease") or (merge_releases(releases) if releases else record)
+    return compiled, sorted(releases, key=lambda r: str(r.get("date", "")))
 
 
 def diagnose(session=None, now=None):

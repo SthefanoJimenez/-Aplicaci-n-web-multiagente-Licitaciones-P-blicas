@@ -1,4 +1,3 @@
-
 import functools
 import glob
 import html
@@ -13,7 +12,7 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from services import bases_download
+from services import bases_download, schedule
 
 # pypdf avisa por cada diccionario repetido de los PDF del SEACE; no afecta la lectura
 logging.getLogger("pypdf").setLevel(logging.ERROR)
@@ -65,6 +64,7 @@ class ReadResult:
     status: str                          # "extraido", "seccion_no_encontrada" o "no_legible"
     section: Section | None = None
     detail: str = ""
+    schedule: object = None              # schedule.ScheduleResult de los documentos leídos (HU-018), o None
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +499,7 @@ def read_bases(content, use_ocr=None):
         return ReadResult("no_legible", detail=f"no se pudo abrir el archivo ({kind or 'formato desconocido'})")
     readable = False
     unread_scans = []
+    found_schedule = None        # HU-018: el cronograma se busca en cada documento que se abre
     for name, data in documents:
         doc = document_text(name, data, use_ocr)
         if doc is None:
@@ -507,9 +508,10 @@ def read_bases(content, use_ocr=None):
             unread_scans.append(len(doc.image_pages))
             continue
         readable = readable or len(doc.text.strip()) >= SCANNED_CHARS_PER_PAGE
+        found_schedule = schedule.better(found_schedule, schedule.schedule_of_document(doc))
         section = _section_of(doc)
         if section:
-            return ReadResult("extraido", section)
+            return ReadResult("extraido", section, schedule=found_schedule)
     if use_ocr:
         # Segunda pasada, solo si ningún documento trae la sección: OCR de las imágenes de los Word
         # (en 1248982 el Word trae fotos de otra cosa y el PDF sí tenía la sección)
@@ -518,16 +520,28 @@ def read_bases(content, use_ocr=None):
                 with_images = document_text(name, data, use_ocr, word_images=True)
                 section = _section_of(with_images) if with_images else None
                 if section:
-                    return ReadResult("extraido", section)
+                    return ReadResult("extraido", section, schedule=found_schedule)
     if readable:
-        return ReadResult("seccion_no_encontrada", detail=f"se leyeron {len(documents)} documento(s) sin la sección")
+        return ReadResult("seccion_no_encontrada", detail=f"se leyeron {len(documents)} documento(s) sin la sección",
+                          schedule=found_schedule)
     if unread_scans and use_ocr:
         detail = f"PDF escaneado de {max(unread_scans)} páginas: supera el límite de OCR ({OCR_MAX_PAGES})"
     elif unread_scans:
         detail = "PDF escaneado y no hay OCR instalado (tesseract con español y pdftoppm)"
     else:
         detail = "sin texto legible"
-    return ReadResult("no_legible", detail=detail)
+    return ReadResult("no_legible", detail=detail, schedule=found_schedule)
+
+
+def read_schedule(content):
+    """Solo el cronograma (HU-018), sin OCR: lo usa la ingesta cuando cambia la etapa de una convocatoria
+    cuyas bases ya se leyeron, o cuando el cronograma aún no se leyó. Devuelve un schedule.ScheduleResult."""
+    found = None
+    for name, data in documents_in(content):
+        doc = document_text(name, data, use_ocr=False)
+        if doc is not None and not doc.unread_scan:
+            found = schedule.better(found, schedule.schedule_of_document(doc))
+    return found or schedule.ScheduleResult(schedule.NO_LEGIBLE, detail="las bases no tienen texto legible sin OCR")
 
 
 # ---------------------------------------------------------------------------

@@ -103,6 +103,19 @@ class Tender(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     requirements_status: Mapped[str] = mapped_column(String(30), default="pendiente")
+    # HU-018: etapa según los documentos publicados y cronograma leído de las bases (services/schedule.py)
+    stage: Mapped[str | None] = mapped_column(String(20))               # administrativas, absolucion, integradas
+    stage_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    schedule_status: Mapped[str | None] = mapped_column(String(20))     # vacío = nunca se leyó
+    schedule: Mapped[list | None] = mapped_column(JSON)                 # [{"key","name","start","end","page","text"}]
+    schedule_page: Mapped[int | None] = mapped_column(Integer)          # página de la sección del cronograma
+    schedule_file: Mapped[str | None] = mapped_column(String(300))      # archivo dentro de lo descargado
+    schedule_document_id: Mapped[int | None] = mapped_column(Integer)   # documento (bases) del que se leyó
+    schedule_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    schedule_stage: Mapped[str | None] = mapped_column(String(20))      # etapa cuando se leyó
+    schedule_due: Mapped[bool | None] = mapped_column(Boolean)          # True: leerlo en la siguiente ingesta
+    enquiry_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # plazo de consultas y
+    enquiry_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))     # observaciones (enquiryPeriod)
     first_run_id: Mapped[int | None] = mapped_column(ForeignKey("actualizaciones.id"))
     last_run_id: Mapped[int | None] = mapped_column(ForeignKey("actualizaciones.id"))
 
@@ -122,6 +135,7 @@ class TenderDocument(Base):
     doc_type: Mapped[str | None] = mapped_column(String(80))
     doc_format: Mapped[str | None] = mapped_column(String(40))
     is_bases: Mapped[bool] = mapped_column(Boolean, default=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # datePublished (HU-018)
 
     tender: Mapped[Tender] = relationship(back_populates="documents")
 
@@ -210,7 +224,13 @@ def create_tables(engine):
 
 
 # Columnas agregadas a tablas que ya existían en Neon: create_all no las agrega por su cuenta.
-ADDED_COLUMNS = {"actualizaciones": ("rubros", "per_rubro")}       # EN-011
+ADDED_COLUMNS = {
+    "actualizaciones": ("rubros", "per_rubro"),                      # EN-011
+    "convocatorias": ("stage", "stage_changed_at", "schedule_status", "schedule", "schedule_page",   # HU-018
+                      "schedule_file", "schedule_document_id", "schedule_read_at", "schedule_stage", "schedule_due",
+                      "enquiry_start", "enquiry_end"),
+    "documentos": ("published_at",),                                 # HU-018
+}
 
 
 def _add_missing_columns(engine):

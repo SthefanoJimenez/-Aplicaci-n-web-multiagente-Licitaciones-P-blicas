@@ -52,3 +52,6 @@ RAG_MAX_BASES_PER_RUN = int(os.environ.get("RAG_MAX_BASES_PER_RUN", "").strip() 
 # Tamaño máximo de las bases que descarga la lectura (la pantalla de descarga mantiene 80 MB).
 # El 03/11/2026, 2 de 142 bases vigentes pasaban de 80 MB.
 RAG_MAX_BASES_MB = int(os.environ.get("RAG_MAX_BASES_MB", "").strip() or "250")
+# HU-018: cuántos cronogramas lee cada ingesta (bases nuevas o cuya etapa cambió). Se leen sin OCR y
+# sin Gemini; las que no alcanzan quedan para la siguiente ejecución.
+SCHEDULE_MAX_PER_RUN = int(os.environ.get("CRONOGRAMA_MAX_POR_EJECUCION", "").strip() or "60")

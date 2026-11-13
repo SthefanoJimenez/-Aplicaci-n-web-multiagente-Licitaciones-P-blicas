@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -45,8 +44,13 @@ def _to_contract(row):
         estimated_value=row.estimated_value, currency=row.currency, item_status=row.item_status,
         first_seen_at=as_utc(row.first_seen_at), last_seen_at=as_utc(row.last_seen_at),
         closed_at=as_utc(row.closed_at), requirements_status=row.requirements_status,
+        stage=row.stage, stage_changed_at=as_utc(row.stage_changed_at), schedule_status=row.schedule_status,
+        schedule=list(row.schedule or []), schedule_page=row.schedule_page, schedule_file=row.schedule_file,
+        schedule_read_at=as_utc(row.schedule_read_at), schedule_stage=row.schedule_stage,
+        schedule_due=row.schedule_due, enquiry_start=as_utc(row.enquiry_start), enquiry_end=as_utc(row.enquiry_end),
         documents=[tender_contract.TenderDocument(title=d.title, url=d.url, doc_type=d.doc_type,
-                                                  doc_format=d.doc_format, is_bases=d.is_bases)
+                                                  doc_format=d.doc_format, is_bases=d.is_bases,
+                                                  published_at=as_utc(d.published_at))
                    for d in row.documents],
         requirements=[tender_contract.Requirement(requirement_type=r.requirement_type, text=r.text, page=r.page,
                                                   source=r.source)

@@ -10,7 +10,7 @@ import auth
 import documents
 import consortium
 from agents import classifier, evaluator, writer
-from services import analytics, bases_download, charts, data, llm, tenders
+from services import analytics, bases_download, charts, data, llm, schedule, tenders
 from services.formatting import format_amount, format_pen, markdown, unit_text
 
 
@@ -454,6 +454,7 @@ def tender_sheet(code):
         days_since=tenders.days_since(tender.published_at, datetime.now(timezone.utc)),
         rubros=[rubro_names.get(r, r) for r in tender.rubros],
         catalog_code=tenders.match_catalog_item(tender.title or tender.description),
+        timeline=schedule.view(tender),
     )
 
 
