@@ -56,10 +56,25 @@ def test_si_el_sistema_rechaza_un_limite_se_aplican_los_demas():
 
 def test_el_validador_cuenta_paginas_aunque_setrlimit_falle_como_en_macos():
     """Ejecuta el validador real en un proceso aparte con setrlimit fallando, como en una Mac."""
-    script = ("import resource, runpy, sys\n"
+    script = ("import runpy, sys, types\n"
+              "resource = types.ModuleType('resource')\n"
+              "resource.RLIMIT_AS, resource.RLIMIT_CPU = 0, 1\n"
               "def rechaza(*args):\n"
               "    raise ValueError('current limit exceeds maximum limit')\n"
               "resource.setrlimit = rechaza\n"
+              "sys.modules['resource'] = resource\n"
+              f"sys.argv = [{str(VALIDATOR)!r}]\n"
+              f"runpy.run_path({str(VALIDATOR)!r}, run_name='__main__')\n")
+    result = subprocess.run([sys.executable, "-c", script], input=blank_pdf(3),
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stdout.strip() == b"3"
+
+
+def test_el_validador_cuenta_paginas_sin_resource_como_en_windows():
+    """La ausencia del módulo de Unix no impide revisar el PDF en el proceso aislado."""
+    script = ("import runpy, sys\n"
+              "sys.modules['resource'] = None\n"
               f"sys.argv = [{str(VALIDATOR)!r}]\n"
               f"runpy.run_path({str(VALIDATOR)!r}, run_name='__main__')\n")
     result = subprocess.run([sys.executable, "-c", script], input=blank_pdf(3),
