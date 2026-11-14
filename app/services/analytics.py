@@ -6,6 +6,7 @@ pantalla de mercado y la página "Cómo preparamos los datos".
 """
 from functools import lru_cache
 import math
+import re
 
 import pandas as pd
 
@@ -54,6 +55,22 @@ def size_bucket(amount):
     return SIZE_BUCKETS[-1][0]
 
 
+def _plain(text):
+    """Minúsculas sin tildes («PETRÓLEO DIÉSEL» -> «petroleo diesel»)."""
+    import unicodedata
+    return unicodedata.normalize("NFKD", str(text)).encode("ascii", "ignore").decode().lower()
+
+
+GOOD_MAX = 60
+
+
+def good_words(text):
+    """Palabras del filtro «Bien o especialidad»: sin tildes, de 3 letras o más, y sin la s del plural
+    («combustibles» busca «combustible»)."""
+    words = re.findall(r"[a-z0-9]+", _plain(text or "")[:GOOD_MAX])
+    return tuple(w[:-1] if len(w) > 4 and w.endswith("s") else w for w in words if len(w) >= 3)
+
+
 def _prepare(table):
     """Columnas derivadas que usan todos los cálculos. Se agregan sobre la misma tabla
     (sin copiarla) para no duplicar unos 50 MB de memoria en cada proceso del servidor."""
@@ -64,6 +81,8 @@ def _prepare(table):
     # Año y mes de la buena pro: los filtros de tiempo del panorama usan esta fecha
     t["bp_year"] = pd.to_numeric(t["fecha_buenapro"].str.slice(0, 4), errors="coerce").astype("Int64")
     t["bp_month"] = pd.to_numeric(t["fecha_buenapro"].str.slice(5, 7), errors="coerce").astype("Int64")
+    # Nombre del bien sin tildes ni mayúsculas, para el filtro «Bien o especialidad»
+    t["item_norm"] = t["itemcubso"].fillna("").map(_plain)
     return t
 
 
@@ -123,7 +142,11 @@ MAP_STEPS = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]   # azul sec
 
 
 def _by_month(t, year=None, month=None):
-    """Compras y monto por mes de buena pro, del primer al último mes con datos (incluye meses sin compras)."""
+    """Compras y monto por mes de buena pro, del primer al último mes con datos (incluye meses sin compras).
+
+    Con filtro de mes se muestran igual todos los meses y se resalta el elegido ("selected"): antes se
+    dejaba solo ese mes y, con año y mes, el gráfico era un único punto (entrevista con el experto, 11/11/2026).
+    """
     year_month = t["fecha_buenapro"].str.slice(0, 7)
     g = t.assign(_m=year_month).groupby("_m").agg(n=("monto_adjudicado", "size"), amount=("monto_adjudicado", "sum"))
     if g.empty:
@@ -133,10 +156,11 @@ def _by_month(t, year=None, month=None):
     while f"{y}-{m:02d}" <= last:
         keys.append(f"{y}-{m:02d}")
         y, m = (y + 1, 1) if m == 12 else (y, m + 1)
-    if month:   # con filtro de mes solo se muestran ese mes de cada año
-        keys = [k for k in keys if int(k[5:]) == month]
+    if year:    # con un año elegido, sus 12 meses aunque alguno no tenga compras
+        keys = [f"{year}-{m:02d}" for m in range(1, 13)]
     g = g.reindex(keys, fill_value=0)
-    return [{"key": k, "label": f"{MONTHS_ES[int(k[5:]) - 1]} {k[:4]}", "n": int(r.n), "amount": float(r.amount)}
+    return [{"key": k, "label": f"{MONTHS_ES[int(k[5:]) - 1]} {k[:4]}", "n": int(r.n), "amount": float(r.amount),
+             "selected": bool(month) and int(k[5:]) == month}
             for k, r in zip(keys, g.itertuples())]
 
 
@@ -201,21 +225,27 @@ def _entity_types(t):
 # ---------------------------------------------------------------------------
 # Panorama del mercado
 # ---------------------------------------------------------------------------
-def clean_filters(year=None, department=None, process=None, size=None, entity_type=None, month=None):
+def clean_filters(year=None, department=None, process=None, size=None, entity_type=None, month=None, good=None):
     """Valida los filtros que llegan por la URL; los desconocidos se ignoran.
-    El año y el mes son los de la buena pro."""
+    El año y el mes son los de la buena pro; good es el texto de «Bien o especialidad»."""
     year = int(year) if str(year or "").isdigit() and int(year) in BP_YEARS else None
     month = int(month) if str(month or "").isdigit() and 1 <= int(month) <= 12 else None
     department = department if department in DEPARTMENTS else None
     process = process if process in PROCESS_OPTIONS else None
     size = size if size in SIZE_LABELS else None
     entity_type = entity_type if entity_type in ENTITY_TYPES else None
-    return year, department, process, size, entity_type, month
+    good = " ".join(str(good or "").split())[:GOOD_MAX] or None
+    if good and not good_words(good):
+        good = None
+    return year, department, process, size, entity_type, month, good
 
 
-def filtered(year=None, department=None, process=None, size=None, entity_type=None, month=None):
-    """Adjudicaciones que cumplen los filtros del panorama."""
+def filtered(year=None, department=None, process=None, size=None, entity_type=None, month=None, good=None):
+    """Adjudicaciones que cumplen los filtros del panorama. good filtra por el nombre del bien:
+    deben aparecer todas sus palabras (entrevista: el proveedor quiere el panorama de su especialidad)."""
     t = DETAIL
+    for word in good_words(good):
+        t = t[t["item_norm"].str.contains(word, regex=False)]
     if year:
         t = t[t["bp_year"] == year]
     if month:
@@ -232,8 +262,8 @@ def filtered(year=None, department=None, process=None, size=None, entity_type=No
 
 
 @lru_cache(maxsize=256)
-def overview(year=None, department=None, process=None, size=None, entity_type=None, month=None):
-    t = filtered(year, department, process, size, entity_type, month)
+def overview(year=None, department=None, process=None, size=None, entity_type=None, month=None, good=None):
+    t = filtered(year, department, process, size, entity_type, month, good)
     n = len(t)
     if n == 0:
         return {"n_awards": 0}
@@ -243,7 +273,9 @@ def overview(year=None, department=None, process=None, size=None, entity_type=No
     by_size = t["tamanio"].value_counts().reindex([k for k, *_ in SIZE_BUCKETS], fill_value=0)
     by_process = t["proceso_grupo"].value_counts()
     by_type = _entity_types(t)
-    by_month = _by_month(t, year, month)
+    # La tendencia no se corta por el mes elegido: muestra los meses y resalta ese mes
+    by_month = _by_month(filtered(year, department, process, size, entity_type, None, good) if month else t,
+                         year, month)
     peru_map = _map_buckets(by_place)
     by_year = t.groupby("anio").agg(n=("monto_adjudicado", "size"), amount=("monto_adjudicado", "sum"))
 

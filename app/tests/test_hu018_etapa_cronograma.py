@@ -338,3 +338,39 @@ def test_comando_etapas_muestra_documentos_y_fechas_de_la_api(factory, source, m
     assert "«Pliego de absolución de consultas» · documentType: clarifications" in out
     assert "Etapa según la regla de HU-018: Absolución de consultas y observaciones" in out
     assert "¿Publica el pliego de absolución? sí" in out and "tenderPeriod en 1" in out
+
+def test_la_app_agrega_las_columnas_nuevas_si_se_actualiza_antes_que_la_ingesta(tmp_path, monkeypatch):
+    """13/11/2026: con los archivos nuevos y sin correr la ingesta, la lista decía «0 convocatorias vigentes»
+    porque la consulta pedía columnas que Neon aún no tenía."""
+    engine = db.make_engine(f"sqlite:///{tmp_path / 'neon.sqlite3'}")
+    db.create_tables(engine)
+    factory = db.make_session_factory(engine)
+    with factory.begin() as session:
+        session.add(db.IngestionRun(status="ok", started_at=datetime(2026, 11, 13, 6, tzinfo=LIMA)))
+        session.add(db.Tender(ocid="o-1", code=CODE, title="ADQUISICION DE DIESEL", state="vigente", rubros="1510",
+                              published_at=datetime(2026, 11, 12, tzinfo=LIMA)))
+    with engine.begin() as conn:                      # la base como estaba antes de esta versión
+        for name in ("enquiry_start", "enquiry_end"):
+            conn.execute(text(f"ALTER TABLE convocatorias DROP COLUMN {name}"))
+    engine.dispose()                                  # SQLite: las conexiones guardadas recuerdan el esquema anterior
+    monkeypatch.setattr(db, "make_engine", lambda *args, **kwargs: engine)
+    tenders.use_session_factory(None)                 # la app abre la base como en producción
+    try:
+        html = app.test_client().get("/convocatorias").get_data(as_text=True)
+        assert "ADQUISICION DE DIESEL" in html and "Resultados (1 convocatorias vigentes)" in html
+        assert {"enquiry_start", "enquiry_end"} <= {c["name"] for c in inspect(engine).get_columns("convocatorias")}
+    finally:
+        tenders.use_session_factory(None)
+        engine.dispose()
+
+
+def test_si_la_consulta_falla_la_lista_avisa_en_lugar_de_mostrar_cero(factory, monkeypatch):
+    with factory.begin() as session:
+        session.add(db.IngestionRun(status="ok", started_at=datetime(2026, 11, 13, 6, tzinfo=LIMA)))
+
+    def broken(**kwargs):
+        raise tenders.TendersUnavailable("sin_conexion")
+
+    monkeypatch.setattr(tenders, "open_tenders", broken)
+    html = app.test_client().get("/convocatorias").get_data(as_text=True)
+    assert "No pudimos consultar las convocatorias vigentes en este momento." in html

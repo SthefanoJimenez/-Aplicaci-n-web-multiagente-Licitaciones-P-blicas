@@ -234,14 +234,24 @@ ADDED_COLUMNS = {
 
 
 def _add_missing_columns(engine):
-    """ALTER TABLE … ADD COLUMN para las columnas nuevas (todas admiten vacío). No toca los datos."""
+    """ALTER TABLE … ADD COLUMN para las columnas nuevas (todas admiten vacío). No toca los datos.
+
+    Lo llaman la ingesta (create_tables) y la app al abrir la base (services/tenders.py), para que la app
+    no falle si se actualiza antes de que corra la ingesta. Si la tabla aún no existe, no hace nada.
+    """
     from sqlalchemy import inspect
     inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
     with engine.begin() as conn:
         for table_name, names in ADDED_COLUMNS.items():
+            if table_name not in tables:
+                continue
             existing = {c["name"] for c in inspector.get_columns(table_name)}
             table = Base.metadata.tables[table_name]
             for name in names:
                 if name not in existing:
                     kind = table.c[name].type.compile(dialect=engine.dialect)
                     conn.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {name} {kind}'))
+
+
+add_missing_columns = _add_missing_columns

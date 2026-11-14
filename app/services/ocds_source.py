@@ -372,16 +372,31 @@ def is_goods(row):
     return normalize(row["category"]) in GOODS_VALUES
 
 
+# Procedimientos a los que un proveedor no puede postular por su cuenta (entrevista con el experto, 11/11/2026):
+# la contratación directa se ejecuta antes (p. ej. por emergencia) y solo se regulariza en el SEACE, y la
+# comparación de precios es por invitación de la entidad a un grupo de proveedores.
+NOT_POSTULABLE = ("contratacion directa", "comparacion de precios")
+
+
+def is_postulable(method):
+    """False si el procedimiento es una contratación directa o una comparación de precios."""
+    text = normalize(method or "")
+    return not any(kind in text for kind in NOT_POSTULABLE)
+
+
 def is_open(row, now):
-    """Vigente: aún acepta ofertas.
+    """Vigente: aún acepta ofertas de cualquier proveedor.
 
     Criterios:
+    0. Las contrataciones directas y las comparaciones de precios no son vigentes (NOT_POSTULABLE).
     1. Si ningún ítem está en estado de convocatoria ("CONVOCADO" o "active"), el proceso
        ya no acepta ofertas (por ejemplo, tiene buena pro / "ADJUDICADO", "CONSENTIDO",
        "CONTRATADO", o está "DESIERTO", "CANCELADO", "NULO").
     2. Si tiene al menos un ítem "CONVOCADO", sigue vigente.
     3. Si tiene fecha límite válida, debe ser futura (deadline >= now).
     """
+    if not is_postulable(row.get("method")):
+        return False
     statuses = {normalize(s) for s in str(row.get("item_status") or "").split("|") if s.strip()}
     if not statuses and row.get("status"):
         statuses = {normalize(row.get("status"))}

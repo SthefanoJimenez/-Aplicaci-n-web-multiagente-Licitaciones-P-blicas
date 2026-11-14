@@ -5,7 +5,11 @@
 <h1 class="page-title">Panorama del mercado de bienes del Estado</h1>
 <p class="page-lead">Qué compra el Estado, cuándo, dónde, qué tipo de entidad compra, con qué proceso y por qué montos. Los filtros se aplican a todos los gráficos, al mapa y a la descarga; el año y el mes son los de la buena pro. Las cifras usan todas las adjudicaciones, sin muestreo.</p>
 
-<form class="filters" method="get" action="{{ url_for('overview') }}" aria-label="Filtros">
+<form class="filters filters-with-good" method="get" action="{{ url_for('overview') }}" aria-label="Filtros">
+  <div>
+    <label for="f-good">Bien o especialidad</label>
+    <input id="f-good" name="bien" type="search" maxlength="60" value="{{ f.good or '' }}" placeholder="Ej.: diésel, cemento" autocomplete="off">
+  </div>
   <div>
     <label for="f-year">Año</label>
     <select id="f-year" name="anio">
@@ -50,7 +54,11 @@
   </div>
   <button type="submit" class="button button-primary">Aplicar</button>
 </form>
+{% if my_rubro and not f.good %}
+<p class="muted small" style="margin:8px 0 0;" data-my-rubro>¿Solo su especialidad? <a href="{{ url_for('overview', bien=my_rubro, **query) }}">Ver el panorama de «{{ my_rubro }}»</a>, el rubro que declaró en su perfil.</p>
+{% endif %}
 {% set active = [] %}
+{% if f.good %}{% set _ = active.append("bienes con «" ~ f.good ~ "»") %}{% endif %}
 {% if f.month %}{% set _ = active.append(months[f.month - 1]|capitalize) %}{% endif %}
 {% if f.year %}{% set _ = active.append(f.year|string) %}{% endif %}
 {% if f.department %}{% set _ = active.append(f.department|place) %}{% endif %}
@@ -64,7 +72,7 @@
 {% if not o.n_awards %}
 <div class="empty">
   <h2 class="section-title">No hay compras con esos filtros</h2>
-  <p class="muted">Pruebe con otro año, otro lugar o un tamaño de compra distinto.</p>
+  <p class="muted">Pruebe con otro año, otro lugar, un tamaño de compra distinto u otras palabras para el bien.</p>
   <div class="actions"><a class="button button-secondary" href="{{ url_for('overview') }}">Quitar filtros</a></div>
 </div>
 {% else %}
@@ -85,7 +93,7 @@
 {% if chart %}
 <section class="section panel" aria-labelledby="trend-title">
   <h2 class="panel-title" id="trend-title">¿Cuándo se compra?</h2>
-  <p class="panel-lead">Compras por mes de la buena pro. El mes con más compras fue {{ chart.peak.point.label }}, con {{ "{:,}".format(chart.peak.point.n) }}. Algunas compras recibieron la buena pro al año siguiente de su convocatoria.</p>
+  <p class="panel-lead">Compras por mes de la buena pro. El mes con más compras fue {{ chart.peak.point.label }}, con {{ "{:,}".format(chart.peak.point.n) }}.{% if chart.selected %} Se resalta {{ months[f.month - 1] }}{% if f.year %} de {{ f.year }}{% else %} de cada año{% endif %}, el mes elegido, para compararlo con los demás.{% endif %} Algunas compras recibieron la buena pro al año siguiente de su convocatoria.</p>
   <div class="chart" data-chart>
     <div class="chart-scroll">
     <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="Compras por mes, de {{ o.by_month[0].label }} a {{ o.by_month[-1].label }}. Máximo en {{ chart.peak.point.label }} con {{ chart.peak.point.n }} compras.">
@@ -97,6 +105,7 @@
       </g>
       <path class="area" d="{{ chart.area }}"/>
       <path class="line" d="{{ chart.line }}"/>
+      {% for p in chart.selected %}<g data-selected-month style="color: var(--bar);"><line x1="{{ p.x }}" x2="{{ p.x }}" y1="12" y2="{{ chart.base }}" stroke="currentColor" stroke-dasharray="4 4" opacity="0.45"/><circle cx="{{ p.x }}" cy="{{ p.y }}" r="5.5" fill="currentColor"/></g>{% endfor %}
       <line class="hover-line" y1="12" y2="{{ chart.base }}"/>
       <circle class="dot" r="4.5"/>
       {% for h in chart.hits %}
@@ -110,7 +119,7 @@
   <details class="table-view">
     <summary>Ver como tabla</summary>
     <div class="table-wrap"><table class="data-table"><thead><tr><th>Mes</th><th class="num">Compras</th><th class="num">Monto</th></tr></thead><tbody>
-      {% for m in o.by_month %}<tr><td>{{ m.label }}</td><td class="num">{{ "{:,}".format(m.n) }}</td><td class="num">{{ m.amount|amount }}</td></tr>{% endfor %}
+      {% for m in o.by_month %}<tr{% if m.selected %} class="highlight"{% endif %}><td>{% if m.selected %}<strong>{{ m.label }}</strong>{% else %}{{ m.label }}{% endif %}</td><td class="num">{{ "{:,}".format(m.n) }}</td><td class="num">{{ m.amount|amount }}</td></tr>{% endfor %}
     </tbody></table></div>
   </details>
   {% if o.n_without_date %}<p class="source">{{ o.n_without_date }} {{ "compra no tiene" if o.n_without_date == 1 else "compras no tienen" }} fecha de buena pro y no {{ "aparece" if o.n_without_date == 1 else "aparecen" }} en el gráfico.</p>{% endif %}

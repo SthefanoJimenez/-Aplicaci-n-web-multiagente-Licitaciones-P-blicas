@@ -162,8 +162,52 @@ def _has_big_image(page):
     return False
 
 
+def pdftotext_path():
+    """pdftotext de Poppler: en el PATH, en POPPLER_PATH o junto a pdftoppm (Poppler los instala juntos)."""
+    found = tool_path("pdftotext")
+    if found:
+        return found
+    pdftoppm = tool_path("pdftoppm")
+    if pdftoppm:
+        folder = os.path.dirname(pdftoppm)
+        for name in ("pdftotext", "pdftotext.exe"):
+            candidate = os.path.join(folder, name)
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+def poppler_pages(content, expected):
+    """Texto de cada página con pdftotext, o None si no está instalado o no coincide el número de páginas.
+
+    pypdf parte palabras en los PDF de texto justificado: en 4 bases reales (1258549, 1262520, 1262142 y
+    1263973, 14/11/2026) dejó entre 14 y 22 palabras partidas cada una («Decr eto», «N acional»,
+    «p ostores»); pdftotext no dejó ninguna.
+    """
+    tool = pdftotext_path()
+    if not tool or expected == 0:
+        return None
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "bases.pdf")
+        with open(path, "wb") as f:
+            f.write(content)
+        try:
+            result = subprocess.run([tool, "-enc", "UTF-8", "-q", path, "-"], capture_output=True, timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            return None
+    if result.returncode != 0:
+        return None
+    pages = result.stdout.decode("utf-8", errors="replace").split("\f")
+    if pages and not pages[-1].strip():
+        pages = pages[:-1]            # pdftotext termina cada página con un salto de página
+    return pages if len(pages) == expected else None
+
+
 def pdf_pages_info(content):
-    """(texto de cada página, si cada página trae una imagen grande)."""
+    """(texto de cada página, si cada página trae una imagen grande).
+
+    El texto sale de pdftotext (Poppler) si está instalado y, si no, de pypdf.
+    """
     from pypdf import PdfReader
     reader = PdfReader(io.BytesIO(content))
     pages, big = [], []
@@ -173,6 +217,10 @@ def pdf_pages_info(content):
         except Exception:          # una página dañada no debe tumbar toda la base
             pages.append("")
         big.append(_has_big_image(page))
+    better = poppler_pages(content, len(pages))
+    if better is not None:
+        # Por página: si pdftotext no sacó nada donde pypdf sí (página rara), se queda lo de pypdf
+        pages = [b if b.strip() or not a.strip() else a for a, b in zip(pages, better)]
     return pages, big
 
 
@@ -258,7 +306,7 @@ def tool_path(name):
     Windows, las carpetas donde suelen instalarse. Así el OCR funciona en Windows aunque no se haya
     tocado el PATH.
     """
-    variable = {"tesseract": "TESSERACT_PATH", "pdftoppm": "POPPLER_PATH"}.get(name)
+    variable = {"tesseract": "TESSERACT_PATH", "pdftoppm": "POPPLER_PATH", "pdftotext": "POPPLER_PATH"}.get(name)
     configured = os.environ.get(variable, "").strip().strip('"') if variable else ""
     if configured:
         for candidate in (configured, os.path.join(configured, name), os.path.join(configured, name + ".exe")):

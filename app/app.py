@@ -226,16 +226,9 @@ def verdict():
     explanation = writer.explain(evaluation, m, response["detail"])
     below = analytics.share_below(m["code"], m["unit"], cost_value)
     
-    # Si el código elegido pertenece a un rubro piloto (ej. 1510 combustibles o 2510 vehículos)
-    pilot_rubro = None
-    item_name = (data.GOODS.get(m["code"]) or {}).get("name", "")
-    for code, label, pattern in [
-        ("1510", "Combustibles", r"\b(diesel|gasolina|gasohol|glp|petroleo)\b"),
-        ("2510", "Vehículos", r"\b(camioneta|automovil|vehiculo|volquete|camion|motocicleta)\b"),
-    ]:
-        if re.search(pattern, item_name, re.I):
-            pilot_rubro = {"code": code, "name": label}
-            break
+    # Rubro de convocatorias vigentes al que pertenece el bien, con el catálogo completo de rubros (antes solo
+    # combustibles y vehículos, escritos en el código). Si no se reconoce, no se ofrece el enlace.
+    pilot_rubro = _rubro_of_good((data.GOODS.get(m["code"]) or {}).get("name", ""))
 
     return render_template("verdict.html", m=m, e=evaluation, w=explanation, rnp=rnp,
                            d=response["detail"], below=below, pilot_rubro=pilot_rubro)
@@ -253,11 +246,11 @@ def _panorama_filters():
     return analytics.clean_filters(
         request.args.get("anio"), request.args.get("lugar"),
         request.args.get("proceso"), request.args.get("tamanio"), request.args.get("entidad"),
-        request.args.get("mes"),
+        request.args.get("mes"), request.args.get("bien"),
     )
 
 
-FILTER_KEYS = ("anio", "lugar", "proceso", "tamanio", "entidad", "mes")
+FILTER_KEYS = ("anio", "lugar", "proceso", "tamanio", "entidad", "mes", "bien")
 
 
 def _csv(table, filename):
@@ -265,6 +258,31 @@ def _csv(table, filename):
     body = "\ufeff" + table.to_csv(index=False)
     return Response(body, mimetype="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+def _rubro_of_good(item_name):
+    """{"code", "name"} del rubro (familia UNSPSC) que corresponde al nombre del bien, o None."""
+    from services import rubros
+    try:
+        names_map = tenders.rubro_names()
+    except tenders.TendersUnavailable:
+        return None
+    found = rubros.match(item_name or "", names_map)
+    return {"code": found[0]["code"], "name": found[0]["name"]} if found else None
+
+
+def _profile_rubro():
+    """Rubros que declaró la empresa en su perfil, para ofrecer «Ver el panorama de mi rubro» (o None)."""
+    user = getattr(g, "current_user", None)
+    if not user:
+        return None
+    try:
+        from services import accounts
+        rubros_text = (accounts.get_profile(auth.store(), user["id"]) or {}).get("rubros") or ""
+    except Exception:          # sin base de cuentas: el panorama sigue funcionando
+        return None
+    first = re.split(r"[,;/\n]| y ", rubros_text)[0].strip()
+    return first[:analytics.GOOD_MAX] if analytics.good_words(first) else None
 
 
 @app.get("/panorama")
@@ -276,7 +294,8 @@ def overview():
     return render_template(
         "overview.html",
         o=o, chart=charts.area_chart(o.get("by_month", [])), geo=charts.peru_map(), query=query,
-        f=dict(zip(("year", "department", "process", "size", "entity_type", "month"), filters)),
+        f=dict(zip(("year", "department", "process", "size", "entity_type", "month", "good"), filters)),
+        my_rubro=_profile_rubro(),
         years=analytics.BP_YEARS, months=analytics.MONTH_NAMES, departments=analytics.DEPARTMENTS,
         processes=analytics.PROCESS_OPTIONS, sizes=analytics.SIZE_BUCKETS,
         size_labels=analytics.SIZE_LABELS, entity_types=analytics.ENTITY_TYPE_OPTIONS,
@@ -370,15 +389,19 @@ def tenders_list():
                 }
                 items.append(item_dict)
         except tenders.TendersUnavailable:
-            pass
+            # Antes se ignoraba y la pantalla decía «0 convocatorias vigentes» (13/11/2026): ahora avisa
+            tenders_state = dict(tenders_state, ok=False, reason="sin_conexion")
 
     # Métodos y departamentos disponibles para los filtros
+    # Solo procedimientos a los que cualquier proveedor puede postular: las contrataciones directas y
+    # las comparaciones de precios no se muestran (ocds_source.NOT_POSTULABLE, entrevista del 11/11/2026)
     method_options = [
         "Subasta Inversa Electrónica",
         "Licitación Pública Abreviada",
         "Licitación Pública",
+        "Concurso Público Abreviado",
+        "Concurso Público",
         "Adjudicación Simplificada",
-        "Comparación de Precios",
     ]
 
     return render_template(

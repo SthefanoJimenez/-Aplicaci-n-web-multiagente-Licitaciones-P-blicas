@@ -307,7 +307,6 @@ def view(tender):
     for event in tender.schedule or []:
         events.append({"name": event.get("name"), "start": day_text(event.get("start")),
                        "end": day_text(event.get("end")), "page": event.get("page"), "text": event.get("text")})
-    # Documentos que marcan la etapa, en el orden en que se publicaron (fecha de la API)
     marked = sorted((d for d in tender.documents if d.title and is_stage_document(d)),
                     key=lambda d: (d.published_at is None, d.published_at or 0))
     stage_documents = [{"title": d.title, "published": moment_text(d.published_at)} for d in marked]
@@ -326,7 +325,6 @@ def view(tender):
         "stage_changed": day_text(tender.stage_changed_at),
         "steps": stage_steps(tender.stage),
         "stage_documents": stage_documents,
-        # De la API del OECE: plazo de consultas (enquiryPeriod) y fecha de publicación de cada documento
         "enquiry": enquiry,
         "status": tender.schedule_status if tender.schedule_read_at else None,
         "events": events,
@@ -334,7 +332,6 @@ def view(tender):
         "source": tender.schedule_file,
         "read_at": day_text(tender.schedule_read_at),
         "read_stage": STAGE_NAMES.get(tender.schedule_stage),
-        # La etapa cambió después de la última lectura: se volverá a leer en la siguiente ingesta
         "reread_pending": reread,
         "seace_search_url": SEACE_SEARCH_URL,
     }

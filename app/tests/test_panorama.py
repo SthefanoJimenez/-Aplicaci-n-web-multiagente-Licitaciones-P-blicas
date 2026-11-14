@@ -47,10 +47,10 @@ def test_overview_totals_match_filters():
 
 
 def test_clean_filters_ignores_unknown_values():
-    assert analytics.clean_filters("1999", "MARTE", "<script>", "gigante", "OTRO", "13") == (None,) * 6
+    assert analytics.clean_filters("1999", "MARTE", "<script>", "gigante", "OTRO", "13", " ¿? ") == (None,) * 7
     year = analytics.BP_YEARS[0]
-    assert analytics.clean_filters(str(year), None, None, "hasta-50k", "GOBIERNO LOCAL", "3") == (
-        year, None, None, "hasta-50k", "GOBIERNO LOCAL", 3)
+    assert analytics.clean_filters(str(year), None, None, "hasta-50k", "GOBIERNO LOCAL", "3", "  diésel  b5 ") == (
+        year, None, None, "hasta-50k", "GOBIERNO LOCAL", 3, "diésel b5")
 
 
 def test_good_detail_is_consistent():
@@ -204,3 +204,40 @@ def test_exterior_lists_each_purchase_without_inventing_a_country(client, no_mod
     assert "¿Qué significa «exterior»?" in html and "no publica el país" in html
     assert "<path d=" not in html.split("places-title", 1)[1].split("</section>", 1)[0]
     assert len(o["special"]["exterior_rows"]) == o["n_awards"]
+
+
+# ---------------------------------------------------------------------------
+# Entrevista con el experto (11/11/2026): tendencia por meses y panorama de la especialidad
+# ---------------------------------------------------------------------------
+
+def test_con_anio_y_mes_la_tendencia_muestra_los_12_meses_y_resalta_el_elegido(client, no_model):
+    year = analytics.BP_YEARS[-1]
+    o = analytics.overview(year, None, None, None, None, 3)
+    assert len(o["by_month"]) == 12                      # antes: un solo punto
+    assert [p["selected"] for p in o["by_month"]].count(True) == 1 and o["by_month"][2]["selected"]
+    # Las demás cifras sí se limitan al mes elegido
+    expected = int(((analytics.DETAIL["bp_year"] == year) & (analytics.DETAIL["bp_month"] == 3)).sum())
+    assert o["n_awards"] == expected and o["by_month"][2]["n"] == expected
+    html = client.get(f"/panorama?anio={year}&mes=3").get_data(as_text=True)
+    assert "data-selected-month" in html and f"Se resalta marzo de {year}, el mes elegido" in html
+
+
+def test_sin_anio_el_mes_elegido_se_resalta_en_cada_anio():
+    o = analytics.overview(None, None, None, None, None, 3)
+    selected = [p["label"] for p in o["by_month"] if p["selected"]]
+    assert selected and all(label.startswith("mar") for label in selected)
+    assert len(o["by_month"]) > 12
+
+
+def test_filtro_por_bien_o_especialidad(client, no_model):
+    total = analytics.overview()["n_awards"]
+    diesel = analytics.overview(None, None, None, None, None, None, "Diésel")
+    assert 0 < diesel["n_awards"] < total
+    assert all("diesel" in analytics._plain(g["name"]) for g in diesel["goods"])
+    # Plural y tildes: «combustibles» busca «combustible»; todas las palabras deben estar
+    assert analytics.good_words("Petróleos diésel") == ("petroleo", "diesel")
+    html = client.get("/panorama?bien=di%C3%A9sel").get_data(as_text=True)
+    assert "Mostrando: bienes con «diésel»" in html and 'value="diésel"' in html
+    csv = client.get("/panorama/datos.csv?bien=di%C3%A9sel").get_data(as_text=True)
+    assert len(csv.strip().splitlines()) - 1 == diesel["n_awards"]
+    assert "No hay compras con esos filtros" in client.get("/panorama?bien=zzzqqq").get_data(as_text=True)

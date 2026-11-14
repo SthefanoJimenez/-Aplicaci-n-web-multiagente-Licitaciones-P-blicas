@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
-from services import db, tender_contract
+from services import db, ocds_source, tender_contract
 from services.ingest import as_utc
 
 LIMA = timezone(timedelta(hours=-5))
@@ -26,6 +26,12 @@ def _session_factory():
         engine = db.make_engine()
         if engine is None:
             raise TendersUnavailable("sin_configurar")
+        try:
+            # Columnas nuevas (p. ej. las de HU-018): si la app se actualiza antes de correr la ingesta, sin
+            # esto toda consulta de convocatorias fallaba y la lista salía vacía (13/11/2026)
+            db.add_missing_columns(engine)
+        except SQLAlchemyError:
+            pass                          # sin conexión ahora: la consulta lo informará
         _factory = db.make_session_factory(engine)
     return _factory
 
@@ -69,7 +75,9 @@ def open_tenders(rubro=None, method=None, department=None):
                 query = query.where(db.Tender.method == method)
             if department:
                 query = query.where(db.Tender.department == department)
-            rows = session.scalars(query).all()
+            # Las guardadas antes de excluir contrataciones directas y comparaciones de precios dejan de
+            # ser vigentes en la siguiente ingesta; mientras tanto, tampoco se muestran
+            rows = [r for r in session.scalars(query).all() if ocds_source.is_postulable(r.method)]
             if rubro == "sin":          # bienes sin código de rubro en la API (RUBROS_INGESTA=todos)
                 rows = [r for r in rows if not (r.rubros or "").split()]
             elif rubro:

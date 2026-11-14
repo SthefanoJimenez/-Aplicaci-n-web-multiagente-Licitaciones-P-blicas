@@ -53,9 +53,11 @@ def area_chart(points, width=760, height=240, pad_left=48, pad_bottom=28, pad_to
     hits = [{"x": round(x(i) - step / 2, 1), "w": round(step, 1), "cx": x(i), "cy": y(p["n"]), "point": p}
             for i, p in enumerate(points)]
     peak = max(range(len(points)), key=lambda i: points[i]["n"])
+    # Mes elegido en el filtro: se marca en la serie en lugar de dejar un solo punto
+    selected = [{"x": coords[i][0], "y": coords[i][1], "point": p} for i, p in enumerate(points) if p.get("selected")]
     return {"width": width, "height": height, "line": line, "area": area, "ticks": ticks,
             "x_labels": x_labels, "hits": hits, "base": base, "left": pad_left, "right": width - pad_right,
-            "peak": {"x": coords[peak][0], "y": coords[peak][1], "point": points[peak]}}
+            "peak": {"x": coords[peak][0], "y": coords[peak][1], "point": points[peak]}, "selected": selected}
 
 
 @lru_cache(maxsize=1)

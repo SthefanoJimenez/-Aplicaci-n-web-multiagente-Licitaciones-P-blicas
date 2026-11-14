@@ -45,6 +45,7 @@
   {% endif %}
 </form>
 <p class="muted small" style="margin-top:8px;">¿No encuentra lo que vende? <a href="{{ url_for('rubro_catalog') }}">Vea el catálogo completo de rubros</a> y solicite el suyo.</p>
+<p class="muted small" style="margin-top:4px;" data-not-postulable>No se muestran las contrataciones directas ni las comparaciones de precios: la entidad elige al proveedor o invita a un grupo, así que no están abiertas a cualquier postor.</p>
 
 {% if request_notice == "invalida" %}
 <div class="notice" role="alert" style="margin-top:16px;">
