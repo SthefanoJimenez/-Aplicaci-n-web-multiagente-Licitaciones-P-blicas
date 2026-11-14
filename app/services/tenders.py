@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
-from services import db, ocds_source, tender_contract
+from services import db, ocds_source, schedule, tender_contract
 from services.ingest import as_utc
 
 LIMA = timezone(timedelta(hours=-5))
@@ -77,7 +77,8 @@ def open_tenders(rubro=None, method=None, department=None):
                 query = query.where(db.Tender.department == department)
             # Las guardadas antes de excluir contrataciones directas y comparaciones de precios dejan de
             # ser vigentes en la siguiente ingesta; mientras tanto, tampoco se muestran
-            rows = [r for r in session.scalars(query).all() if ocds_source.is_postulable(r.method)]
+            rows = [r for r in session.scalars(query).all()
+                    if ocds_source.is_postulable(r.method) and r.stage != schedule.BUENA_PRO]
             if rubro == "sin":          # bienes sin código de rubro en la API (RUBROS_INGESTA=todos)
                 rows = [r for r in rows if not (r.rubros or "").split()]
             elif rubro:

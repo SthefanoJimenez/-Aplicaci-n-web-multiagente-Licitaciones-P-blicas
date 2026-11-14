@@ -1,6 +1,9 @@
 // JavaScript mínimo: validación del campo vacío, indicador de carga y ejemplos de descripción.
 // Si el navegador no ejecuta JavaScript, el servidor hace la misma validación.
 
+// Conserva el foco accesible de la revisión Bootstrap sin reemplazar el diseño actual.
+document.querySelector('[data-required][aria-invalid="true"]')?.focus();
+
 document.querySelectorAll("form[data-loading]").forEach((form) => {
     form.addEventListener("submit", (event) => {
         const field = form.querySelector("[data-required]");

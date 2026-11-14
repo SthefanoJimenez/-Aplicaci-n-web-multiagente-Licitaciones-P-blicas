@@ -348,4 +348,11 @@
   });
 
   window.setTimeout(scrollToEnd, 60);
+  if (window.location.hash === "#asistente") {
+    var selected = new URLSearchParams(window.location.search).get("convocatoria");
+    if (selected && /^[0-9]{4,10}$/.test(selected)) {
+      input.value = "Evalúa la convocatoria " + selected;
+      open();
+    }
+  }
 })();

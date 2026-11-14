@@ -141,7 +141,7 @@ def test_home_page_uses_all_data(client, no_model):
     html = client.get("/").get_data(as_text=True)
     assert "sin muestreo" in html
     assert f"{len(data.AWARDS_DETAIL):,}" in html
-    assert 'href="/evaluar"' in html
+    assert 'href="/evaluar/mi-producto"' in html
     s = analytics.landing()
     assert s["example"]["n_awards"] == int((data.AWARDS["codigoitem"] == CEMENT_I).sum())
 

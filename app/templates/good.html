@@ -14,7 +14,7 @@
   <span class="chip">CUBSO {{ m.code }}</span>
   <span class="muted">Unidad de medida: {{ m.unit }}</span>
 </div>
-<p class="page-lead">Ficha de consulta con todas las compras de este bien registradas por el OECE. Es informativa: para comparar su costo y recibir un veredicto, describa su producto en «Evaluar mi producto».</p>
+<p class="page-lead">Ficha de consulta con todas las compras de este bien registradas por el OECE. Es informativa: para comparar su costo y recibir un veredicto, use «Evaluar mi producto» para recuperar el bien de su empresa o confirmar otro.</p>
 
 {% include "market_detail.html" %}
 
@@ -28,6 +28,6 @@
 
 <div class="actions actions-between">
   <a class="button button-secondary" href="{{ url_for('overview') }}">Volver al panorama</a>
-  <a class="button button-primary" href="{{ url_for('describe') }}">Evaluar mi producto</a>
+  <a class="button button-primary" href="{{ url_for('evaluate_company_product') }}">Evaluar mi producto</a>
 </div>
 {% endblock %}

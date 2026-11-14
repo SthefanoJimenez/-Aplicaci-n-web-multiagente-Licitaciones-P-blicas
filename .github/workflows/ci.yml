@@ -1,0 +1,55 @@
+name: EN-009 - Pruebas de Python
+
+# Sin filtros: comprueba los pushes y los pull requests de todas las ramas.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest sin claves
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Las pruebas existentes simulan las respuestas de Gemini.
+      GEMINI_API_KEY: ""
+      GOOGLE_API_KEY: ""
+      LANGSMITH_API_KEY: ""
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
+      PYTHON_DOTENV_DISABLED: "1"
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Preparar Python como en Render
+        uses: actions/setup-python@v6
+        with:
+          # Misma versión declarada en render.yaml.
+          python-version: "3.12.9"
+          cache: pip
+          cache-dependency-path: |
+            app/requirements.txt
+            app/requirements-dev.txt
+
+      - name: Instalar dependencias de la aplicación y las pruebas
+        run: python -m pip install -r app/requirements-dev.txt
+
+      - name: Ejecutar pytest
+        run: python -m pytest -q --junitxml=pytest-results.xml
+
+      - name: Guardar el informe de las pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: pytest-results.xml
+          if-no-files-found: warn
+          retention-days: 14

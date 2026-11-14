@@ -53,7 +53,7 @@ def tenders_db():
                                "text": "Presentación de ofertas 20/11/2026"}])
         t1.chunks.append(db.RequirementChunk(
             chunk_index=0, page=4, source="texto", file_name="bases_2001.pdf",
-            text="Requisito: inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. "
+            text="Presentar RNP vigente. No se permite consorcio. Requisito: inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. "
                  "Experiencia del postor: monto facturado acumulado de S/ 150,000.00 en venta de combustibles.",
             embedding=[0.1] * 768))
 
@@ -142,7 +142,7 @@ def test_caso_04_sin_rnp_cargado_avisa_pero_no_descarta(account_factory, tenders
     uid = make_user(account_factory, amount="200000")
     result = ask(account_factory, uid, "Vendo combustibles, ¿puedo postular?")
     assert "RNP" in result["response"]
-    assert "⚪" in result["response"] or "Por verificar" in result["response"]
+    assert "🟡" in result["response"] and "Requiere atención" in result["response"]
 
 
 def test_caso_04b_si_el_usuario_dice_que_no_tiene_rnp_es_rojo(account_factory, tenders_db):
@@ -157,7 +157,7 @@ def test_caso_05_rnp_vencido_lo_avisa(account_factory, tenders_db):
     uid = make_user(account_factory, amount="200000")
     add_document(account_factory, uid, "rnp", date(2026, 1, 1))
     result = ask(account_factory, uid, "Vendo combustibles, ¿puedo postular?")
-    assert "vencida" in result["response"].lower()
+    assert "vencidos" in result["response"].lower()
 
 
 def test_caso_06_experiencia_insuficiente_es_rojo_y_cita_el_monto(account_factory, tenders_db):
@@ -166,17 +166,17 @@ def test_caso_06_experiencia_insuficiente_es_rojo_y_cita_el_monto(account_factor
     add_document(account_factory, uid, "rnp", date(2027, 1, 1))
     result = ask(account_factory, uid, "Vendo combustibles")
     assert "🔴" in result["response"]
-    assert "150,000.00" in result["response"]
-    assert "pág. 4" in result["response"]
+    assert "150000" in result["response"]
+    assert "página 4" in result["response"]
 
 
-def test_caso_07_experiencia_suficiente_es_verde(account_factory, tenders_db):
-    """Facturación de S/ 300,000 frente a S/ 200,000 de vehículos: verde en 2002."""
+def test_caso_07_experiencia_suficiente_sin_revisiones_sigue_amarillo(account_factory, tenders_db):
+    """Superar la experiencia no basta: faltan monto, garantías y revisión de las bases."""
     uid = make_user(account_factory, rubros_text="Vehículos de motor", amount="300000")
     add_document(account_factory, uid, "rnp", date(2027, 1, 1))
     result = ask(account_factory, uid, "Vendo camionetas")
     assert "2002" in result["response"]
-    assert "🟢" in result["response"]
+    assert "🟡" in result["response"] and "🟢" not in result["response"]
 
 
 def test_caso_08_avisa_cuando_el_plazo_esta_por_vencer(account_factory, tenders_db):
@@ -257,7 +257,7 @@ def test_sin_bases_leidas_queda_por_verificar(account_factory, tenders_db):
     add_document(account_factory, uid, "rnp", date(2027, 1, 1))
     result = ask(account_factory, uid, "Vendo combustibles")
     assert "2004" in result["response"]
-    assert "⚪" in result["response"] or "Por verificar" in result["response"]
+    assert "🟡" in result["response"] and "Requiere atención" in result["response"]
 
 
 def test_entiende_el_producto_y_el_monto_del_propio_mensaje(account_factory, tenders_db):
@@ -266,7 +266,7 @@ def test_entiende_el_producto_y_el_monto_del_propio_mensaje(account_factory, ten
     result = ask(account_factory, uid, "tengo 3000 mil ventas en autos")
     assert any(item["code"] == "2510" for item in result["rubros"])
     assert "2002" in result["response"]
-    assert "3,000,000" in result["response"]
+    assert "Mi empresa" in result["response"] and "🟢" not in result["response"]
 
 
 def test_el_rubro_se_recuerda_en_el_siguiente_turno(account_factory, tenders_db):

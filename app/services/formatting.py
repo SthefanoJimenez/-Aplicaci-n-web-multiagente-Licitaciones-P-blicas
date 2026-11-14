@@ -12,6 +12,17 @@ def format_pen(value):
     return f"S/ {value:,.{decimals}f}"
 
 
+def format_pen_total(value):
+    """Total monetario en soles, siempre con dos decimales (incluido cero)."""
+    return f"S/ {value:,.2f}"
+
+
+def format_quantity(value):
+    """Cantidad sin símbolo monetario ni ceros decimales sobrantes."""
+    text = format(value, ",f")
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def format_amount(value):
     """Montos grandes en palabras cortas: S/ 245 mil, S/ 1.2 millones, S/ 8.3 mil millones."""
     if value >= 1_000_000_000:

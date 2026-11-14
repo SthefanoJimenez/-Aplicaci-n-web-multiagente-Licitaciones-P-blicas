@@ -6,6 +6,7 @@
 {% set per_unit = "por " ~ (m.unit|unit_text) %}
 
 <h1 class="page-title">El mercado de su bien</h1>
+<p class="hint">Evaluación para {{ current_user.company_name }}. <a href="{{ url_for('evaluate_company_product', cambiar=1) }}">Elegir otro producto de mi empresa</a></p>
 <div class="chosen">
   <span class="chip">CUBSO {{ m.code }}</span>
   <span class="chosen-name">{{ m.name }}</span>

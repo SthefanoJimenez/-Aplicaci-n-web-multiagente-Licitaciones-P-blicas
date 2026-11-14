@@ -3,10 +3,12 @@ pero crea únicamente sus propias tablas; no modifica las tablas de EN-007/EN-01
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import logging
 import hashlib
 import secrets
+import re
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, text
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -33,9 +35,8 @@ class Company(AccountBase):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), unique=True)
     name: Mapped[str] = mapped_column(String(200))
-    # HU-014: el asistente usa el RUC del perfil. Nulo en las cuentas creadas antes de esta versión;
-    # el asistente lo pide una sola vez y no lo deduce del mensaje.
-    ruc: Mapped[str | None] = mapped_column(String(11))
+    # Las cuentas anteriores conservan NULL hasta completar su perfil; no se inventa un RUC.
+    ruc: Mapped[str | None] = mapped_column(String(11), nullable=True, unique=True, index=True)
 
 
 class CompanyProfile(AccountBase):
@@ -48,6 +49,14 @@ class CompanyProfile(AccountBase):
     similar_contracts_amount: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     specialized_staff: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class CompanyProduct(AccountBase):
+    """Último bien confirmado; el costo y la descripción libre no se almacenan."""
+    __tablename__ = "productos_empresa"
+    company_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    catalog_code: Mapped[int] = mapped_column(Integer)
+    profile_key: Mapped[str] = mapped_column(String(64))
 
 
 class LoginSession(AccountBase):
@@ -66,6 +75,35 @@ class LoginAttempt(AccountBase):
 
 class EmailTaken(ValueError):
     pass
+
+
+class RucTaken(ValueError):
+    pass
+
+
+def valid_ruc(value):
+    """Valida el formato acordado; no acredita inscripción ni estado en SUNAT."""
+    return isinstance(value, str) and re.fullmatch(r"[0-9]{11}", value) is not None
+
+
+def initialize_schema(engine):
+    """Migración aditiva e idempotente de cuentas existentes en SQLite o PostgreSQL."""
+    AccountBase.metadata.create_all(engine)
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("empresas")}
+        if "ruc" not in columns:
+            optional = " IF NOT EXISTS" if engine.dialect.name == "postgresql" else ""
+            connection.exec_driver_sql(f"ALTER TABLE empresas ADD COLUMN{optional} ruc VARCHAR(11)")
+        # No se borran ni reasignan RUC de bases anteriores que admitían duplicados.
+        duplicate = connection.exec_driver_sql(
+            "SELECT 1 FROM empresas WHERE ruc IS NOT NULL AND ruc <> '' GROUP BY ruc HAVING COUNT(*) > 1 LIMIT 1"
+        ).first()
+        if duplicate:
+            logging.getLogger(__name__).warning(
+                "Hay RUC duplicados anteriores: revise la migración antes de crear el índice único.")
+        else:
+            connection.exec_driver_sql("UPDATE empresas SET ruc = NULL WHERE ruc = ''")
+            connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_empresas_ruc ON empresas (ruc)")
 
 
 def digest(token):
@@ -151,46 +189,76 @@ def get_profile(factory, user_id):
 
 
 def save_ruc(factory, user_id, ruc):
-    """Guarda el RUC que el usuario escribe en el asistente, si aún no lo tenía en el perfil."""
+    """Guarda un RUC opcional sin sustituir el existente ni tomar el de otra cuenta."""
+    if not valid_ruc(ruc):
+        return False
+    try:
+        with factory.begin() as db:
+            company = db.scalar(select(Company).where(Company.user_id == user_id))
+            if company is None or company.ruc:
+                return False
+            if db.scalar(select(Company.id).where(Company.ruc == ruc)) is not None:
+                return False
+            company.ruc = ruc
+        return True
+    except IntegrityError:
+        return False
+
+
+def _product_profile_key(profile):
+    values = (getattr(profile, key, "") or "" for key in ("business_activity", "rubros"))
+    return digest("\x1f".join(value.strip() for value in values))
+
+
+def get_company_product(factory, user_id):
+    """Recupera el bien de la cuenta; cambiar giro o rubros exige confirmar de nuevo."""
+    with factory() as db:
+        company = db.scalar(select(Company).where(Company.user_id == user_id))
+        product = db.get(CompanyProduct, company.id)
+        profile = db.get(CompanyProfile, company.id)
+        if product and product.profile_key == _product_profile_key(profile):
+            return product.catalog_code
+    return None
+
+
+def remember_company_product(factory, user_id, catalog_code):
+    """Asocia el código confirmado al usuario autenticado, nunca a un ID del formulario."""
     with factory.begin() as db:
         company = db.scalar(select(Company).where(Company.user_id == user_id))
-        if company is not None:
-            company.ruc = ruc
+        profile = db.get(CompanyProfile, company.id)
+        product = db.get(CompanyProduct, company.id)
+        if product is None:
+            product = CompanyProduct(company_id=company.id)
+            db.add(product)
+        product.catalog_code = catalog_code
+        product.profile_key = _product_profile_key(profile)
 
 
 def save_profile(factory, user_id, values):
-    with factory.begin() as db:
-        company = db.scalar(select(Company).where(Company.user_id == user_id))
-        company.name = values["company_name"]
-        company.ruc = values.get("ruc") or None
-        profile = db.get(CompanyProfile, company.id)
-        if profile is None:
-            profile = CompanyProfile(company_id=company.id)
-            db.add(profile)
-        for key in ("business_activity", "rubros", "monthly_sales", "experience_years",
-                    "similar_contracts_amount", "specialized_staff"):
-            setattr(profile, key, values[key])
-
-
-# ---------------------------------------------------------------------------
-# Migración mínima de las tablas de cuentas
-# ---------------------------------------------------------------------------
-# create_all no agrega columnas a tablas que ya existen. Las nuevas (hoy solo "empresas.ruc")
-# se agregan con ALTER TABLE … ADD COLUMN, sin tocar datos.
-ADDED_COLUMNS = {"empresas": ("ruc",)}
+    if values.get("ruc") and not valid_ruc(values["ruc"]):
+        raise ValueError("El RUC debe contener exactamente 11 dígitos.")
+    try:
+        with factory.begin() as db:
+            company = db.scalar(select(Company).where(Company.user_id == user_id))
+            if "ruc" in values:
+                duplicate = db.scalar(select(Company.id).where(Company.ruc == values["ruc"], Company.id != company.id))
+                if values["ruc"] and duplicate is not None:
+                    raise RucTaken("Este RUC ya está asociado a otra cuenta.")
+                company.ruc = values["ruc"] or None
+            company.name = values["company_name"]
+            profile = db.get(CompanyProfile, company.id)
+            if profile is None:
+                profile = CompanyProfile(company_id=company.id)
+                db.add(profile)
+            for key in ("business_activity", "rubros", "monthly_sales", "experience_years",
+                        "similar_contracts_amount", "specialized_staff"):
+                setattr(profile, key, values[key])
+    except IntegrityError as error:
+        if "ruc" in str(error.orig).lower():
+            raise RucTaken("Este RUC ya está asociado a otra cuenta.") from error
+        raise
 
 
 def ensure_columns(engine):
-    """Agrega las columnas que falten en una base creada por una versión anterior."""
-    inspector = inspect(engine)
-    tables = set(inspector.get_table_names())
-    with engine.begin() as conn:
-        for table_name, names in ADDED_COLUMNS.items():
-            if table_name not in tables:
-                continue
-            existing = {column["name"] for column in inspector.get_columns(table_name)}
-            table = AccountBase.metadata.tables[table_name]
-            for name in names:
-                if name not in existing:
-                    kind = table.c[name].type.compile(dialect=engine.dialect)
-                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {kind}"))
+    """Compatibilidad con el arranque y las migraciones aditivas de main."""
+    initialize_schema(engine)

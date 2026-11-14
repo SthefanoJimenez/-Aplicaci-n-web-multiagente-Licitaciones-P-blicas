@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from services import accounts, company_documents, consortia, legal, llm, rubros, schedule, tenders
+from services import eligibility, eligibility_store, eligibility_chat, assistant_profile, accounts, company_documents, consortia, legal, llm, rubros, schedule, tenders
 
 PROMPT_ANSWER = (Path(__file__).resolve().parent.parent / "prompts" / "assistant_answer.txt").read_text(encoding="utf-8")
 PROMPT_NOTE = (Path(__file__).resolve().parent.parent / "prompts" / "assistant_note.txt").read_text(encoding="utf-8")
@@ -238,8 +238,8 @@ def load_profile_node(state: AssistantState) -> dict:
     match = RUC_RE.search(state.get("query") or "")
     if match and not profile.get("ruc"):
         # Si escribe su RUC, se guarda como dato opcional; no se pide para responder.
-        accounts.save_ruc(context["factory"], context["user_id"], match.group(1))
-        profile["ruc"] = match.group(1)
+        if accounts.save_ruc(context["factory"], context["user_id"], match.group(1)):
+            profile["ruc"] = match.group(1)
     return {
         "profile": profile,
         "missing": [],
@@ -274,13 +274,14 @@ def resolve_rubros_node(state: AssistantState) -> dict:
 
 
 def route_after_profile(state: AssistantState) -> str:
-    if state.get("status") == "need_rubro":
+    if state.get("status") == "need_rubro" and not eligibility_chat._code(state.get("query", "")):
         return "need_rubro"
     return "search"
 
 
 def search_tenders_node(state: AssistantState) -> dict:
     """Convocatorias vigentes de los rubros resueltos, sin buena pro y con plazo no vencido."""
+    selected_code = eligibility_chat._code(state.get("query", ""))
     codes = {item["code"] for item in state.get("rubros") or []}
     today = _today(state)
     try:
@@ -293,7 +294,9 @@ def search_tenders_node(state: AssistantState) -> dict:
     for tender in available:
         if tender.stage == schedule.BUENA_PRO:
             continue
-        if not (codes & set(tender.rubros or [])):
+        if selected_code and str(tender.code) != selected_code:
+            continue
+        if not selected_code and not (codes & set(tender.rubros or [])):
             continue
         deadline = _as_datetime(tender.deadline_at)
         if deadline and deadline.date() < today:
@@ -331,79 +334,24 @@ def _bases_reason(reqs):
 
 def _evaluate_tender(tender, reqs, state, today):
     """Semáforo de una convocatoria. Solo afirma lo que se puede verificar."""
-    profile = state["profile"]
-    documents = state.get("documents") or {}
-    consortium = state.get("consortium")
-    reasons, failed, verified, consortium_covers = [], False, True, False
-
-    rnp = documents.get("rnp", "missing")
-    declared_rnp = _rnp_declared(state.get("query"))
-    if declared_rnp is False:
-        failed = True
-        reasons.append("Indicó que no cuenta con **RNP**: sin inscripción vigente no puede contratar "
-                       "con el Estado.")
-    elif rnp == "expired":
-        failed = True
-        reasons.append("Su constancia de **RNP** figura **vencida** en Documentos de mi empresa.")
-    elif rnp != "current":
-        verified = False
-        if declared_rnp is True:
-            reasons.append("Indicó que cuenta con **RNP**, pero no hay una constancia vigente cargada.")
-        else:
-            reasons.append("No tiene una constancia de **RNP** cargada; súbala para acreditarlo.")
-
+    assessment = state["assessments"][str(tender.code)]
+    semaphore = assessment["color"]
+    reasons = [assessment["reason"]]
+    reasons.append(f"**Empresa:** {assessment['company']['name']} · **RUC:** {assessment['company']['ruc'] or 'Pendiente en Mi empresa'}.")
+    if assessment["amount"] is not None:
+        reasons.append(f"**Monto:** {_pen(assessment['amount'])} ({assessment['amount_source']}).")
+    if assessment["guarantee"]["amount"] is not None:
+        reasons.append(f"**Garantía orientativa de fiel cumplimiento:** {_pen(assessment['guarantee']['amount'])}.")
+    for check in assessment["checks"]:
+        where = f" (bases, página {check['page']})" if check.get("page") else ""
+        reason = f"**{check['label']}**{where}: {check['reason']}"
+        reasons.append(reason)
+        if check.get("text"):
+            reasons.append("Texto de las bases: " + check["text"][:350].replace("\n", " "))
+    reasons.append(f"Documentos evaluados al **{assessment['on_date']}**: {assessment['date_basis']}.")
     bases_read = bool(reqs and reqs.get("available"))
     requirement = _experience_required(reqs["blocks"]) if bases_read else None
     needs_osinergmin = _mentions_osinergmin(reqs["blocks"]) if bases_read else False
-    if not bases_read:
-        verified = False
-        reasons.append(_bases_reason(reqs))
-
-    own = _decimal(profile.get("similar_contracts_amount"))
-    own_source = "perfil"
-    if own <= 0:
-        declared = _query_experience(state.get("query"))
-        if declared:
-            own, own_source = declared, "chat"
-    if requirement:
-        needed, page = requirement["amount"], requirement["page"]
-        where = f" (bases, pág. {page})" if page else ""
-        if own >= needed:
-            origen = "lo que indicó en el chat" if own_source == "chat" else "su perfil"
-            reasons.append(f"El monto declarado ({_pen(own)}, según {origen}) cubre los "
-                           f"{_pen(needed)} de experiencia que piden las bases{where}.")
-        elif consortium and consortium["amount"] >= needed:
-            consortium_covers = True
-            reasons.append(f"Su empresa sola declara {_pen(own)} y las bases piden {_pen(needed)}{where}; "
-                           f"el consorcio «{consortium['name']}» suma {_pen(consortium['amount'])} y sí alcanza.")
-        else:
-            failed = True
-            extra = f"; su consorcio suma {_pen(consortium['amount'])}" if consortium else ""
-            origen = "lo que indicó en el chat" if own_source == "chat" else "su perfil"
-            reasons.append(f"Las bases piden {_pen(needed)} de experiencia{where} y, según {origen}, "
-                           f"declara {_pen(own)}{extra}.")
-    elif bases_read:
-        verified = False
-        if EXPERIENCE_WORD.search(" ".join(block.get("text") or "" for block in reqs["blocks"])):
-            reasons.append("La experiencia aparece en las bases, pero no con un monto que se pueda leer; "
-                           "confírmela en el capítulo de requisitos.")
-        else:
-            reasons.append("No se identificó una exigencia de experiencia en la sección leída de las bases; "
-                           "confírmela antes de postular.")
-
-    if needs_osinergmin:
-        verified = False
-        reasons.append("Las bases exigen **Registro de Hidrocarburos de OSINERGMIN** y el perfil no acredita "
-                       "ese registro.")
-
-    if failed:
-        semaphore = "rojo"
-    elif consortium_covers:
-        semaphore = "amarillo"
-    elif not verified:
-        semaphore = "gris"
-    else:
-        semaphore = "verde"
 
     deadlines = _deadlines(tender, today)
     schedule_lines = []
@@ -445,7 +393,8 @@ def _evaluate_tender(tender, reqs, state, today):
         "schedule_lines": schedule_lines[:6],
         "semaphore": semaphore,
         "semaphore_icon": SEMAPHORES[semaphore][0],
-        "semaphore_label": SEMAPHORES[semaphore][1],
+        "semaphore_label": assessment["label"],
+        "assessment": assessment,
         "reasons": reasons,
         "bases_read": bases_read,
         "experience_required": float(requirement["amount"]) if requirement else None,
@@ -456,13 +405,28 @@ def _evaluate_tender(tender, reqs, state, today):
 
 def evaluate_node(state: AssistantState) -> dict:
     today = _today(state)
+    context = state["context"]
+    codes = [str(tender.code) for tender in state.get("tenders") or []]
+    if not codes:
+        return {"evaluations": []}
+    declaration = _rnp_declared(state.get("query"))
+    if declaration is not None:
+        inputs = eligibility_store.load_inputs(context["factory"], context["user_id"], codes)
+        for code in codes:
+            values = inputs.get(code, {})
+            values["rnp"] = "yes" if declaration else "no"
+            eligibility_store.save_inputs(context["factory"], context["user_id"], code, values)
+    assessments = eligibility.evaluate_many(context["factory"], context["user_id"], codes, today=today)
+    updated = dict(state, assessments=assessments)
     evaluations = []
     for tender in state.get("tenders") or []:
+        if str(tender.code) not in assessments:
+            continue
         try:
             reqs = tenders.requirements_of(tender.code)
         except tenders.TendersUnavailable:
             reqs = None
-        evaluations.append(_evaluate_tender(tender, reqs, state, today))
+        evaluations.append(_evaluate_tender(tender, reqs, updated, today))
     return {"evaluations": evaluations}
 
 
@@ -494,7 +458,7 @@ def _facts(state, evaluations):
         "rubros": [{"codigo": item["code"], "nombre": item["name"]} for item in state.get("rubros") or []],
         "convocatorias": [
             {key: value for key, value in evaluation.items()
-             if key not in ("semaphore_icon", "reasons")} | {"motivos": evaluation["reasons"]}
+             if key not in ("semaphore_icon", "reasons", "assessment")} | {"motivos": evaluation["reasons"]}
             for evaluation in evaluations
         ],
     }
@@ -566,10 +530,9 @@ def _render(state, evaluations, payload):
     counts = {key: sum(1 for item in evaluations if item["semaphore"] == key)
               for key in ("verde", "amarillo", "gris", "rojo")}
     if evaluations:
-        lines.append(f"**Resumen:** {counts['verde']} postulable(s) con lo verificado, "
-                     f"{counts['amarillo']} viable(s) con condiciones o consorcio, "
-                     f"{counts['gris']} por verificar en las bases y "
-                     f"{counts['rojo']} no recomendable(s) por ahora.")
+        lines.append(f"**Resumen:** {counts['verde']} cumple(n) por sí sola, "
+                     f"{counts['amarillo']} requiere(n) atención, "
+                     f"{counts['rojo']} no cumple(n) ni en consorcio.")
         lines.append("")
         lines.append("Marco: **Ley N.° 32069** y **OECE**. El detalle de cada convocatoria está "
                      "en el botón «Ver detalle».")
@@ -592,7 +555,7 @@ def _render(state, evaluations, payload):
         if evaluation["deadline_soon"]:
             lines.append(f"- **Aviso:** el plazo está por vencer; prepare su oferta o sus consultas.")
         lines.append(f"- **Semáforo:** {evaluation['semaphore_label']}")
-        for reason in evaluation["reasons"][:4]:
+        for reason in evaluation["reasons"]:
             lines.append(f"- {reason}")
         lines.append(f"- [Ver ficha, bases y cronograma](/convocatorias/{evaluation['code']})")
         if by_code.get(evaluation["code"]):
@@ -726,7 +689,7 @@ def _db_answer(state):
 def answer_node(state: AssistantState) -> dict:
     status = state.get("status")
     query = state.get("query") or ""
-    if DOCUMENT_INTENT.search(query):
+    if DOCUMENT_INTENT.search(query) and not eligibility_chat._code(query):
         return {"answer": _with_legal(_polish(state, _documents_answer(state))), "status": "documents"}
     if GREETING.match(query):
         return {"answer": _with_legal(_polish(state, _greeting_answer(state))), "status": "greeting"}
@@ -767,7 +730,7 @@ def build_assistant_graph():
 ASSISTANT_GRAPH = build_assistant_graph()
 
 
-def ask_assistant(query, user_id, factory, email=None, history=None, remembered_rubros=None,
+def ask_assistant(query, user_id=None, factory=None, email=None, history=None, remembered_rubros=None, profile=None,
                   today=None, call_model=None):
     """Punto de entrada del asistente.
 
@@ -779,6 +742,14 @@ def ask_assistant(query, user_id, factory, email=None, history=None, remembered_
     query = (query or "").strip()
     if not query:
         return {"response": "", "status": "empty", "rubros": [], "missing": []}
+    if assistant_profile.check_profile_node({"query": query, "profile": profile or {}}).get("status") == "general_guidance":
+        return {"response": assistant_profile.preparation_guide_node({})["response"],
+                "status": "general_guidance", "rubros": [], "profile": profile or {}, "evaluations": []}
+    company = accounts.get_profile(factory, user_id)
+    declared_amount = _query_experience(query)
+    if declared_amount is not None and company.get("similar_contracts_amount") is not None and declared_amount != company["similar_contracts_amount"]:
+        return {"response": "La experiencia de la consulta difiere de la guardada en **Mi empresa**. Actualice allí el monto facturado en contratos similares antes de evaluar; el chat no sustituye silenciosamente el perfil.",
+                "status": "profile_conflict", "rubros": [], "profile": company, "evaluations": []}
     state: AssistantState = {
         "query": query,
         "context": {
@@ -799,4 +770,5 @@ def ask_assistant(query, user_id, factory, email=None, history=None, remembered_
         "missing": result.get("missing") or [],
         "profile": result.get("profile") or {},
         "detail_count": len(result.get("evaluations") or []),
+        "evaluations": result.get("evaluations") or [],
     }

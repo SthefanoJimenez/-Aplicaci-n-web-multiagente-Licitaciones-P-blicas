@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 import re
 
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, stream_with_context, url_for
+from sqlalchemy.exc import SQLAlchemyError
 
 import config
 import orchestrator
@@ -11,7 +12,9 @@ import documents
 import consortium
 from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, schedule, tenders
-from services.formatting import format_amount, format_pen, markdown, unit_text
+from services import accounts, company_documents, eligibility, eligibility_chat, eligibility_store
+from services.formatting import format_amount, format_pen, format_pen_total, format_quantity, markdown, unit_text
+from services.chat_formatting import render_assistant_text
 
 
 app = Flask(__name__)
@@ -24,14 +27,17 @@ consortium.init_app(app)
 @app.context_processor
 def common_context():
     return {"app_name": config.APP_NAME, "max_length": config.MAX_DESCRIPTION_LENGTH,
-            "chat_history": session.get("assistant_history", [])}
+            "chat_history": _chat_state()[0] if g.get("current_user") else []}
 
 
 app.template_filter("pen")(format_pen)
+app.template_filter("pen_total")(format_pen_total)
+app.template_filter("quantity")(format_quantity)
 app.template_filter("amount")(format_amount)
 app.template_filter("unit_text")(unit_text)
 app.template_filter("markdown")(markdown)
 app.template_filter("place")(analytics.place_label)
+app.template_filter("assistant_text")(render_assistant_text)
 
 
 @app.template_filter("number")
@@ -74,6 +80,31 @@ def home():
 # ---------------------------------------------------------------------------
 # Flujo de evaluación: 5 pasos
 # ---------------------------------------------------------------------------
+@app.get("/evaluar/mi-producto")
+def evaluate_company_product():
+    """Entrada con el perfil guardado y recuperación del último bien confirmado."""
+    try:
+        factory = auth.store()
+        profile = accounts.get_profile(factory, g.current_user["id"])
+        code = accounts.get_company_product(factory, g.current_user["id"])
+    except SQLAlchemyError:
+        return render_template("auth/unavailable.html"), 503
+    if code in data.VALID_CODES and not request.args.get("cambiar"):
+        session["code"] = code
+        session["description"] = data.GOODS[code]["name"]
+        session["candidates"] = [code]
+        return redirect(url_for("market"))
+
+    matches = classifier.profile_candidates(profile.get("business_activity", ""), profile.get("rubros", ""))
+    session.pop("code", None)
+    # Solo información pública del catálogo y una etiqueta genérica pasan a la cookie.
+    session["description"] = "Bienes del perfil de la empresa"
+    session["candidates"] = [item["code"] for item in matches]
+    description = (profile.get("rubros") or profile.get("business_activity") or "")[:config.MAX_DESCRIPTION_LENGTH]
+    return render_template("company_product.html", profile=profile, candidates=matches,
+                           description=description, n_awards=data.N_AWARDS)
+
+
 @app.get("/evaluar")
 def describe():
     """Paso 1: descripción del bien."""
@@ -160,6 +191,10 @@ def confirm():
     code = request.form.get("code", type=int)
     if code not in session.get("candidates", []) or code not in data.VALID_CODES:
         return redirect(url_for("describe"))
+    try:
+        accounts.remember_company_product(auth.store(), g.current_user["id"], code)
+    except SQLAlchemyError:
+        return render_template("auth/unavailable.html"), 503
     session["code"] = code
     return redirect(url_for("market"))
 
@@ -393,8 +428,15 @@ def tenders_list():
             tenders_state = dict(tenders_state, ok=False, reason="sin_conexion")
 
     # Métodos y departamentos disponibles para los filtros
-    # Solo procedimientos a los que cualquier proveedor puede postular: las contrataciones directas y
-    # las comparaciones de precios no se muestran (ocds_source.NOT_POSTULABLE, entrevista del 11/11/2026)
+    total_items = len(items)
+    page_number = max(1, request.args.get("pagina", 1, type=int) or 1)
+    items = items[(page_number - 1) * 50:page_number * 50]
+    eligibility_results, eligibility_error = {}, None
+    if g.get("current_user") and items:
+        try:
+            eligibility_results = eligibility.evaluate_many(auth.store(), g.current_user["id"], [t["code"] for t in items if t["code"]])
+        except (SQLAlchemyError, tenders.TendersUnavailable, ValueError):
+            eligibility_error = "No se pudo consultar la elegibilidad de su empresa; intente de nuevo."
     method_options = [
         "Subasta Inversa Electrónica",
         "Licitación Pública Abreviada",
@@ -407,6 +449,8 @@ def tenders_list():
     return render_template(
         "tenders.html",
         tenders=items,
+        eligibility_results=eligibility_results, eligibility_error=eligibility_error,
+        total_items=total_items, page_number=page_number, total_pages=max(1, (total_items + 49) // 50),
         tenders_state=tenders_state,
         pilot_rubros=tenders.rubro_options(PILOT_RUBRO_OPTIONS),   # catálogo completo de rubros (HU-013)
         rubro_info=rubro_info,
@@ -471,6 +515,15 @@ def tender_sheet(code):
     if tender is None:
         abort(404)
     rubro_names = tenders.rubro_names()
+    assessment, saved_inputs, owned_documents, eligibility_error = None, {}, [], None
+    if g.get("current_user"):
+        try:
+            factory, user_id = auth.store(), g.current_user["id"]
+            assessment = eligibility.evaluate_many(factory, user_id, [code]).get(code)
+            saved_inputs = eligibility_store.load_inputs(factory, user_id, [code]).get(code, {})
+            owned_documents = company_documents.list_documents(factory, user_id)
+        except (SQLAlchemyError, tenders.TendersUnavailable, ValueError):
+            eligibility_error = "No se pudo consultar la evaluación privada; sus datos guardados se conservan. Intente nuevamente."
     return render_template(
         "tender.html", tender=tender, reqs=reqs, unavailable=False, code=code,
         seace_url=tenders.seace_url(tender),
@@ -479,7 +532,29 @@ def tender_sheet(code):
         rubros=[rubro_names.get(r, r) for r in tender.rubros],
         catalog_code=tenders.match_catalog_item(tender.title or tender.description),
         timeline=schedule.view(tender),
+        assessment=assessment, saved_inputs=saved_inputs, owned_documents=owned_documents,
+        eligibility_error=eligibility_error, review_options=eligibility.REVIEW_OPTIONS,
     )
+
+
+@app.post("/elegibilidad/<code>")
+def eligibility_save(code):
+    """Guarda solo declaraciones propias; los requisitos y la empresa se resuelven en el servidor."""
+    try:
+        context = eligibility.load_tenders([code]).get(code)
+        if context is None:
+            abort(404)
+        documents = company_documents.list_documents(auth.store(), g.current_user["id"])
+        values, errors = eligibility.parse_form(request.form, [r["key"] for r in context["requirements"]], documents)
+        if errors:
+            for error in errors:
+                flash(error, "error")
+        else:
+            eligibility_store.save_inputs(auth.store(), g.current_user["id"], code, values)
+            flash("Datos de evaluación guardados. El resultado se recalculó con su perfil y documentos actuales.", "success")
+    except (SQLAlchemyError, tenders.TendersUnavailable):
+        flash("No se pudo guardar la evaluación en este momento. Intente nuevamente.", "error")
+    return redirect(url_for("tender_sheet", code=code, _anchor="elegibilidad"), code=303)
 
 
 @app.get("/convocatorias/<code>/bases")
@@ -513,37 +588,7 @@ def tender_bases(code):
 # ---------------------------------------------------------------------------
 # Asistente de postulación (HU-010 / HU-014)
 # ---------------------------------------------------------------------------
-# La conversación vive en la cookie de sesión (4 KB en los navegadores): se guarda solo
-# lo último y cada mensaje se recorta para que el asistente siga funcionando tras varias consultas.
 ASSISTANT_MAX_QUERY = 1000
-ASSISTANT_HISTORY_MESSAGES = 8
-ASSISTANT_MESSAGE_CHARS = 1800
-# Presupuesto total del historial: la cookie de sesión admite ~4 KB y también lleva
-# la cuenta, el token CSRF y el perfil. Con 2200 caracteres queda margen de sobra.
-ASSISTANT_HISTORY_MAX_CHARS = 2200
-
-
-def _trim_history(messages):
-    """Conserva los últimos mensajes dentro del presupuesto de la cookie.
-
-    Primero recorta cada mensaje y luego va descartando los más antiguos hasta que
-    el texto total cabe en ASSISTANT_HISTORY_MAX_CHARS.
-    """
-    trimmed = [
-        {"role": m.get("role", "user"), "content": str(m.get("content", ""))[:ASSISTANT_MESSAGE_CHARS]}
-        for m in messages
-    ][-ASSISTANT_HISTORY_MESSAGES:]
-    kept, total = [], 0
-    for message in reversed(trimmed):
-        size = len(message["content"])
-        if kept and total + size > ASSISTANT_HISTORY_MAX_CHARS:
-            break
-        if total + size > ASSISTANT_HISTORY_MAX_CHARS:       # el último mensaje solo, recortado
-            message["content"] = message["content"][:max(0, ASSISTANT_HISTORY_MAX_CHARS - total)]
-            size = len(message["content"])
-        kept.append(message)
-        total += size
-    return list(reversed(kept))
 
 
 def _assistant_reply(text, status="ok", code=200, detail="", detail_count=0):
@@ -559,6 +604,18 @@ def _assistant_reply(text, status="ok", code=200, detail="", detail_count=0):
     return payload, code
 
 
+def _chat_state():
+    factory, user_id = auth.store(), g.current_user["id"]
+    messages, context = eligibility_store.load_chat(factory, user_id)
+    legacy = session.pop("assistant_history", [])
+    legacy_rubros = session.pop("assistant_rubros", [])
+    if legacy and not messages:
+        messages = legacy
+        context["rubros"] = legacy_rubros
+        eligibility_store.save_chat(factory, user_id, messages, context)
+    return messages, context
+
+
 @app.post("/asistente/mensaje")
 def assistant_message():
     """Una consulta del widget flotante. La respuesta es JSON para no recargar la página."""
@@ -567,15 +624,19 @@ def assistant_message():
     query = (request.form.get("query") or "").strip()[:ASSISTANT_MAX_QUERY]
     if not query:
         return _assistant_reply("", status="empty", code=400)
-    history = session.get("assistant_history", [])
+    history, chat_context = _chat_state()
+    if chat_context.get("selected_tender_code") and not eligibility_chat._code(query):
+        query_for_engine = query + " · Convocatoria " + chat_context["selected_tender_code"]
+    else:
+        query_for_engine = query
     try:
         result = assistant.ask_assistant(
-            query,
+            query_for_engine,
             user_id=g.current_user["id"],
             factory=auth.store(),
             email=g.current_user["email"],
             history=history,
-            remembered_rubros=session.get("assistant_rubros", []),
+            remembered_rubros=chat_context.get("rubros", []),
         )
     except Exception:
         # El chat nunca debe romper la página: se avisa y se conserva el historial.
@@ -586,13 +647,14 @@ def assistant_message():
 
     # El resumen va al chat y el detalle a la ventana interna del widget.
     summary, _, detail = result["response"].partition(assistant.DETAIL_MARKER)
-    session["assistant_history"] = _trim_history(
-        history + [{"role": "user", "content": query},
-                   {"role": "assistant", "content": summary[:ASSISTANT_MESSAGE_CHARS]}]
-    )
+    messages = history + [{"role": "user", "content": query},
+                          {"role": "assistant", "content": summary + (assistant.DETAIL_MARKER + detail if detail else "")}]
     if result.get("rubros"):
-        # Rubros resueltos: permiten seguir la conversación aunque el siguiente mensaje no los repita.
-        session["assistant_rubros"] = result["rubros"][:3]
+        chat_context["rubros"] = result["rubros"][:3]
+    explicit_code = eligibility_chat._code(query)
+    if explicit_code:
+        chat_context["selected_tender_code"] = explicit_code
+    eligibility_store.save_chat(auth.store(), g.current_user["id"], messages, chat_context)
     return _assistant_reply(summary, status=result.get("status", "ok"),
                             detail=detail, detail_count=result.get("detail_count", 0))
 
@@ -600,6 +662,7 @@ def assistant_message():
 @app.post("/asistente/limpiar")
 def assistant_clear():
     """Reinicia la conversación del asistente y devuelve el panel vacío."""
+    eligibility_store.clear_chat(auth.store(), g.current_user["id"])
     session.pop("assistant_history", None)
     session.pop("assistant_rubros", None)
     return {"ok": True}
@@ -608,6 +671,12 @@ def assistant_clear():
 @app.get("/asistente")
 def assistant_chat():
     """La página anterior del asistente ya no existe: el chat vive en el widget de todas las pantallas."""
+    code = request.args.get("convocatoria") or request.args.get("code")
+    if code and re.fullmatch(r"[0-9]{4,10}", code):
+        messages, context = _chat_state()
+        context["selected_tender_code"] = code
+        eligibility_store.save_chat(auth.store(), g.current_user["id"], messages, context)
+        return redirect(url_for("home", convocatoria=code, _anchor="asistente"))
     return redirect(url_for("home"))
 
 
