@@ -12,7 +12,7 @@ permissions:
 jobs:
   pytest:
     name: pytest sin claves
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       # Las pruebas existentes simulan las respuestas de Gemini.
@@ -29,7 +29,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Preparar Python como en Render
+      - name: Preparar Python de la aplicación
         uses: actions/setup-python@v6
         with:
           # Misma versión declarada en render.yaml.

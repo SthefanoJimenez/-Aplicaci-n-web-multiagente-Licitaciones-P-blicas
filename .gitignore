@@ -30,3 +30,6 @@ analisis/datos/produccion/
 *.sqlite3
 app/instance/
 /instance/
+
+# Evita registrar otra copia del mismo repositorio como submódulo accidental.
+/-Aplicaci-n-web-multiagente-Licitaciones-P-blicas/
