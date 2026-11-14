@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "auth/_fields.html" import input, summary %}
+{% from "auth/_fields.html" import input, summary, password_toggle %}
 {% set active_nav = "register" %}
 {% block title %}Crear cuenta{% endblock %}
 {% block content %}
@@ -8,20 +8,40 @@
   <h1 class="page-title" id="account-title">Crear cuenta</h1>
   <p class="page-lead">Guarde el perfil de su empresa para consultarlo y actualizarlo cuando lo necesite.</p>
   {{ summary(errors) }}
-  <form method="post" action="{{ url_for('auth.register') }}" data-registration-form>
+  <form method="post" action="{{ url_for('auth.register') }}" data-registration-form data-email-pattern="{{ email_pattern }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization', minimum=2) }}
     {{ input('email', 'Correo electrónico', values, errors, type='email', autocomplete='email', maximum=254) }}
-    {{ input('password', 'Contraseña', {}, errors, type='password', autocomplete='new-password', hint='Use entre 12 y 128 caracteres. Puede escribir una frase larga.', minimum=12, maximum=128) }}
-    {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=12, maximum=128) }}
+    <div class="field">
+      <div class="password-label-row">
+        <label class="label" for="password">Contraseña</label>
+        <details class="password-help" data-password-help>
+          <summary aria-label="Requisitos de la contraseña" aria-controls="password-help-content">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 10v7M12 7v1"/></svg>
+          </summary>
+          <div class="password-help-card" id="password-help-content">
+            <p id="password-hint">Use de 4 a 128 caracteres, con al menos una mayúscula (A-Z), una minúscula (a-z), un número y un símbolo. Los espacios y las letras acentuadas no cuentan como símbolo.</p>
+          </div>
+        </details>
+      </div>
+      <div class="password-input" data-password-wrapper>
+        <input id="password" name="password" type="password" required autocomplete="new-password"
+               minlength="4" maxlength="128" aria-describedby="password-hint{% if errors.get('password') %} password-error{% endif %}"
+               {% if errors.get('password') %}aria-invalid="true"{% endif %}>
+        {{ password_toggle('password') }}
+      </div>
+      {% if errors.get('password') %}<p class="error" id="password-error">{{ errors['password'] }}</p>{% endif %}
+    </div>
+    {{ input('password_confirm', 'Repita la contraseña', {}, errors, type='password', autocomplete='new-password', minimum=4, maximum=128) }}
     <div class="actions"><button class="button button-primary button-wide" type="submit" aria-describedby="registration-help">Crear mi cuenta</button></div>
-    <p class="hint" id="registration-help">Complete los cuatro campos. La contraseña debe tener entre 12 y 128 caracteres y coincidir en ambos campos.</p>
+    <p class="hint" id="registration-help">Complete los cuatro campos para crear su cuenta.</p>
     <p class="sr-only" id="registration-announcement" role="status" aria-atomic="true"></p>
   </form>
   <p class="hint">¿Ya tiene una cuenta? <a href="{{ url_for('auth.login', **({'next': next_url} if next_url else {})) }}">Iniciar sesión</a></p>
 </section>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/password-visibility.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/register.js') }}" defer></script>
 {% endblock %}

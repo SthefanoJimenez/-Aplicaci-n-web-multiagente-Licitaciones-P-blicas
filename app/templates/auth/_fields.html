@@ -1,8 +1,19 @@
+{% macro password_toggle(name, label='contraseña') %}
+  <button class="password-toggle" type="button" data-password-toggle="{{ name }}" data-password-label="{{ label }}"
+          aria-controls="{{ name }}" aria-label="Mostrar {{ label }}" title="Mostrar {{ label }}" hidden>
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
+      <path data-password-slash d="m3 3 18 18"/>
+    </svg>
+  </button>
+{% endmacro %}
+
 {% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none) %}
 <div class="field">
   <label class="label" for="{{ name }}">{{ label }}</label>
   {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount'] %}
   {% if is_amount %}<div class="amount-input" data-amount-input>{% endif %}
+  {% if type == 'password' %}<div class="password-input" data-password-wrapper>{% endif %}
   <input id="{{ name }}" name="{{ name }}" type="{{ type }}" required
          autocomplete="{{ autocomplete }}" maxlength="{{ maximum }}"
          {% if minimum is not none %}minlength="{{ minimum }}"{% endif %}
@@ -11,8 +22,13 @@
          pattern="[0-9]{1,14}([.,][0-9]{1,2})?"
          title="Use hasta 14 cifras enteras y dos decimales, con un solo punto o coma y sin separadores de miles."{% endif %}
          {% if name == 'experience_years' %}inputmode="numeric"{% endif %}
+         {% if name == 'ruc' %}inputmode="numeric" pattern="[0-9]{11}" title="Escriba exactamente 11 dígitos, sin espacios ni guiones."{% endif %}
          {% if errors.get(name) %}aria-invalid="true"{% endif %}
          {% if hint or errors.get(name) %}aria-describedby="{{ name }}-hint{% if errors.get(name) %} {{ name }}-error{% endif %}"{% endif %}>
+  {% if type == 'password' %}
+    {{ password_toggle(name, 'contraseña repetida' if name == 'password_confirm' else 'contraseña') }}
+  </div>
+  {% endif %}
   {% if is_amount %}
     <span class="amount-guide" aria-hidden="true" hidden><span class="amount-guide-prefix" data-amount-prefix></span><span data-amount-suffix></span></span>
   </div>

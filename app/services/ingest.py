@@ -81,6 +81,7 @@ def _apply_row(tender, row, now, run_id):
     tender.enquiry_start = as_utc(ocds_source.parse_date(enquiry_start))
     tender.enquiry_end = as_utc(ocds_source.parse_date(enquiry_end))
     tender.estimated_value = row.get("value")
+    tender.items = row.get("items") or []
     tender.currency = row.get("currency")
     tender.last_seen_at = now
     tender.last_run_id = run_id

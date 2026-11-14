@@ -16,9 +16,17 @@ from services import accounts, db
 
 
 bp = Blueprint("auth", __name__)
+# Registro con dirección ASCII habitual (dot-atom) y dominio público de varias
+# etiquetas. Una sola regla se comparte con el formulario para evitar diferencias.
+# Sin consultas DNS: el formato no acredita que exista el buzón.
+EMAIL_ATOM = r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+"
+EMAIL_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+EMAIL_TLD = r"(?:[A-Za-z]{2,63}|[xX][nN]--[A-Za-z0-9](?:[A-Za-z0-9-]{0,57}[A-Za-z0-9]))"
+EMAIL_PATTERN = rf"(?=.{{1,64}}@){EMAIL_ATOM}(?:\.{EMAIL_ATOM})*@(?:{EMAIL_LABEL}\.)+{EMAIL_TLD}"
+
 PRIVATE_ENDPOINTS = {"describe", "candidates", "back_to_candidates", "confirm", "market",
-                     "cost", "verdict", "verdict_without_cost", "auth.profile"}
-PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente")
+                     "cost", "verdict", "verdict_without_cost", "auth.profile", "evaluate_company_product"}
+PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente", "/elegibilidad")
 
 
 def store():
@@ -35,7 +43,7 @@ def store():
             Path(current_app.instance_path).mkdir(parents=True, exist_ok=True)
             url = "sqlite:///" + str(Path(current_app.instance_path) / "cuentas.sqlite3")
         engine = db.make_engine(url)
-        accounts.AccountBase.metadata.create_all(engine)
+        accounts.initialize_schema(engine)
         factory = db.make_session_factory(engine)
         current_app.extensions["accounts_factory"] = factory
     return factory
@@ -144,12 +152,14 @@ def register():
         values = {"email": request.form.get("email", "").strip().lower(),
                   "company_name": request.form.get("company_name", "").strip()}
         password = request.form.get("password", "")
-        if len(values["email"]) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", values["email"]):
-            errors["email"] = "Escriba un correo válido."
+        if len(values["email"]) > 254 or not re.fullmatch(EMAIL_PATTERN, values["email"]):
+            errors["email"] = "Escriba un correo válido, por ejemplo: empresa@ejemplo.com. Revise los puntos y la terminación del dominio."
         if not 2 <= len(values["company_name"]) <= 200:
             errors["company_name"] = "Escriba el nombre de su empresa (de 2 a 200 caracteres)."
-        if not 12 <= len(password) <= 128:
-            errors["password"] = "Use una contraseña de 12 a 128 caracteres."
+        if (not 4 <= len(password) <= 128 or
+                not all(re.search(pattern, password) for pattern in
+                        (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^\w\s]|_"))):
+            errors["password"] = "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo."
         if password != request.form.get("password_confirm"):
             errors["password_confirm"] = "Las contraseñas no coinciden."
         if not errors:
@@ -163,7 +173,8 @@ def register():
                 errors["email"] = str(error)
             except SQLAlchemyError:
                 return _service_unavailable()
-    return render_template("auth/register.html", errors=errors, values=values, next_url=target), (400 if errors else 200)
+    return render_template("auth/register.html", errors=errors, values=values, next_url=target,
+                           email_pattern=EMAIL_PATTERN), (400 if errors else 200)
 
 
 @bp.route("/ingresar", methods=["GET", "POST"])
@@ -203,11 +214,16 @@ def logout():
 
 def validate_profile(form):
     values, errors = {}, {}
+    values["ruc"] = form.get("ruc", "").strip()
+    if not accounts.valid_ruc(values["ruc"]):
+        errors["ruc"] = "Escriba los 11 dígitos del RUC, sin espacios ni guiones."
     for key, maximum in (("company_name", 200), ("business_activity", 300), ("rubros", 500), ("specialized_staff", 3000)):
         value = form.get(key, "").strip()
         if not value or len(value) > maximum:
             errors[key] = f"Complete este campo (máximo {maximum} caracteres)."
         values[key] = value
+    if len(values["company_name"]) < 2:
+        errors["company_name"] = "Escriba la razón social (de 2 a 200 caracteres)."
     for key in ("monthly_sales", "similar_contracts_amount"):
         raw = form.get(key, "").strip()
         try:
@@ -234,9 +250,12 @@ def profile():
         if request.method == "POST":
             values, errors = validate_profile(request.form)
             if not errors:
-                accounts.save_profile(store(), g.current_user["id"], values)
-                flash("Perfil guardado. Puede actualizarlo cuando lo necesite.", "success")
-                return redirect(target or url_for("auth.profile"))
+                try:
+                    accounts.save_profile(store(), g.current_user["id"], values)
+                    flash("Perfil guardado. Puede actualizarlo cuando lo necesite.", "success")
+                    return redirect(target or url_for("auth.profile"))
+                except accounts.RucTaken as error:
+                    errors["ruc"] = str(error)
         else:
             values = accounts.get_profile(store(), g.current_user["id"])
     except SQLAlchemyError:

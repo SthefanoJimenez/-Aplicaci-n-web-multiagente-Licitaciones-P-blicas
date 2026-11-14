@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% set active_nav = "tenders" %}
 {% block title %}Convocatorias vigentes{% endblock %}
+{% block page_class %}page-tenders{% endblock %}
 {% block content %}
 <h1 class="page-title">Convocatorias vigentes de bienes</h1>
 <p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto y en los que solicitan las empresas. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
@@ -11,7 +12,7 @@
   <p><strong>Aviso sobre la ubicación:</strong> El departamento mostrado corresponde a la sede de la entidad compradora convocante, no necesariamente al lugar final de entrega de los bienes.</p>
 </div>
 
-<form class="filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
+<form class="filters tender-filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
   <div>
     <label for="f-rubro">Rubro</label>
     <select id="f-rubro" name="rubro">
@@ -39,10 +40,12 @@
       {% endfor %}
     </select>
   </div>
-  <button type="submit" class="button button-primary">Aplicar</button>
-  {% if f.rubro or f.department or f.method %}
-  <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
-  {% endif %}
+  <div class="tender-filter-actions">
+    <button type="submit" class="button button-primary">Aplicar</button>
+    {% if f.rubro or f.department or f.method %}
+    <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
+    {% endif %}
+  </div>
 </form>
 <p class="muted small" style="margin-top:8px;">¿No encuentra lo que vende? <a href="{{ url_for('rubro_catalog') }}">Vea el catálogo completo de rubros</a> y solicite el suyo.</p>
 
@@ -92,24 +95,32 @@
 {% endif %}
 
 <div class="section">
-  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
-    <h2 class="section-title">Resultados ({{ tenders|length }} convocatorias vigentes)</h2>
+  <div class="tender-results-heading">
+    <h2 class="section-title">Resultados ({{ total_items }} convocatorias vigentes)</h2>
     <span class="muted small">Ordenadas de la más reciente a la más antigua</span>
   </div>
 
   {% if tenders %}
-  <div class="table-wrap">
-    <table class="data-table">
+  <p id="tender-scroll-hint" class="tender-scroll-hint muted small">Desplace la tabla horizontalmente para ver todas las columnas.</p>
+  <div class="table-wrap tender-list" tabindex="0" role="region" aria-label="Tabla de convocatorias vigentes" aria-describedby="tender-scroll-hint">
+    <table class="data-table tender-table">
+      <caption class="sr-only">Convocatorias vigentes con sus nueve columnas, incluida la elegibilidad de mi empresa.</caption>
+      <colgroup>
+        <col class="tender-col-code"><col class="tender-col-title"><col class="tender-col-entity">
+        <col class="tender-col-department"><col class="tender-col-published"><col class="tender-col-age">
+        <col class="tender-col-value"><col class="tender-col-eligibility"><col class="tender-col-actions">
+      </colgroup>
       <thead>
         <tr>
-          <th>Código</th>
-          <th>Objeto y Convocatoria</th>
-          <th>Entidad compradora</th>
-          <th>Departamento</th>
-          <th>Publicación</th>
-          <th class="num">Antigüedad</th>
-          <th class="num">Valor estimado</th>
-          <th style="min-width: 170px;">Acciones</th>
+          <th scope="col">Código</th>
+          <th scope="col">Objeto y Convocatoria</th>
+          <th scope="col">Entidad compradora</th>
+          <th scope="col">Departamento</th>
+          <th scope="col">Publicación</th>
+          <th scope="col" class="num">Antigüedad</th>
+          <th scope="col" class="num">Valor estimado</th>
+          <th scope="col">Elegibilidad de mi empresa</th>
+          <th scope="col">Acciones</th>
         </tr>
       </thead>
       <tbody>
@@ -165,22 +176,33 @@
               <span class="muted">No publicado</span>
             {% endif %}
           </td>
+          <td class="tender-eligibility">
+            {% set e = eligibility_results.get(t.code) %}
+            {% if e %}<a class="eligibility-badge eligibility-{{ e.color }}" href="{{ url_for('tender_sheet', code=t.code, _anchor='elegibilidad') }}">{{ e.color|capitalize }} · {{ e.label }}</a><p class="small">{{ e.reason }}</p>
+            {% elif current_user %}<span class="muted">Evaluación no disponible</span>
+            {% else %}<span class="muted">Inicie sesión para evaluar</span>{% endif %}
+          </td>
           <td>
-            <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="tender-actions">
               {% if t.code %}
-              <a class="button button-sm button-secondary" href="{{ url_for('tender_sheet', code=t.code) }}" title="Ficha de la convocatoria con sus requisitos de calificación">Ver requisitos</a>
+              <a class="button button-secondary tender-icon" href="{{ url_for('tender_sheet', code=t.code) }}" aria-label="Ver requisitos" title="Ficha de la convocatoria con sus requisitos de calificación" data-action-tooltip>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
+              </a>
               {% endif %}
               {% if t.seace_url and t.code %}
-              <a class="button button-sm button-primary" href="{{ url_for('tender_bases', code=t.code) }}" title="Descargar bases oficiales del proceso con su formato real">
-                <svg viewBox="0 0 20 20" fill="currentColor" style="width:14px;height:14px;display:inline-block;vertical-align:text-top;margin-right:4px;" aria-hidden="true"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-                Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}
+              <a class="button button-primary tender-icon" href="{{ url_for('tender_bases', code=t.code) }}" aria-label="Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}" title="Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}" data-action-tooltip>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>
               </a>
-              <a class="muted" style="font-size:12px;" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Enlace directo publicado por el OECE">Enlace original del SEACE</a>
+              <a class="button button-secondary tender-icon" href="{{ t.seace_url }}" target="_blank" rel="noopener" aria-label="Enlace original del SEACE (nueva pestaña)" title="Enlace original del SEACE (nueva pestaña)" data-action-tooltip>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3h7v7M21 3l-11 11M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg>
+              </a>
               {% elif t.seace_url %}
-              <a class="button button-sm button-primary" href="{{ t.seace_url }}" target="_blank" rel="noopener" title="Descargar bases oficiales del proceso">Descargar bases</a>
+              <a class="button button-primary tender-icon" href="{{ t.seace_url }}" target="_blank" rel="noopener" aria-label="Descargar bases (nueva pestaña)" title="Descargar bases (nueva pestaña)" data-action-tooltip>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>
+              </a>
               {% endif %}
-              <button type="button" class="button button-sm button-secondary" data-copy-search="{{ t.code or t.title }}" data-code="{{ t.code }}" data-title="{{ t.title }}" title="Copiar datos para ubicar el proceso en el SEACE">
-                Copiar p/ SEACE
+              <button type="button" class="button button-secondary tender-icon" data-copy-search="{{ t.code or t.title }}" data-code="{{ t.code }}" data-title="{{ t.title }}" aria-label="Copiar datos para buscar en SEACE" title="Copiar datos para buscar en SEACE" data-action-tooltip>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
               </button>
             </div>
           </td>
@@ -196,7 +218,15 @@
     <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Ver todas las convocatorias vigentes</a>
   </div>
   {% endif %}
+  {% if total_pages > 1 %}<nav class="eligibility-pagination" aria-label="Páginas de convocatorias">
+    {% if page_number > 1 %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number-1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Anterior</a>{% endif %}
+    <span>Página {{ page_number }} de {{ total_pages }}</span>
+    {% if page_number < total_pages %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number+1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Siguiente</a>{% endif %}
+  </nav>{% endif %}
+  {% if eligibility_error %}<p class="notice notice-warning" role="status">{{ eligibility_error }}</p>{% endif %}
 </div>
+
+<div id="tender-action-tooltip" class="tender-action-tooltip" role="tooltip" hidden></div>
 
 <!-- Modal / Toast de ayuda para buscar en SEACE -->
 <div id="seace-toast" class="notice notice-good" style="display:none; position:fixed; bottom:24px; right:24px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.18); max-width:420px; animation:fadeIn 0.2s ease;">
@@ -230,5 +260,60 @@ document.querySelectorAll('[data-copy-search]').forEach(btn => {
     });
   });
 });
+
+// Las etiquetas también se muestran con Tab y se pueden cerrar con Escape.
+(() => {
+  const tooltip = document.getElementById('tender-action-tooltip');
+  let activeControl = null;
+  let hideTimer;
+  const hideTooltip = () => {
+    clearTimeout(hideTimer);
+    if (activeControl) activeControl.removeAttribute('aria-describedby');
+    tooltip.hidden = true;
+    activeControl = null;
+  };
+  const positionTooltip = () => {
+    if (!activeControl) return;
+    const anchor = activeControl.getBoundingClientRect();
+    const bubble = tooltip.getBoundingClientRect();
+    const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - bubble.width / 2,
+      window.innerWidth - bubble.width - 8));
+    const preferredTop = anchor.top >= bubble.height + 16
+      ? anchor.top - bubble.height - 8 : anchor.bottom + 8;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${Math.max(8, Math.min(preferredTop, window.innerHeight - bubble.height - 8))}px`;
+  };
+  const showTooltip = control => {
+    hideTooltip();
+    activeControl = control;
+    tooltip.textContent = control.getAttribute('aria-label');
+    tooltip.hidden = false;
+    control.setAttribute('aria-describedby', tooltip.id);
+    positionTooltip();
+  };
+  document.querySelectorAll('[data-action-tooltip]').forEach(control => {
+    control.addEventListener('mouseenter', () => showTooltip(control));
+    control.addEventListener('mouseleave', () => {
+      if (document.activeElement !== control) hideTimer = setTimeout(hideTooltip, 150);
+    });
+    control.addEventListener('focus', () => showTooltip(control));
+    control.addEventListener('blur', hideTooltip);
+    control.addEventListener('click', hideTooltip);
+  });
+  tooltip.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+  tooltip.addEventListener('mouseleave', () => {
+    if (document.activeElement !== activeControl) hideTooltip();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') hideTooltip();
+  });
+  // Tab puede desplazar la tabla automáticamente para mostrar el botón enfocado.
+  const updateTooltip = () => {
+    if (activeControl && document.activeElement === activeControl) positionTooltip();
+    else hideTooltip();
+  };
+  window.addEventListener('resize', updateTooltip);
+  document.addEventListener('scroll', updateTooltip, true);
+})();
 </script>
 {% endblock %}

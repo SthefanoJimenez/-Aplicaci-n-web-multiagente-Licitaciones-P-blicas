@@ -1,0 +1,56 @@
+{% extends "flow.html" %}
+{% set step = 2 if candidates else 1 %}
+{% block title %}Evalúe el producto de su empresa{% endblock %}
+{% block flow %}
+<h1 class="page-title">Evalúe el producto de su empresa</h1>
+<section class="panel company-product-context" aria-labelledby="saved-profile-title">
+  <h2 class="panel-title" id="saved-profile-title">Usamos su perfil guardado</h2>
+  <p><strong>{{ profile.company_name }}</strong>{% if profile.ruc %} · RUC {{ profile.ruc }}{% endif %}</p>
+  {% if profile.business_activity %}<p><strong>Giro:</strong> {{ profile.business_activity }}</p>{% endif %}
+  {% if profile.rubros %}<p><strong>Rubros:</strong> {{ profile.rubros }}</p>{% endif %}
+  <a href="{{ url_for('auth.profile', next=url_for('evaluate_company_product', cambiar=1)) }}">Actualizar mi perfil</a>
+</section>
+
+{% if candidates %}
+<p class="page-lead" style="margin-top:24px;">Encontramos estos bienes a partir de su giro y sus rubros. Confirme cuál vende para consultar sus precios y competencia.</p>
+<form method="post" action="{{ url_for('confirm') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset class="candidates">
+    <legend class="sr-only">Bienes relacionados con el perfil</legend>
+    {% for c in candidates %}
+    <label class="candidate">
+      <input type="radio" name="code" value="{{ c.code }}" required>
+      <span>
+        <span class="chip">CUBSO {{ c.code }}</span>
+        <span class="candidate-name">{{ c.name }}</span>
+        <span class="candidate-meta">Se compra por {{ c.unit|unit_text }}</span>
+      </span>
+      <span class="candidate-count"><strong>{{ "{:,}".format(n_awards.get(c.code, 0)) }}</strong>compras del Estado</span>
+    </label>
+    {% endfor %}
+  </fieldset>
+  <p class="hint">Recordaremos el bien que confirme. La próxima vez, «Evaluar mi producto» abrirá directamente su mercado. Puede cambiarlo cuando lo necesite.</p>
+  <div class="actions actions-between">
+    <a class="button button-secondary" href="{{ url_for('describe') }}">Describir otro bien</a>
+    <button class="button button-primary" type="submit">Confirmar y ver el mercado</button>
+  </div>
+</form>
+{% else %}
+<section class="panel" style="margin-top:24px;" aria-labelledby="missing-product-title">
+  <h2 class="panel-title" id="missing-product-title">Indique el bien que desea evaluar</h2>
+  <p>Con los datos guardados aún no pudimos identificar un bien del catálogo. Precise el producto, su material, medida o presentación.</p>
+  <form method="post" action="{{ url_for('candidates') }}" data-loading>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label class="label" for="description">Descripción del bien</label>
+      <textarea id="description" name="description" rows="4" maxlength="{{ max_length }}" required>{{ description }}</textarea>
+    </div>
+    <div class="actions">
+      <button type="submit" class="button button-primary" data-loading-text="Buscando en el catálogo…">Buscar en el catálogo</button>
+    </div>
+    <p class="loading-status" aria-live="polite" hidden>Esto puede tardar unos segundos.</p>
+    <p class="hint">Un modelo de lenguaje usa esta descripción para identificar el bien. Recordaremos únicamente el código que confirme.</p>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

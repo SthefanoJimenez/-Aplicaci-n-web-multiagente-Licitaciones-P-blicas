@@ -14,7 +14,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     <div class="profile-grid">
-      {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization') }}
+      {{ input('ruc', 'RUC de la empresa', values, errors, minimum=11, maximum=11, hint='Solo se valida el formato de 11 dígitos. No es una consulta ni una verificación de SUNAT.') }}
+      {{ input('company_name', 'Razón social de la empresa', values, errors, autocomplete='organization', minimum=2, hint='Escriba el nombre legal de la empresa tal como figura en su RUC.') }}
       {{ input('business_activity', 'Giro o actividad principal', values, errors, hint='Por ejemplo: venta de materiales de construcción.', maximum=300) }}
       {{ input('rubros', 'Rubros que ofrece', values, errors, hint='Por ejemplo: cemento, acero y agregados.', maximum=500) }}
       {{ input('monthly_sales', 'Ventas mensuales (S/)', values, errors, hint='Hasta 14 cifras enteras y 2 decimales, sin separadores de miles. Si aún no tiene ventas, escriba 0.', maximum=17) }}
@@ -32,7 +33,7 @@
     <p class="hint">Este perfil registra información declarada por su empresa. Guardarlo todavía no emite un veredicto sobre una convocatoria.</p>
     <div class="actions">
       <button class="button button-primary" type="submit">Guardar perfil</button>
-      <a class="button button-secondary" href="{{ url_for('describe') }}">Evaluar mi producto</a>
+      <a class="button button-secondary" href="{{ url_for('evaluate_company_product') }}">Evaluar mi producto</a>
       <a class="button button-secondary" href="{{ url_for('company_documents.index') }}">Documentos de mi empresa</a>
       <a class="button button-secondary" href="{{ url_for('consortium.index') }}">Consorcios</a>
     </div>

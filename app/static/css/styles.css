@@ -3086,7 +3086,8 @@ details.table-view summary {
 }
 
 .account-panel input[type="email"],
-.account-panel input[type="password"] {
+.account-panel input[type="password"],
+.account-panel .password-input input {
     width: 100%;
     font: 400 16px/1.5 var(--font);
     color: var(--ink);
@@ -3094,6 +3095,44 @@ details.table-view summary {
     border: 1.5px solid var(--rule-strong);
     border-radius: 8px;
     padding: 12px 14px;
+}
+
+.password-input {
+    position: relative;
+}
+
+.account-panel .password-input input {
+    padding-inline-end: 52px;
+}
+
+.password-toggle {
+    position: absolute;
+    inset-inline-end: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--seal);
+    cursor: pointer;
+}
+
+.password-toggle:hover {
+    background: var(--seal-tint);
+}
+
+.password-toggle[hidden],
+.password-toggle [data-password-slash] {
+    display: none;
+}
+
+.password-toggle.is-visible [data-password-slash] {
+    display: block;
 }
 
 .account-panel input[aria-invalid="true"] {
@@ -3125,6 +3164,61 @@ details.table-view summary {
     color: var(--good);
 }
 
+/* Ayuda de contraseña: accesible por puntero, teclado y pantalla táctil. */
+.password-label-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.password-label-row .label {
+    margin: 0;
+}
+
+.password-help summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: var(--seal);
+    cursor: pointer;
+    list-style: none;
+}
+
+.password-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.password-help summary:hover,
+.password-help[open] summary {
+    background: var(--seal-tint);
+}
+
+.password-help-card {
+    position: absolute;
+    z-index: 10;
+    inset-inline-start: 0;
+    top: 100%;
+    width: min(100%, 350px);
+    padding: 14px 16px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 5px 18px rgba(24, 33, 46, .16);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.password-help-card p {
+    margin: 0;
+}
+
 .account-panel .button[aria-disabled="true"],
 .account-panel .button[aria-disabled="true"]:hover {
     background: var(--rule);
@@ -3135,7 +3229,7 @@ details.table-view summary {
 /* Los enlaces de cuenta se mantienen juntos; los de secciones bajan como grupo. */
 .topbar-inner {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     max-width: 1440px;
     min-height: 72px;
     padding: 12px 24px;
@@ -3148,18 +3242,30 @@ details.table-view summary {
 }
 
 .topbar-inner .nav {
-    justify-content: center;
-    align-items: center;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-column: 1 / -1;
+    grid-row: 2;
+    align-items: stretch;
+    gap: 6px;
+    border-top: 1px solid var(--rule);
+    padding-top: 8px;
     min-width: 0;
 }
 
 .topbar-inner .nav a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
     padding: 8px 10px;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
 }
 
 .nav-account {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -3248,25 +3354,6 @@ details.table-view summary {
 .page-documents .notice ul { margin: 8px 0 0; }
 .page-documents .notice { display: block; }
 
-@media (max-width: 1350px) {
-    .topbar-inner {
-        grid-template-columns: auto minmax(0, 1fr);
-    }
-
-    .topbar-inner .nav {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        justify-content: flex-start;
-        border-top: 1px solid var(--rule);
-        padding-top: 8px;
-    }
-
-    .nav-account {
-        grid-column: 2;
-        grid-row: 1;
-    }
-}
-
 @media (max-width: 680px) {
     .profile-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -3301,6 +3388,10 @@ details.table-view summary {
         min-height: 44px;
         white-space: normal;
         padding: 8px;
+    }
+
+    .topbar-inner .nav a:last-child {
+        grid-column: 1 / -1;
     }
 }
 
@@ -3432,6 +3523,9 @@ details.table-view summary {
 }
 
 .profile-val {
+    min-width: 0;
+    max-width: 65%;
+    overflow-wrap: anywhere;
     text-align: right;
 }
 
@@ -3527,6 +3621,7 @@ details.table-view summary {
     flex-direction: column;
     height: 720px;
     overflow: hidden;
+    min-width: 0;
 }
 
 /* Header bar del chat */
@@ -3555,6 +3650,7 @@ details.table-view summary {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .assistant-avatar-img {
@@ -3585,6 +3681,7 @@ details.table-view summary {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .assistant-bot-name {
@@ -3622,6 +3719,7 @@ details.table-view summary {
 /* Chat Container */
 .chat-container {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 24px;
     display: flex;
@@ -3635,6 +3733,19 @@ details.table-view summary {
     gap: 12px;
     max-width: 90%;
     animation: fadeInBubble 0.25s ease-out;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.assistant-title-group,
+.chat-assistant-details,
+.assistant-page .bubble-content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.assistant-page .welcome-card {
+    max-width: 100%;
 }
 
 @keyframes fadeInBubble {
@@ -3715,6 +3826,8 @@ details.table-view summary {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .welcome-header h3 {
@@ -3791,6 +3904,7 @@ details.table-view summary {
 
 .chat-input {
     flex: 1;
+    min-width: 0;
     border: 1.5px solid #cbd5e1;
     border-radius: 12px;
     padding: 12px 16px;
@@ -3868,6 +3982,11 @@ details.table-view summary {
     padding-left: 22px;
 }
 
+.markdown-body ol {
+    margin: 0 0 12px;
+    padding-left: 22px;
+}
+
 .markdown-body li {
     margin-bottom: 4px;
 }
@@ -3880,6 +3999,56 @@ details.table-view summary {
     border-radius: 0 8px 8px 0;
     color: var(--ink-2);
     font-style: italic;
+}
+
+@media (max-width: 680px) {
+    .assistant-header {
+        flex-direction: column;
+    }
+
+    .assistant-layout {
+        gap: 16px;
+    }
+
+    .assistant-page .card-profile,
+    .assistant-page .chat-header-bar,
+    .assistant-page .chat-container,
+    .assistant-page .chat-form {
+        padding: 16px;
+    }
+
+    .assistant-page .profile-item {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .assistant-page .chat-bubble {
+        max-width: 100%;
+        gap: 8px;
+    }
+
+    .assistant-page .chat-bubble-ai .bubble-content {
+        padding: 12px;
+    }
+
+    .assistant-page .input-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .assistant-page .chat-input {
+        width: 100%;
+    }
+
+    .assistant-page .btn-send {
+        justify-content: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .assistant-page .chat-bubble {
+        animation: none;
+    }
 }
 
 /* --- Estado de envío del chat y contención de respuestas largas --- */
@@ -3898,3 +4067,122 @@ details.table-view summary {
     max-width: 100%;
     height: auto;
 }
+
+/* HU-010: resultados, declaraciones y referencias de elegibilidad. */
+.eligibility-badge { display: inline-block; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 700; text-decoration: none; }
+.eligibility-verde { color: var(--good); background: var(--good-tint); border: 1px solid var(--good); }
+.eligibility-amarillo { color: var(--caution); background: var(--caution-tint); border: 1px solid var(--caution); }
+.eligibility-rojo { color: var(--bad); background: var(--bad-tint); border: 1px solid var(--bad); }
+.eligibility-summary { margin-top: 16px; }
+.eligibility-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; padding: 16px 0; border-block: 1px solid var(--rule); }
+.eligibility-metrics > div { min-width: 0; overflow-wrap: anywhere; }
+.eligibility-details { margin: 14px 0; }
+.eligibility-checks { display: grid; gap: 12px; margin-top: 16px; }
+.eligibility-check h3 { font-size: 16px; line-height: 1.5; }
+.eligibility-check { padding: 16px 20px; }
+.eligibility-check p { margin: 8px 0; }
+.eligibility-check-state { display: inline-block; margin-left: 8px; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.eligibility-source { white-space: pre-line; overflow-wrap: anywhere; margin: 12px 0; padding: 12px 16px; border-left: 3px solid var(--seal); background: var(--paper); font-size: 14px; }
+.eligibility-form { margin-top: 20px; }
+.eligibility-form fieldset { min-width: 0; padding: 16px; border: 1px solid var(--rule); border-radius: 8px; margin: 20px 0; }
+.eligibility-form legend { padding: 0 8px; font-weight: 700; }
+.eligibility-form input:not([type="checkbox"]), .eligibility-form select { width: 100%; min-width: 0; }
+.eligibility-form .profile-grid { gap: 18px; }
+.eligibility-form .profile-grid label, .eligibility-review > label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+.eligibility-form .field-help { font-size: 12px; line-height: 1.5; color: var(--ink-3); margin: 6px 0 0; }
+.eligibility-checkbox { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; font-weight: 400; }
+.eligibility-checkbox input { width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; }
+.eligibility-review { margin: 16px 0 24px; }
+.eligibility-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 20px; }
+.eligibility-chat-context { padding: 10px 20px; background: var(--seal-tint); border-bottom: 1px solid var(--rule); font-size: 13px; flex-shrink: 0; }
+@media(max-width:680px) { .eligibility-metrics { grid-template-columns: minmax(0,1fr); } .eligibility-form fieldset { padding:12px; } }
+
+/* Convocatorias: nueve columnas originales y acciones mediante iconos. */
+.page-tenders { max-width: 1440px; }
+
+.tender-filters {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.5fr) auto;
+    gap: 16px;
+}
+.tender-filters > div,
+.tender-filters select { min-width: 0; width: 100%; }
+.tender-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tender-results-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px 24px;
+    margin-bottom: 12px;
+}
+
+/* El desplazamiento queda dentro de la tabla; ninguna columna se oculta. */
+.tender-list { max-width: 100%; }
+.tender-list:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+.tender-scroll-hint { display: none; margin: 0 0 10px; }
+.tender-table { min-width: 1280px; table-layout: fixed; }
+.tender-col-code { width: 8%; }
+.tender-col-title { width: 17%; }
+.tender-col-entity { width: 17%; }
+.tender-col-department { width: 9%; }
+.tender-col-published { width: 9%; }
+.tender-col-age { width: 7%; }
+.tender-col-value { width: 9%; }
+.tender-col-eligibility { width: 15%; }
+.tender-col-actions { width: 9%; }
+.tender-table th,
+.tender-table td,
+.tender-table th:first-child,
+.tender-table td:first-child {
+    padding: 12px 8px;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.tender-table th { overflow-wrap: normal; }
+.tender-table .num { white-space: normal; overflow-wrap: anywhere; }
+.tender-table .chip { max-width: 100%; white-space: normal; }
+.tender-table .tag { white-space: normal; }
+.tender-table .eligibility-badge { max-width: 100%; }
+.tender-eligibility p { margin: 8px 0 0; }
+.tender-actions { display: grid; grid-template-columns: repeat(2, 44px); gap: 8px; }
+.tender-actions .tender-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 6px;
+}
+.tender-icon svg { width: 20px; height: 20px; flex-shrink: 0; }
+.tender-icon:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+.tender-action-tooltip {
+    position: fixed;
+    z-index: 1100;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: white;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: var(--shadow);
+    pointer-events: auto;
+}
+.tender-action-tooltip[hidden] { display: none; }
+
+@media (max-width: 1327px) {
+    .tender-scroll-hint { display: block; }
+}
+@media (max-width: 1100px) {
+    .tender-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .tender-filters { grid-template-columns: minmax(0, 1fr); }
+    .tender-filter-actions .button { flex: 1; }
+}
+
+/* HU-008: entrada a evaluación con los datos guardados de la empresa. */
+.company-product-context { overflow-wrap: anywhere; }

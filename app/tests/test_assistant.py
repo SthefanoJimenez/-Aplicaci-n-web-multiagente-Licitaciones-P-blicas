@@ -1,11 +1,8 @@
-"""Pruebas automatizadas y evaluación de 10 casos para el Asistente de Postulación (HU-010 / HU-014).
+"""Regresiones del grafo original HU-014 y de sus formularios.
 
-Criterios de Aceptación:
-- [x] El asistente usa el perfil guardado, los documentos, el consorcio si existe y los requisitos de las bases.
-- [x] Responde con una lista de convocatorias y su semáforo, y explica cada caso citando el requisito y la página de las bases.
-- [x] Si falta un dato del perfil (por ejemplo, el rubro o producto que vende), lo pide en lugar de suponerlo.
-- [x] Solo menciona convocatorias que existen en la base de datos (con su código real).
-- [x] Se evalúa con 10 preguntas de prueba con respuesta esperada.
+El recorrido autenticado de HU-010 se comprueba en test_hu010.py: usa el perfil
+persistido, los documentos propios, el cálculo de garantías y la misma regla en
+ficha, listado y asistente. Estos casos antiguos no prueban esa integración por sí solos.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -59,7 +56,7 @@ def test_db():
         t1.chunks.append(db.RequirementChunk(
             chunk_index=0,
             page=4,
-            text="Requisito: Copia de la constancia de inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. Experiencia mínima de S/ 150,000 en venta de combustibles.",
+            text="Requisito: RNP vigente. Copia de la constancia de inscripción vigente en el Registro de Hidrocarburos de OSINERGMIN. Experiencia mínima de S/ 150,000 en venta de combustibles.",
             source="pdf",
             file_name="bases_2001.pdf",
             embedding=[0.1] * 768,
@@ -86,7 +83,7 @@ def test_db():
         t2.chunks.append(db.RequirementChunk(
             chunk_index=0,
             page=7,
-            text="Experiencia del postor en la especialidad: acreditación de facturación acumulada por S/ 200,000.00 en venta de vehículos similares.",
+            text="RNP vigente. Experiencia del postor en la especialidad: acreditación de facturación acumulada por S/ 200,000.00 en venta de vehículos similares.",
             source="pdf",
             file_name="bases_2002.pdf",
             embedding=[0.2] * 768,
@@ -100,6 +97,8 @@ def test_db():
 
 @pytest.fixture
 def client(signed_in_client):
+
+
     """Pantalla /asistente: desde HU-008 exige una cuenta con sesión iniciada."""
     app.config["TESTING"] = True
     return signed_in_client
@@ -226,6 +225,13 @@ def test_case_10_multiturn_conversation_maintains_profile_and_history(test_db, c
     assert "2001" in html2
     assert "Combustibles y lubricantes" in html2
     assert "Perfil del Proveedor" in html2
+
+
+def test_specific_tender_question_still_uses_its_bases(test_db):
+    result = assistant.ask_assistant("¿Qué información necesito para la convocatoria 2002?")
+    assert result["status"] != "general_guidance"
+    assert [evaluation["code"] for evaluation in result["evaluations"]] == ["2002"]
+    assert "pág. 7" in result["response"]
 
 
 def test_case_11_assistant_forms_send_the_session_token(client):

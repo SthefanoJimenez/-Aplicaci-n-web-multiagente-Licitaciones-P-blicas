@@ -9,17 +9,17 @@
     <div class="assistant-title-group">
       <div class="assistant-badge">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A7 7 0 1 1 13 4.07V5a1 1 0 0 1-2 0v-.93a9 9 0 1 0 2 12.86z"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>LangGraph AI • SEACE v3</span>
+        <span>Elegibilidad preliminar</span>
       </div>
       <h1 class="page-title">¿A qué convocatorias puedo postular?</h1>
       <p class="page-lead">
-        Asesoría especializada para empresarios proveedores y nuevos licitadores del Estado. Evalúa tus opciones reales de ganar o calificar, evitando que te descalifiquen por requisitos no cumplidos en las bases administrativas.
+        Contrasta el perfil y los documentos de tu empresa con los requisitos disponibles de cada convocatoria. Revisa qué cumple, qué falta y qué debes confirmar en las bases oficiales.
       </p>
     </div>
     {% if history %}
     <form method="post" action="{{ url_for('assistant_clear') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn-clean" title="Reiniciar conversación y perfil">
+      <button type="submit" class="btn-clean" title="Reiniciar conversación; conserva Mi empresa y sus documentos">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
         <span>Reiniciar chat</span>
       </button>
@@ -37,11 +37,13 @@
           </div>
           <div>
             <h3 class="card-profile-title">Perfil del Proveedor</h3>
-            <p class="card-profile-sub">Información inferida de tu consulta en curso:</p>
+            <p class="card-profile-sub">Perfil guardado de tu empresa y datos de la consulta:</p>
           </div>
         </div>
         
         <ul class="profile-list">
+          <li class="profile-item"><span class="profile-label">Razón social:</span><span class="profile-val">{{ profile.company_name or 'Por completar en Mi empresa' }}</span></li>
+          <li class="profile-item"><span class="profile-label">RUC:</span><span class="profile-val">{{ profile.ruc or 'Por completar en Mi empresa' }}</span></li>
           <li class="profile-item">
             <span class="profile-label">Rubro principal:</span>
             <span class="profile-val">
@@ -56,7 +58,7 @@
             <span class="profile-label">Inscripción RNP:</span>
             <span class="profile-val">
               {% if profile.has_rnp is sameas true %}
-                <span class="tag-pill tag-green">&#10003; Vigente</span>
+                <span class="tag-pill tag-green">&#10003; Declarado</span>
               {% elif profile.has_rnp is sameas false %}
                 <span class="tag-pill tag-red">&#10007; Sin RNP</span>
               {% else %}
@@ -100,25 +102,25 @@
 
         <div class="legend-card">
           <h4>Criterio del Semáforo de Calificación:</h4>
-          <div class="legend-item"><span class="dot dot-green"></span> <strong>Verde:</strong> Cumples habilitación técnica, RNP y experiencia de las bases.</div>
-          <div class="legend-item"><span class="dot dot-yellow"></span> <strong>Amarillo:</strong> Viable mediante consorcio o requisitos subsanables.</div>
-          <div class="legend-item"><span class="dot dot-red"></span> <strong>Rojo:</strong> Descalificación inminente (falta RNP, falta habilitación clave o facturación).</div>
+          <div class="legend-item"><span class="dot dot-green"></span> <strong>Verde:</strong> Cumplimiento individual según los datos y la revisión declarados.</div>
+          <div class="legend-item"><span class="dot dot-yellow"></span> <strong>Amarillo:</strong> Falta información, una subsanación o se requiere consorcio.</div>
+          <div class="legend-item"><span class="dot dot-red"></span> <strong>Rojo:</strong> No cumple una condición decisiva, tampoco con el consorcio declarado.</div>
         </div>
 
         <div class="sidebar-norm-tip">
           <div class="norm-tip-title">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span>Ley N° 30225 & OSCE</span>
+            <span>Datos y bases de la evaluación</span>
           </div>
           <p class="norm-tip-desc">
-            En procedimientos de Subasta Inversa Electrónica no se evalúa experiencia. En licitaciones directas, el consorcio permite sumar experiencia de socios calificados.
+            Las exigencias dependen de las bases y su régimen aplicable. Un PDF cargado y vigente según sus fechas declaradas no acredita por sí solo el cumplimiento ni la autenticidad.
           </p>
         </div>
       </div>
     </aside>
 
     <!-- Panel principal: Conversación -->
-    <main class="assistant-chat-pane">
+    <section class="assistant-chat-pane" aria-label="Conversación con LicitaBot">
       <!-- Barra superior del Asistente -->
       <div class="chat-header-bar">
         <div class="chat-assistant-meta">
@@ -129,14 +131,18 @@
           <div class="chat-assistant-details">
             <div class="assistant-name-row">
               <span class="assistant-bot-name">LicitaBot AI</span>
-              <span class="assistant-role-pill">Asesor Experto</span>
+              <span class="assistant-role-pill">Revisión de bases</span>
             </div>
             <div class="assistant-status-text">
-              <span class="dot-online"></span> Respuestas fundamentadas en Bases Administrativas del SEACE
+              <span class="dot-online"></span> Perfil, documentos y requisitos de la convocatoria
             </div>
           </div>
         </div>
       </div>
+
+      {% if profile.selected_tender_code %}
+      <div class="eligibility-chat-context">Convocatoria {{ profile.selected_tender_code }} · <a href="{{ url_for('tender_sheet', code=profile.selected_tender_code, _anchor='elegibilidad') }}">Ver y completar mi evaluación</a></div>
+      {% endif %}
 
       <!-- Contenedor del chat -->
       <div class="chat-container" id="chat-messages-container">
@@ -149,10 +155,10 @@
           <div class="bubble-content">
             <div class="welcome-header">
               <h3>¡Hola! Soy tu Asistente Inteligente de Licitaciones</h3>
-              <span class="welcome-tag">Evaluación Automatizada</span>
+              <span class="welcome-tag">Perfil y documentos</span>
             </div>
             <p>
-              Te ayudo a identificar a qué convocatorias del Estado puedes postular con éxito según tu giro de negocio, tu facturación y las bases reales del SEACE, alertándote de inmediato si corres riesgo de ser descalificado.
+              Indica el código de una convocatoria o qué producto ofrece tu empresa. La revisión usa tu perfil guardado y los documentos de tu propia cuenta; los datos que falten quedarán pendientes.
             </p>
             <p><strong>Para comenzar, selecciona una consulta de ejemplo o escribe tu caso:</strong></p>
             <div class="prompt-suggestions">
@@ -164,9 +170,9 @@
                 <span class="sug-icon">🚗</span>
                 <span><strong>Vehículos:</strong> "Vendo vehículos con facturación privada de S/ 300,000 y RNP"</span>
               </button>
-              <button type="button" class="btn-suggestion" onclick="fillQuery('Quiero postular en consorcio con un socio que tiene experiencia para la licitación 1001')">
+              <button type="button" class="btn-suggestion" onclick="fillQuery('¿Qué información necesito preparar para postular en consorcio?')">
                 <span class="sug-icon">🤝</span>
-                <span><strong>Consorcio:</strong> "Quiero postular en consorcio con un socio experimentado para la 1001"</span>
+                <span><strong>Consorcio:</strong> "¿Qué información necesito preparar para postular en consorcio?"</span>
               </button>
               <button type="button" class="btn-suggestion" onclick="fillQuery('Vendo cemento y materiales de construcción, tengo experiencia de S/ 70,000 pero no sé si califico.')">
                 <span class="sug-icon">🏗️</span>
@@ -194,7 +200,7 @@
               <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" class="avatar-ai-img" alt="LicitaBot" width="40" height="40">
             </div>
             <div class="bubble-content markdown-body">
-              {{ msg.content | markdown | safe }}
+              {{ msg.content | assistant_text }}
             </div>
           </div>
           {% endif %}
@@ -205,12 +211,14 @@
       <form class="chat-form" method="post" action="{{ url_for('assistant_ask') }}" id="chat-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="input-wrapper">
+          <label for="chat-input" class="sr-only">Tu consulta al asistente</label>
           <textarea
             id="chat-input"
             name="query"
             class="chat-input"
             placeholder="Escribe tu consulta sobre a qué convocatorias postular, tus productos o experiencia..."
             rows="2"
+            maxlength="1000"
             required
           ></textarea>
           <button type="submit" class="btn-send" id="btn-submit" title="Enviar consulta">
@@ -222,7 +230,7 @@
           <span class="chat-hint">Presiona <strong>Enter</strong> para enviar, <strong>Shift + Enter</strong> para nueva línea.</span>
         </div>
       </form>
-    </main>
+    </section>
   </div>
 </div>
 
@@ -238,7 +246,7 @@ function fillQuery(text) {
 // Auto-scroll al final del chat al cargar
 document.addEventListener("DOMContentLoaded", function() {
   const container = document.getElementById("chat-messages-container");
-  if (container) {
+  if (container && container.querySelector('.chat-bubble-user')) {
     container.scrollTop = container.scrollHeight;
   }
 
@@ -278,7 +286,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 
   textarea.addEventListener("keydown", function(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       if (textarea.value.trim().length > 0) {
         if (typeof form.requestSubmit === "function") {
