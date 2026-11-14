@@ -175,14 +175,38 @@ def tender_sheet(code):
 
 
 def rubro_names():
-    """{rubro: "1510 · Combustibles y lubricantes"} con el nombre del catálogo, sin conteos."""
+    """{rubro: "1510 · Combustibles y lubricantes"} con el nombre del catálogo, sin conteos.
+
+    Sin base de convocatorias devuelve los rubros piloto: el asistente puede seguir
+    interpretando el rubro del perfil y responder con un aviso, en lugar de fallar.
+    """
     from services import rubros
     try:
         with _session_factory()() as session:
             names = rubros.names(session)
-    except SQLAlchemyError:
-        return {}
+    except (TendersUnavailable, SQLAlchemyError):
+        names = dict(rubros.PILOT_NAMES)
     return {code: f"{code} · {name}" for code, name in names.items()}
+
+
+def requirements_of(code):
+    """Requisitos de una convocatoria leídos de sus bases, para el asistente (HU-014).
+
+    Devuelve {"status", "available", "pages", "file", "blocks": [{"page", "text"}]} o None si el
+    código no existe. No usa el modelo de lenguaje: son los fragmentos guardados por la ingesta.
+    """
+    from services import requirements
+    try:
+        with _session_factory()() as session:
+            row = session.scalars(select(db.Tender).where(db.Tender.code == str(code))).first()
+            if row is None:
+                return None
+            reqs = requirements.for_tender(session, row.id, row.requirements_status)
+            return {"status": reqs.status, "available": reqs.available, "pages": reqs.pages,
+                    "file": reqs.file_name,
+                    "blocks": [{"page": block.page, "text": block.text or ""} for block in reqs.blocks]}
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
 
 
 def lima_text(moment):

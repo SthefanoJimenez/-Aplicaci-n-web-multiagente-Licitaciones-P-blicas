@@ -13,7 +13,10 @@ Las empresas piden rubros en HU-013; mientras esa pantalla no exista, se registr
 con sus convocatorias después de la siguiente ingesta. Si se desactiva, en la siguiente
 ingesta sus convocatorias pasan a "no_vigente" (no se borran), salvo que también sean de otro rubro.
 """
+import json
 import re
+import unicodedata
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -229,3 +232,92 @@ def status(session, code):
             "pilot": pilot, "requested": bool(requests), "requested_at": first_request, "pending": pending,
             "loaded": pilot or bool(requests) or config.ALL_RUBROS,
             "can_request": open_count == 0 and not pilot and not requests}
+
+
+# ---------------------------------------------------------------------------
+# Correspondencia entre el texto libre y el catálogo de rubros (HU-014)
+# ---------------------------------------------------------------------------
+# El asistente no lleva rubros escritos en el código: toma el texto del perfil («rubros»,
+# «giro») o el de la consulta y lo compara con TODO el catálogo (nombres de las familias
+# UNSPSC, pilotos y solicitados). La comparación es léxica (TF-IDF de n-gramas de caracteres),
+# así que «venta de diésel y gasolina» cae en la familia de combustibles sin una lista fija.
+MATCH_MIN_SCORE = 0.12          # por debajo de esto el texto no se parece a ningún rubro
+MATCH_RELATIVE = 0.70           # solo se conservan los rubros que se acercan al mejor puntaje
+# Palabras que no identifican un rubro: sin esto, «consultoría de software» se parecía a «vehículos».
+STOPWORDS = {"para", "como", "vendo", "venta", "ventas", "empresa", "servicios", "servicio",
+             "generales", "general", "bienes", "productos", "producto", "tengo", "tiene",
+             "ofrezco", "ofrece", "distribucion", "comercializacion", "rubro", "rubros", "otros"}
+
+
+def _plain(text):
+    """Minúsculas sin tildes ni signos, para comparar nombres y texto libre."""
+    plain = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/. ]", " ", plain)).strip()
+
+
+# Sinónimos coloquiales (palabra → palabra del catálogo). No contiene códigos de rubro:
+# solo ayuda a que «autos» encuentre «vehículos» y «diésel» encuentre «combustibles».
+SYNONYMS_PATH = Path(__file__).resolve().parent.parent / "data" / "sinonimos_rubros.json"
+try:
+    SYNONYMS = json.loads(SYNONYMS_PATH.read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    SYNONYMS = {}
+
+
+def _expand(text):
+    """Normaliza y cambia los sinónimos conocidos por la palabra del catálogo."""
+    return " ".join(SYNONYMS.get(word, word) for word in _plain(text).split())
+
+
+def _stems(text):
+    """Raíces aproximadas (primeras seis letras) para que «combustible» encuentre «combustibles»."""
+    return {word[:6] for word in _expand(text).split()
+            if len(word) >= 4 and word not in STOPWORDS}
+
+
+def clean_name(code, name):
+    """Nombre del rubro sin el prefijo que agregan las pantallas («1510 ·», «Ej.:»)."""
+    text = re.sub(r"^\s*Ej\.?\s*:\s*", "", str(name or ""), flags=re.IGNORECASE)
+    text = re.sub(r"^\s*\d{4}\s*[·-]\s*", "", text)
+    return text.strip() or f"Rubro {code}"
+
+
+def match(text, names_map, limit=3):
+    """Rubros del catálogo que mejor corresponden a un texto libre, de mayor a menor parecido.
+
+    names_map: {código: nombre} del catálogo completo (services.tenders.rubro_names()).
+    Devuelve [{"code", "name", "score"}]. Lista vacía si el texto no se parece a ningún rubro.
+    """
+    text = _expand(text)
+    if len(text) < 4 or not names_map:
+        return []
+    # Un código de 4 dígitos escrito en el texto manda sobre la comparación léxica.
+    written = [code for code in re.findall(r"(?<!\d)(\d{4})(?!\d)", text) if code in names_map]
+    if written:
+        return [{"code": code, "name": clean_name(code, names_map[code]), "score": 1.0}
+                for code in dict.fromkeys(written)][:limit]
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    # Solo compiten los rubros que comparten alguna palabra significativa con el texto; si no,
+    # una consulta sobre «software» se parecía demasiado a «vehículos de motor».
+    text_stems = _stems(text)
+    codes, labels = [], []
+    for code in names_map:
+        name = clean_name(code, names_map[code])
+        if not (text_stems & _stems(f"{name} {code}")):
+            continue
+        codes.append(code)
+        labels.append(f"{name} {code}")
+    if not codes:
+        return []
+    vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+    matrix = vectorizer.fit_transform([_plain(label) for label in labels])
+    scores = cosine_similarity(vectorizer.transform([text]), matrix).ravel()
+    ranked = sorted(zip(codes, scores), key=lambda item: -item[1])
+    best = ranked[0][1] if ranked else 0
+    if best < MATCH_MIN_SCORE:
+        return []
+    return [{"code": code, "name": clean_name(code, names_map[code]), "score": float(score)}
+            for code, score in ranked if score >= max(MATCH_MIN_SCORE, best * MATCH_RELATIVE)][:limit]

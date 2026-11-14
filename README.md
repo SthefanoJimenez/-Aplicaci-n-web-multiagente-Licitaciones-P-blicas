@@ -20,6 +20,10 @@ El sistema está construido sobre **Flask**, orquestado con **LangGraph** (`Stat
      - **Rango de precios (`HU-002`)**: Calcula $P_{25}$, mediana ($P_{50}$), $P_{75}$ mediante interpolación lineal y la dispersión intercuartílica relativa $\frac{P_{75} - P_{25}}{P_{50}}$.
      - **Competencia (`HU-003`)**: Calcula la mediana de postores por proceso, el porcentaje de procesos con postor único y el número de adjudicaciones convocadas por entidades de **La Libertad**.
      - **Reglas de evidencia (`app/rules.py`)**: Evalúa el nivel de evidencia según el número de adjudicaciones ($n < 5$ sin evidencia, $5 \le n < 10$ rango referencial, $n \ge 10$ apto para veredicto).
+3. **Asistente de postulación (`HU-014`)**:
+   - **Widget flotante** en la esquina inferior derecha de todas las pantallas, visible con sesión iniciada (`app/templates/_assistant_widget.html`, `app/static/js/assistant-widget.js`). La conversación se guarda en la sesión.
+   - **Grafo LangGraph** (`app/services/assistant.py`): perfil guardado → rubros del catálogo → búsqueda de convocatorias vigentes → evaluación con documentos, consorcio, requisitos de las bases y cronograma → respuesta.
+   - **Semáforo honesto**: verde solo cuando lo verificado se cumple; «por verificar» cuando las bases no se pudieron leer. Gemini redacta, pero el sistema valida que solo cite convocatorias reales y cierra con la **Ley N.° 32069** y el **OECE**. Detalle en [`docs/HU014.md`](docs/HU014.md).
 
 ---
 

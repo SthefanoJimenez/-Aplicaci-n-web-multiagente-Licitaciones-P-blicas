@@ -1,9 +1,9 @@
-{% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none) %}
+{% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none, required=true) %}
 <div class="field">
   <label class="label" for="{{ name }}">{{ label }}</label>
   {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount'] %}
   {% if is_amount %}<div class="amount-input" data-amount-input>{% endif %}
-  <input id="{{ name }}" name="{{ name }}" type="{{ type }}" required
+  <input id="{{ name }}" name="{{ name }}" type="{{ type }}"{% if required %} required{% endif %}
          autocomplete="{{ autocomplete }}" maxlength="{{ maximum }}"
          {% if minimum is not none %}minlength="{{ minimum }}"{% endif %}
          {% if type != 'password' %}value="{{ values.get(name, '') }}"{% endif %}

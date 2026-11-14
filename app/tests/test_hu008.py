@@ -12,7 +12,8 @@ from app import app
 from services import accounts
 
 PASSWORD = "Una frase de prueba 2026"
-PROFILE = {"company_name": "Materiales del Norte", "business_activity": "Venta de materiales",
+PROFILE = {"company_name": "Materiales del Norte", "ruc": "20123456789",
+           "business_activity": "Venta de materiales",
            "rubros": "Cemento y acero", "monthly_sales": "15000.50", "experience_years": "5",
            "similar_contracts_amount": "80000.00", "specialized_staff": "Un técnico con tres años de experiencia"}
 
@@ -106,6 +107,17 @@ def test_two_companies_cannot_read_or_overwrite_each_other(account_client, accou
         first = db.scalar(select(accounts.CompanyProfile).where(accounts.CompanyProfile.company_id == 1))
         second = db.scalar(select(accounts.CompanyProfile).where(accounts.CompanyProfile.company_id == 2))
         assert first.monthly_sales == Decimal("15000.50") and second.monthly_sales == Decimal("42")
+
+
+def test_ruc_is_optional_and_validated(account_client, account_factory):
+    """HU-014: el RUC ya no es obligatorio; si se escribe, se valida y se guarda."""
+    register(account_client)
+    assert account_client.post("/perfil", data=PROFILE | {"ruc": "123"}).status_code == 400
+    assert account_client.post("/perfil", data=PROFILE | {"ruc": ""}).status_code == 302
+    assert accounts.get_profile(account_factory, 1)["ruc"] == ""
+    assert account_client.post("/perfil", data=PROFILE).status_code == 302
+    assert accounts.get_profile(account_factory, 1)["ruc"] == "20123456789"
+    assert 'name="ruc"' in account_client.get("/perfil").text
 
 
 @pytest.mark.parametrize("field,value", [("monthly_sales", "-1"), ("monthly_sales", "NaN"),

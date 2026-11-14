@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from pypdf import PdfWriter
 
 from services import pdf_validation
@@ -54,6 +55,7 @@ def test_si_el_sistema_rechaza_un_limite_se_aplican_los_demas():
     assert pdf_validation.limit_resources(platform="linux", resource=FakeResource(failing={"AS", "CPU"})) == []
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows no tiene el módulo resource")
 def test_el_validador_cuenta_paginas_aunque_setrlimit_falle_como_en_macos():
     """Ejecuta el validador real en un proceso aparte con setrlimit fallando, como en una Mac."""
     script = ("import resource, runpy, sys\n"

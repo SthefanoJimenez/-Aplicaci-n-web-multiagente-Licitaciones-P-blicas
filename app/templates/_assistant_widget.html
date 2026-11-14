@@ -1,0 +1,105 @@
+{% set chat_welcome = "Hola. Soy el asistente de postulación de LicitaFácil. Uso el perfil de su empresa, sus documentos y las convocatorias vigentes del OECE para decirle a cuáles puede postular y cuáles le conviene evitar. ¿Qué vende su empresa?" %}
+<div class="lf-chat" data-chat
+     data-endpoint="{{ url_for('assistant_message') }}"
+     data-clear="{{ url_for('assistant_clear') }}"
+     data-csrf="{{ csrf_token() }}"
+     data-welcome="{{ chat_welcome }}">
+
+  <button type="button" class="lf-chat-launcher" data-chat-launcher
+          aria-expanded="false" aria-controls="lf-chat-panel"
+          title="Abrir el asistente de postulación">
+    <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" alt="" width="34" height="34">
+    <span class="lf-chat-launcher-text">
+      <strong>¿A qué puedo postular?</strong>
+      <small>Asistente de postulación</small>
+    </span>
+    <span class="lf-chat-launcher-dot" aria-hidden="true"></span>
+  </button>
+
+  <section class="lf-chat-panel" id="lf-chat-panel" data-chat-panel role="dialog" aria-modal="false"
+           aria-labelledby="lf-chat-title" hidden>
+    <header class="lf-chat-head" title="Arrastre esta barra para mover el chat. Doble clic para restablecer.">
+      <div class="lf-chat-identity">
+        <span class="lf-chat-grip" aria-hidden="true">
+          <svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor">
+            <circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/>
+            <circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/>
+            <circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/>
+          </svg>
+        </span>
+        <img src="{{ url_for('static', filename='img/assistant_avatar.png') }}" alt="" width="38" height="38">
+        <div>
+          <h2 id="lf-chat-title">Asistente de postulación</h2>
+          <p>Perfil, documentos y convocatorias del OECE</p>
+        </div>
+      </div>
+      <div class="lf-chat-actions">
+        <button type="button" class="lf-chat-icon" data-chat-clear
+                title="Reiniciar la conversación" aria-label="Reiniciar la conversación">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>
+          </svg>
+        </button>
+        <button type="button" class="lf-chat-icon" data-chat-close
+                title="Cerrar el asistente" aria-label="Cerrar el asistente">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="lf-chat-log" data-chat-log role="log" aria-live="polite" aria-relevant="additions">
+      {% if not chat_history %}
+      <div class="lf-chat-msg is-bot">
+        <div class="lf-chat-bubble markdown-body">{{ chat_welcome | markdown | safe }}</div>
+      </div>
+      {% endif %}
+      {% for msg in chat_history %}
+      <div class="lf-chat-msg {{ 'is-user' if msg.role == 'user' else 'is-bot' }}">
+        <div class="lf-chat-bubble{% if msg.role != 'user' %} markdown-body{% endif %}">
+          {% if msg.role == 'user' %}{{ msg.content }}{% else %}{{ msg.content.split('<!--detalle-->')[0] | markdown | safe }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if not chat_history %}
+    <div class="lf-chat-chips" data-chat-chips>
+      <button type="button" class="lf-chat-chip" data-chat-prompt="Soy una empresa que nunca le ha vendido al Estado y quiero saber a qué convocatorias puedo postular.">Nunca vendí al Estado</button>
+      <button type="button" class="lf-chat-chip" data-chat-prompt="Vendo combustibles y lubricantes. ¿A qué convocatorias puedo postular?">Vendo combustibles</button>
+      <button type="button" class="lf-chat-chip" data-chat-prompt="¿Qué documentos me faltan o están vencidos para postular?">Mis documentos</button>
+      <button type="button" class="lf-chat-chip" data-chat-prompt="¿Qué convocatorias vencen pronto y cuál es el cronograma?">Plazos próximos</button>
+    </div>
+    {% endif %}
+
+    <form class="lf-chat-form" data-chat-form>
+      <label class="lf-chat-sr" for="lf-chat-input">Su consulta</label>
+      <textarea id="lf-chat-input" data-chat-input rows="1" maxlength="1000"
+                placeholder="Escriba su consulta…" autocomplete="off" required></textarea>
+      <button type="submit" class="lf-chat-send" data-chat-send aria-label="Enviar consulta">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </form>
+    <p class="lf-chat-foot">
+      Ley N.° 32069 y OECE · Datos del portal de Contrataciones Abiertas · No reemplaza la revisión de las bases.
+    </p>
+
+    <div class="lf-chat-detail" data-chat-detail hidden>
+      <header class="lf-chat-detail-head">
+        <div class="lf-chat-detail-title">
+          <strong>Detalle de convocatorias</strong>
+          <span data-chat-detail-count></span>
+        </div>
+        <button type="button" class="lf-chat-icon" data-chat-detail-close
+                title="Cerrar el detalle" aria-label="Cerrar el detalle">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="lf-chat-detail-body markdown-body" data-chat-detail-body></div>
+    </div>
+  </section>
+</div>

@@ -36,6 +36,7 @@ def store():
             url = "sqlite:///" + str(Path(current_app.instance_path) / "cuentas.sqlite3")
         engine = db.make_engine(url)
         accounts.AccountBase.metadata.create_all(engine)
+        accounts.ensure_columns(engine)
         factory = db.make_session_factory(engine)
         current_app.extensions["accounts_factory"] = factory
     return factory
@@ -208,6 +209,11 @@ def validate_profile(form):
         if not value or len(value) > maximum:
             errors[key] = f"Complete este campo (máximo {maximum} caracteres)."
         values[key] = value
+    # HU-014: el RUC es opcional. Si se escribe, se valida; nunca bloquea el uso del asistente.
+    ruc = form.get("ruc", "").strip()
+    values["ruc"] = ruc
+    if ruc and not re.fullmatch(r"(10|15|17|20)\d{9}", ruc):
+        errors["ruc"] = "Escriba el RUC de su empresa: 11 dígitos, empieza con 10, 15, 17 o 20."
     for key in ("monthly_sales", "similar_contracts_amount"):
         raw = form.get(key, "").strip()
         try:

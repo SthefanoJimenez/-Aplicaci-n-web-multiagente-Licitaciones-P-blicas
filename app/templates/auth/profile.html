@@ -15,6 +15,7 @@
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     <div class="profile-grid">
       {{ input('company_name', 'Nombre de la empresa', values, errors, autocomplete='organization') }}
+      {{ input('ruc', 'RUC (opcional)', values, errors, hint='11 dígitos, sin guiones. Ayuda a identificar a su empresa, pero no es obligatorio para usar el asistente.', maximum=11, required=false) }}
       {{ input('business_activity', 'Giro o actividad principal', values, errors, hint='Por ejemplo: venta de materiales de construcción.', maximum=300) }}
       {{ input('rubros', 'Rubros que ofrece', values, errors, hint='Por ejemplo: cemento, acero y agregados.', maximum=500) }}
       {{ input('monthly_sales', 'Ventas mensuales (S/)', values, errors, hint='Hasta 14 cifras enteras y 2 decimales, sin separadores de miles. Si aún no tiene ventas, escriba 0.', maximum=17) }}

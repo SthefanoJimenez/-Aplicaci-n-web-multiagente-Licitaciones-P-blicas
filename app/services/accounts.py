@@ -6,7 +6,7 @@ from decimal import Decimal
 import hashlib
 import secrets
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, select
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -33,6 +33,9 @@ class Company(AccountBase):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), unique=True)
     name: Mapped[str] = mapped_column(String(200))
+    # HU-014: el asistente usa el RUC del perfil. Nulo en las cuentas creadas antes de esta versión;
+    # el asistente lo pide una sola vez y no lo deduce del mensaje.
+    ruc: Mapped[str | None] = mapped_column(String(11))
 
 
 class CompanyProfile(AccountBase):
@@ -139,7 +142,7 @@ def get_profile(factory, user_id):
     with factory() as db:
         company = db.scalar(select(Company).where(Company.user_id == user_id))
         profile = db.get(CompanyProfile, company.id)
-        values = {"company_name": company.name}
+        values = {"company_name": company.name, "ruc": company.ruc or ""}
         if profile:
             for field in ("business_activity", "rubros", "monthly_sales", "experience_years",
                           "similar_contracts_amount", "specialized_staff"):
@@ -147,10 +150,19 @@ def get_profile(factory, user_id):
         return values
 
 
+def save_ruc(factory, user_id, ruc):
+    """Guarda el RUC que el usuario escribe en el asistente, si aún no lo tenía en el perfil."""
+    with factory.begin() as db:
+        company = db.scalar(select(Company).where(Company.user_id == user_id))
+        if company is not None:
+            company.ruc = ruc
+
+
 def save_profile(factory, user_id, values):
     with factory.begin() as db:
         company = db.scalar(select(Company).where(Company.user_id == user_id))
         company.name = values["company_name"]
+        company.ruc = values.get("ruc") or None
         profile = db.get(CompanyProfile, company.id)
         if profile is None:
             profile = CompanyProfile(company_id=company.id)
@@ -158,3 +170,27 @@ def save_profile(factory, user_id, values):
         for key in ("business_activity", "rubros", "monthly_sales", "experience_years",
                     "similar_contracts_amount", "specialized_staff"):
             setattr(profile, key, values[key])
+
+
+# ---------------------------------------------------------------------------
+# Migración mínima de las tablas de cuentas
+# ---------------------------------------------------------------------------
+# create_all no agrega columnas a tablas que ya existen. Las nuevas (hoy solo "empresas.ruc")
+# se agregan con ALTER TABLE … ADD COLUMN, sin tocar datos.
+ADDED_COLUMNS = {"empresas": ("ruc",)}
+
+
+def ensure_columns(engine):
+    """Agrega las columnas que falten en una base creada por una versión anterior."""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table_name, names in ADDED_COLUMNS.items():
+            if table_name not in tables:
+                continue
+            existing = {column["name"] for column in inspector.get_columns(table_name)}
+            table = AccountBase.metadata.tables[table_name]
+            for name in names:
+                if name not in existing:
+                    kind = table.c[name].type.compile(dialect=engine.dialect)
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {kind}"))

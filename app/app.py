@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 import re
 
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, stream_with_context, url_for
+from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, stream_with_context, url_for
 
 import config
 import orchestrator
@@ -23,7 +23,8 @@ consortium.init_app(app)
 
 @app.context_processor
 def common_context():
-    return {"app_name": config.APP_NAME, "max_length": config.MAX_DESCRIPTION_LENGTH}
+    return {"app_name": config.APP_NAME, "max_length": config.MAX_DESCRIPTION_LENGTH,
+            "chat_history": session.get("assistant_history", [])}
 
 
 app.template_filter("pen")(format_pen)
@@ -487,7 +488,7 @@ def tender_bases(code):
 
 
 # ---------------------------------------------------------------------------
-# Asistente de Postulación con LangGraph (HU-010 / HU-014)
+# Asistente de postulación (HU-010 / HU-014)
 # ---------------------------------------------------------------------------
 # La conversación vive en la cookie de sesión (4 KB en los navegadores): se guarda solo
 # lo último y cada mensaje se recorta para que el asistente siga funcionando tras varias consultas.
@@ -522,60 +523,69 @@ def _trim_history(messages):
     return list(reversed(kept))
 
 
-@app.get("/asistente")
-def assistant_chat():
-    """Pantalla del asistente de postulación con historial de conversación y perfil de la sesión."""
-    from services import assistant
-    history = session.get("assistant_history", [])
-    profile = session.get("supplier_profile", {})
-    tenders_state = tenders.availability()
-    return render_template(
-        "assistant.html",
-        history=history,
-        profile=profile,
-        tenders_state=tenders_state,
-        active_nav="assistant",
-    )
+def _assistant_reply(text, status="ok", code=200, detail="", detail_count=0):
+    """Respuesta JSON del widget: el Markdown se convierte a HTML seguro en el servidor.
+
+    `text` es el resumen que se muestra en el chat; `detail` es el contenido completo que el
+    widget abre en una ventana interna para no llenar la conversación.
+    """
+    payload = {"ok": code == 200, "status": status, "html": markdown(text) if text else ""}
+    if detail:
+        payload["detail"] = markdown(detail)
+        payload["detail_count"] = detail_count
+    return payload, code
 
 
-@app.post("/asistente")
-def assistant_ask():
-    """Procesa una consulta del usuario mediante el grafo de LangGraph."""
+@app.post("/asistente/mensaje")
+def assistant_message():
+    """Una consulta del widget flotante. La respuesta es JSON para no recargar la página."""
     from services import assistant
-    query = request.form.get("query", "").strip()[:ASSISTANT_MAX_QUERY]
+
+    query = (request.form.get("query") or "").strip()[:ASSISTANT_MAX_QUERY]
     if not query:
-        return redirect(url_for("assistant_chat"))
-
+        return _assistant_reply("", status="empty", code=400)
     history = session.get("assistant_history", [])
-    profile = session.get("supplier_profile", {})
-
     try:
-        result = assistant.ask_assistant(query, history=history, profile=profile)
+        result = assistant.ask_assistant(
+            query,
+            user_id=g.current_user["id"],
+            factory=auth.store(),
+            email=g.current_user["email"],
+            history=history,
+            remembered_rubros=session.get("assistant_rubros", []),
+        )
     except Exception:
-        # La conversación nunca debe romper la pantalla: se avisa y se conserva el historial.
+        # El chat nunca debe romper la página: se avisa y se conserva el historial.
         app.logger.exception("Falló el asistente de postulación")
-        flash("No se pudo completar la consulta en este momento. Vuelva a intentarlo en unos segundos.", "error")
-        return redirect(url_for("assistant_chat"))
+        return _assistant_reply(
+            "No se pudo completar la consulta en este momento. Vuelva a intentarlo en unos segundos.",
+            status="error", code=503)
 
-    # Actualizar historial. Se guarda recortado: la sesión viaja en una cookie y un
-    # historial largo la haría superar el límite del navegador (4 KB).
+    # El resumen va al chat y el detalle a la ventana interna del widget.
+    summary, _, detail = result["response"].partition(assistant.DETAIL_MARKER)
     session["assistant_history"] = _trim_history(
-        history + [
-            {"role": "user", "content": query},
-            {"role": "assistant", "content": result["response"][:ASSISTANT_MESSAGE_CHARS]},
-        ]
+        history + [{"role": "user", "content": query},
+                   {"role": "assistant", "content": summary[:ASSISTANT_MESSAGE_CHARS]}]
     )
-    session["supplier_profile"] = result["profile"]
-
-    return redirect(url_for("assistant_chat"))
+    if result.get("rubros"):
+        # Rubros resueltos: permiten seguir la conversación aunque el siguiente mensaje no los repita.
+        session["assistant_rubros"] = result["rubros"][:3]
+    return _assistant_reply(summary, status=result.get("status", "ok"),
+                            detail=detail, detail_count=result.get("detail_count", 0))
 
 
 @app.post("/asistente/limpiar")
 def assistant_clear():
-    """Reinicia la conversación del asistente y el perfil guardado en sesión."""
+    """Reinicia la conversación del asistente y devuelve el panel vacío."""
     session.pop("assistant_history", None)
-    session.pop("supplier_profile", None)
-    return redirect(url_for("assistant_chat"))
+    session.pop("assistant_rubros", None)
+    return {"ok": True}
+
+
+@app.get("/asistente")
+def assistant_chat():
+    """La página anterior del asistente ya no existe: el chat vive en el widget de todas las pantallas."""
+    return redirect(url_for("home"))
 
 
 if __name__ == "__main__":

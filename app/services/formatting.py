@@ -41,12 +41,24 @@ _RULE = re.compile(r"^-{3,}$")
 _CODE = re.compile(r"`([^`]+)`")
 _BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
 _ITALIC = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")
+# Solo enlaces http(s) y rutas internas de la aplicación: nada de javascript: ni data:.
+# La URL no admite comillas ni ángulos para que no pueda cerrar el atributo href.
+_LINK = re.compile(r"\[([^\]]+)\]\(((?:https?://|/)[^\s)\"'<>]*)\)")
+
+
+def _link(match):
+    label, url = match.group(1), match.group(2)
+    href = html.escape(url, quote=True)
+    if url.startswith("/"):
+        return f'<a href="{href}">{label}</a>'
+    return f'<a href="{href}" target="_blank" rel="noopener">{label}</a>'
 
 
 def _inline(text):
-    """Negritas, cursivas y código en línea sobre texto ya escapado."""
+    """Negritas, cursivas, código y enlaces en línea sobre texto ya escapado."""
     text = html.escape(str(text), quote=False)
     text = _CODE.sub(r"<code>\1</code>", text)
+    text = _LINK.sub(_link, text)
     text = _BOLD.sub(r"<strong>\1</strong>", text)
     return _ITALIC.sub(r"<em>\1</em>", text)
 

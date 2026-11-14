@@ -26,7 +26,8 @@ def company(factory, email, name, sales="0", amount="0", years=0, staff="Ingenie
     uid = accounts.create_user(factory, email, PASSWORD, name)
     if profile:
         accounts.save_profile(factory, uid, {
-            "company_name": name, "business_activity": "Venta de combustibles", "rubros": "Combustibles",
+            "company_name": name, "ruc": "20123456789",
+            "business_activity": "Venta de combustibles", "rubros": "Combustibles",
             "monthly_sales": Decimal(sales), "experience_years": years,
             "similar_contracts_amount": Decimal(amount), "specialized_staff": staff})
     client = FormClient(app, app.response_class)
