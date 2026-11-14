@@ -261,12 +261,15 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
             elif review != "own":
                 problems.append("Revise el periodo y los importes de ventas exigidos; no se convierten ventas mensuales en anuales.")
         jobs = "tecnicos?|profesional(?:es)?|especialistas?|ingenieros?|conductor(?:es)?|operarios?"
-        if re.search(r"\bpersonal\b|" + jobs, normalized):
+        # La ficha 1265895 cita un Reglamento Técnico del cemento, no personal técnico.
+        # Se conserva el resto del bloque para detectar exigencias reales en esa misma página.
+        staff_text = re.sub(r"\breglamentos?\s+tecnicos?\b", "", normalized)
+        if re.search(r"\b(?:personal|" + jobs + r")\b", staff_text):
             doc_types.add("personal")
             if not str(profile.get("specialized_staff") or "").strip():
                 problems.append("El perfil no declara personal especializado.")
             counts = {"un":1,"uno":1,"dos":2,"tres":3,"cuatro":4,"cinco":5,"seis":6,"siete":7,"ocho":8,"nueve":9,"diez":10}
-            count_text = re.sub(r"\b(" + "|".join(counts) + r")\s+(?=" + jobs + ")", lambda m:str(counts[m.group(1)])+" ", normalized)
+            count_text = re.sub(r"\b(" + "|".join(counts) + r")\s+(?=" + jobs + ")", lambda m:str(counts[m.group(1)])+" ", staff_text)
             count = re.search(r"(\d+)\s*\)?\s*(?:" + jobs + ")", count_text)
             if count and (values.get("staff_count") is None or int(values["staff_count"]) < int(count.group(1))):
                 problems.append("La cantidad de personal declarada no acredita el mínimo exigido; revise también su especialidad.")
