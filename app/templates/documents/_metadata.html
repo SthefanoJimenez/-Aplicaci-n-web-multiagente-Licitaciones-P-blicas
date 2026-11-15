@@ -11,16 +11,18 @@
   </div>
   <div class="field">
     <label class="label" for="valid_from">Vigente desde (opcional)</label>
-    <input id="valid_from" name="valid_from" type="date" value="{{ values.get('valid_from', '') }}"
-           {% if errors.get('valid_from') %}aria-invalid="true" aria-describedby="from-error"{% endif %}>
+    <input id="valid_from" name="valid_from" type="date" min="0001-01-01" max="9999-12-31" value="{{ values.get('valid_from', '') }}"
+           aria-describedby="from-hint{% if errors.get('valid_from') %} from-error{% endif %}"
+           {% if errors.get('valid_from') %}aria-invalid="true"{% endif %}>
+    <p class="hint" id="from-hint">Use un año de cuatro cifras.</p>
     {% if errors.get('valid_from') %}<p class="error" id="from-error">{{ errors.valid_from }}</p>{% endif %}
   </div>
   <div class="field">
     <label class="label" for="expires_on">Fecha de vencimiento</label>
-    <input id="expires_on" name="expires_on" type="date" value="{{ values.get('expires_on', '') }}"
+    <input id="expires_on" name="expires_on" type="date" min="0001-01-01" max="9999-12-31" value="{{ values.get('expires_on', '') }}"
            aria-describedby="expiry-hint{% if errors.get('expires_on') %} expiry-error{% endif %}"
            {% if errors.get('expires_on') %}aria-invalid="true"{% endif %}>
-    <p class="hint" id="expiry-hint">Si el documento no indica vencimiento, marque la casilla de al lado.</p>
+    <p class="hint" id="expiry-hint">Use un año de cuatro cifras. Si el documento no indica vencimiento, marque la casilla de al lado.</p>
     {% if errors.get('expires_on') %}<p class="error" id="expiry-error">{{ errors.expires_on }}</p>{% endif %}
   </div>
   <div class="field document-checkbox-field">

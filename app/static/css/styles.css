@@ -4076,14 +4076,14 @@ body.lf-chat-open .lf-chat-launcher {
 .tender-list { max-width: 100%; }
 .tender-list:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
 .tender-scroll-hint { display: none; margin: 0 0 10px; }
-.tender-table { min-width: 1280px; table-layout: fixed; }
+.tender-table { min-width: 1280px; table-layout: auto; }
 .tender-col-code { width: 8%; }
-.tender-col-title { width: 17%; }
-.tender-col-entity { width: 17%; }
+.tender-col-title { width: 16%; }
+.tender-col-entity { width: 15%; }
 .tender-col-department { width: 9%; }
 .tender-col-published { width: 9%; }
 .tender-col-age { width: 7%; }
-.tender-col-value { width: 9%; }
+.tender-col-value { width: 12%; }
 .tender-col-eligibility { width: 15%; }
 .tender-col-actions { width: 9%; }
 .tender-table th,
@@ -4097,6 +4097,13 @@ body.lf-chat-open .lf-chat-launcher {
 }
 .tender-table th { overflow-wrap: normal; }
 .tender-table .num { white-space: normal; overflow-wrap: anywhere; }
+.tender-table .tender-age { text-align: center; }
+.tender-table .tender-amount {
+    display: inline-block;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-variant-numeric: tabular-nums;
+}
 .tender-table .chip { max-width: 100%; white-space: normal; }
 .tender-table .tag { white-space: normal; }
 .tender-table .eligibility-badge { max-width: 100%; }

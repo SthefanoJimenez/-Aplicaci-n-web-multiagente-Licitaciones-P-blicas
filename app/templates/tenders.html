@@ -118,7 +118,7 @@
           <th scope="col">Entidad compradora</th>
           <th scope="col">Departamento</th>
           <th scope="col">Publicación</th>
-          <th scope="col" class="num">Antigüedad</th>
+          <th scope="col" class="tender-age">Antigüedad</th>
           <th scope="col" class="num">Valor estimado</th>
           <th scope="col">Elegibilidad de mi empresa</th>
           <th scope="col">Acciones</th>
@@ -157,7 +157,7 @@
             <br><span class="muted small">Límite: {{ t.deadline_at|date_pe }}</span>
             {% endif %}
           </td>
-          <td class="num">
+          <td class="tender-age">
             {% if t.days_since is not none %}
               {% if t.days_since == 0 %}
                 <span class="tag tag-good">Hoy</span>
@@ -172,7 +172,7 @@
           </td>
           <td class="num">
             {% if t.estimated_value and t.estimated_value > 0 %}
-              {{ t.estimated_value|pen }}
+              <span class="tender-amount">{{ t.estimated_value|pen }}</span>
             {% else %}
               <span class="muted">No publicado</span>
             {% endif %}

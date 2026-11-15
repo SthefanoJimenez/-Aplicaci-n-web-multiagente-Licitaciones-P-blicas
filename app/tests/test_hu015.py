@@ -149,10 +149,27 @@ def test_missing_file_oversized_file_and_request(owner, account_factory):
 
 @pytest.mark.parametrize("fields", [{"document_type": "falso"}, {"expires_on": ""}, {"expires_on": "2026-02-30"},
                                    {"valid_from": "2026-99-01"}, {"valid_from": "2028-01-01"},
+                                   {"valid_from": "222222-01-01"}, {"expires_on": "222222-12-31"},
                                    {"expires_on": "2027-12-31", "no_expiry": "1"}])
 def test_invalid_metadata_never_saves_pdf(owner, account_factory, fields):
     assert upload(owner, **fields).status_code == 400
     assert count_documents(account_factory) == 0
+
+
+@pytest.mark.parametrize("field", ["valid_from", "expires_on"])
+def test_six_digit_year_edit_preserves_original_dates_and_pdf(owner, account_factory, field):
+    original = pdf_bytes()
+    assert upload(owner, original, valid_from="2026-01-01").status_code == 302
+    fields = {"document_type": "rnp", "valid_from": "2026-01-01", "expires_on": "2027-12-31"}
+    fields[field] = "222222-01-01"
+    response = owner.post("/documentos/1/editar", data=fields)
+    assert response.status_code == 400
+    assert "año de cuatro cifras" in response.text
+    with account_factory() as session:
+        doc = session.get(documents.CompanyDocument, 1)
+        assert doc.valid_from == date(2026, 1, 1)
+        assert doc.expires_on == date(2027, 12, 31)
+        assert doc.content == original
 
 
 def test_expiry_boundaries_and_inventory_for_evaluation(owner, account_factory, monkeypatch):

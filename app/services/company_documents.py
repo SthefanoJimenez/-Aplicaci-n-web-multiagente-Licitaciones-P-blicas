@@ -59,7 +59,7 @@ def validate_metadata(form):
                 raise ValueError
         except ValueError:
             dates[key] = None
-            errors[key] = "Escriba una fecha válida."
+            errors[key] = "Escriba una fecha válida con un año de cuatro cifras."
     if values["no_expiry"] and values["expires_on"]:
         errors["expires_on"] = "Quite la fecha o desmarque «Sin vencimiento declarado»."
     elif not values["no_expiry"] and not values["expires_on"]:
