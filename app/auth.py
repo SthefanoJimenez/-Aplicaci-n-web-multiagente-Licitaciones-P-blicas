@@ -12,7 +12,7 @@ from flask import Blueprint, abort, current_app, flash, g, redirect, render_temp
 from sqlalchemy.exc import SQLAlchemyError
 
 import config
-from services import accounts, db
+from services import accounts, db, password_recovery
 
 
 bp = Blueprint("auth", __name__)
@@ -24,9 +24,25 @@ EMAIL_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 EMAIL_TLD = r"(?:[A-Za-z]{2,63}|[xX][nN]--[A-Za-z0-9](?:[A-Za-z0-9-]{0,57}[A-Za-z0-9]))"
 EMAIL_PATTERN = rf"(?=.{{1,64}}@){EMAIL_ATOM}(?:\.{EMAIL_ATOM})*@(?:{EMAIL_LABEL}\.)+{EMAIL_TLD}"
 
+
+def password_errors(password, confirmation):
+    """La misma política en registro, cambio y recuperación; no altera cuentas previas."""
+    errors = {}
+    if (not 4 <= len(password) <= 128 or not all(re.search(p, password) for p in
+                                               (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^\w\s]|_"))):
+        errors["password"] = "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo."
+    if password != confirmation:
+        errors["password_confirm"] = "Las contraseñas no coinciden."
+    return errors
+
 PRIVATE_ENDPOINTS = {"describe", "candidates", "back_to_candidates", "confirm", "market",
                      "cost", "verdict", "verdict_without_cost", "auth.profile", "evaluate_company_product"}
 PRIVATE_PREFIXES = ("/perfil", "/documentos", "/consorcio", "/asistente", "/elegibilidad")
+PASSWORD_ENDPOINTS = {"auth.forgot_password", "auth.reset_password", "auth.change_password"}
+
+
+def password_management_enabled():
+    return current_app.config.get("PASSWORD_MANAGEMENT_ENABLED", config.PASSWORD_MANAGEMENT_ENABLED) is True
 
 
 def store():
@@ -43,7 +59,7 @@ def store():
             Path(current_app.instance_path).mkdir(parents=True, exist_ok=True)
             url = "sqlite:///" + str(Path(current_app.instance_path) / "cuentas.sqlite3")
         engine = db.make_engine(url)
-        accounts.initialize_schema(engine)
+        accounts.initialize_schema(engine, password_management=password_management_enabled())
         factory = db.make_session_factory(engine)
         current_app.extensions["accounts_factory"] = factory
     return factory
@@ -98,6 +114,8 @@ def init_app(app):
         g.current_user = None
         if request.endpoint == "static":
             return None
+        if request.endpoint in PASSWORD_ENDPOINTS and not password_management_enabled():
+            abort(404)
         unavailable = False
         token = session.get("auth_token")
         if token:
@@ -124,12 +142,18 @@ def init_app(app):
 
     @app.context_processor
     def account_context():
-        return {"current_user": g.get("current_user")}
+        enabled = password_management_enabled()
+        return {"current_user": g.get("current_user"), "password_management_enabled": enabled,
+                "password_recovery_available": bool(enabled and request.endpoint == "auth.login"
+                                                     and password_recovery.settings(current_app))}
 
     @app.after_request
     def private_headers(response):
-        if g.get("current_user") or request.endpoint in {"auth.login", "auth.register", "auth.profile"}:
+        if g.get("current_user") or (request.endpoint or "").startswith("auth."):
             response.headers["Cache-Control"] = "no-store"
+        if request.endpoint == "auth.reset_password":
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'; base-uri 'self'"
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         return response
 
@@ -156,12 +180,7 @@ def register():
             errors["email"] = "Escriba un correo válido, por ejemplo: empresa@ejemplo.com. Revise los puntos y la terminación del dominio."
         if not 2 <= len(values["company_name"]) <= 200:
             errors["company_name"] = "Escriba el nombre de su empresa (de 2 a 200 caracteres)."
-        if (not 4 <= len(password) <= 128 or
-                not all(re.search(pattern, password) for pattern in
-                        (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^\w\s]|_"))):
-            errors["password"] = "Use de 4 a 128 caracteres, con mayúscula, minúscula, número y símbolo."
-        if password != request.form.get("password_confirm"):
-            errors["password_confirm"] = "Las contraseñas no coinciden."
+        errors.update(password_errors(password, request.form.get("password_confirm")))
         if not errors:
             try:
                 factory = store()
@@ -210,6 +229,95 @@ def logout():
         return _service_unavailable()
     session.clear()
     return redirect(url_for("home"))
+
+
+def _notify_password_changed(factory, user_id):
+    configured = password_recovery.settings(current_app)
+    if configured:
+        try:
+            with factory() as connection:
+                user = connection.get(accounts.User, user_id)
+                if user:
+                    password_recovery.notify_changed(configured, user.email)
+        except SQLAlchemyError:
+            current_app.logger.error("No se pudo preparar la notificación de cambio.")
+
+
+@bp.route("/recuperar-contrasena", methods=["GET", "POST"])
+def forgot_password():
+    configured = password_recovery.settings(current_app)
+    if not configured:
+        return render_template("auth/forgot_password.html", unavailable=True, sent=False), 503
+    sent = False
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()[:254]
+        try:
+            factory = store()
+            allowed_ip = accounts.recovery_attempt(factory, accounts.digest(
+                "recovery-ip|" + (request.remote_addr or "")), 10)
+            allowed_email = accounts.recovery_attempt(factory, accounts.digest("recovery-email|" + email), 3)
+            if allowed_ip and allowed_email and re.fullmatch(EMAIL_PATTERN, email):
+                password_recovery.submit(factory, configured, email)
+            sent = True
+        except SQLAlchemyError:
+            return _service_unavailable()
+    return render_template("auth/forgot_password.html", unavailable=False, sent=sent)
+
+
+@bp.route("/restablecer-contrasena", methods=["GET", "POST"])
+def reset_password():
+    errors = {}
+    # El secreto viaja en el fragmento del correo y luego en el cuerpo POST;
+    # no se incluye en la URL enviada al servidor ni en el registro de accesos.
+    token = request.form.get("reset_token", "")[:129] if request.method == "POST" else ""
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        errors.update(password_errors(password, request.form.get("password_confirm")))
+        if not errors:
+            try:
+                factory = store()
+                if not accounts.record_attempt(factory, accounts.digest(
+                        "reset|" + (request.remote_addr or ""))):
+                    errors["reset"] = "Espere 15 minutos antes de volver a intentar."
+                    return render_template("auth/reset_password.html", errors=errors, token=token), 429
+                with factory() as connection:
+                    row = connection.get(accounts.PasswordReset, accounts.digest(token))
+                    user_id = row.user_id if row else None
+                if accounts.reset_password(factory, token, password):
+                    session.clear()
+                    _notify_password_changed(factory, user_id)
+                    flash("Contraseña actualizada. Inicie sesión con su nueva contraseña.", "success")
+                    return redirect(url_for("auth.login"))
+                errors["reset"] = "El enlace no es válido o ya venció. Solicite uno nuevo."
+            except SQLAlchemyError:
+                return _service_unavailable()
+    return render_template("auth/reset_password.html", errors=errors, token=token), (400 if errors else 200)
+
+
+@bp.route("/perfil/contrasena", methods=["GET", "POST"])
+def change_password():
+    errors = {}
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        previous = request.form.get("current_password", "")
+        errors.update(password_errors(password, request.form.get("password_confirm")))
+        if len(previous) > 128:
+            errors["current_password"] = "La contraseña actual no es correcta."
+        if not errors:
+            try:
+                factory = store()
+                if not accounts.record_attempt(factory, accounts.digest("change|" + str(g.current_user["id"]))):
+                    errors["current_password"] = "Espere 15 minutos antes de volver a intentar."
+                    return render_template("auth/change_password.html", errors=errors), 429
+                if accounts.change_password(factory, g.current_user["id"], previous, password):
+                    session.clear()
+                    _notify_password_changed(factory, g.current_user["id"])
+                    flash("Contraseña actualizada. Se cerraron sus sesiones. Ingrese de nuevo.", "success")
+                    return redirect(url_for("auth.login"))
+                errors["current_password"] = "La contraseña actual no es correcta."
+            except SQLAlchemyError:
+                return _service_unavailable()
+    return render_template("auth/change_password.html", errors=errors), (400 if errors else 200)
 
 
 def validate_profile(form):

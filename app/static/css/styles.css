@@ -4033,6 +4033,34 @@ body.lf-chat-open .lf-chat-launcher {
 .eligibility-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; padding: 16px 0; border-block: 1px solid var(--rule); }
 .eligibility-metrics > div { min-width: 0; overflow-wrap: anywhere; }
 .eligibility-details { margin: 14px 0; }
+.eligibility-inventory-note { margin: 10px 0 6px; }
+.eligibility-inventory { list-style: none; padding: 0; margin: 0 0 10px; }
+.eligibility-inventory-row {
+    display: grid;
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+    align-items: start;
+    gap: 6px 14px;
+    padding: 8px 0;
+    border-block-end: 1px solid var(--rule);
+}
+.eligibility-inventory-row > strong { align-self: center; }
+.eligibility-inventory-states { display: flex; flex-wrap: wrap; gap: 6px; }
+.eligibility-document-badge {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--rule-strong);
+    padding: 3px 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink-2);
+    background: var(--paper);
+}
+.eligibility-document-current { color: var(--good); background: var(--good-tint); border-color: var(--good); }
+.eligibility-document-expired { color: var(--bad); background: var(--bad-tint); border-color: var(--bad); }
+.eligibility-document-future { color: var(--caution); background: var(--caution-tint); border-color: var(--caution); }
+@media (max-width: 480px) { .eligibility-inventory-row { grid-template-columns: minmax(0, 1fr); } }
 .eligibility-checks { display: grid; gap: 12px; margin-top: 16px; }
 .eligibility-check h3 { font-size: 16px; line-height: 1.5; }
 .eligibility-check { padding: 16px 20px; }

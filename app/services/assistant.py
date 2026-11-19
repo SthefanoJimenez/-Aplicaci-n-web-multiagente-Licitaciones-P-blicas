@@ -42,7 +42,7 @@ EXP_AMOUNT = re.compile(
 OSINERGMIN = re.compile(r"osinergmin|registro\s+de\s+hidrocarburos", re.IGNORECASE)
 EXPERIENCE_WORD = re.compile(r"experiencia|facturaci[oó]n|contratos?\s+similares", re.IGNORECASE)
 QUERY_AMOUNT_BEFORE = re.compile(
-    r"(\d[\d.,\s]*)\s*(mil|millones|millon)?\s*(?:en\s+)?(?:ventas|facturaci[oó]n|experiencia)", re.IGNORECASE)
+    r"(\d[\d.,\s]*)\s*(mil|millones|millon)?\s*(?:(?:en|de)\s+)?(?:ventas|facturaci[oó]n|experiencia)", re.IGNORECASE)
 QUERY_AMOUNT_AFTER = re.compile(
     r"(?:ventas|facturaci[oó]n|experiencia)[^\d]{0,30}(?:de|por|:)?\s*(?:S\s*/\s*\.?)?\s*"
     r"(\d[\d.,\s]*)\s*(mil|millones|millon)?", re.IGNORECASE)
@@ -199,6 +199,8 @@ def _query_experience(query):
     aporta S/ 3,000,000 como experiencia declarada en esta conversación.
     """
     text = (query or "").lower()
+    # El número de una convocatoria/proceso es una referencia, no facturación.
+    text = re.sub(r"\b(convocatoria|proceso|c[oó]digo)\s*(?:n[.°º]?\s*)?\d{4,10}\b", r"\1", text)
     candidates = []
     for pattern in (
         QUERY_AMOUNT_BEFORE,

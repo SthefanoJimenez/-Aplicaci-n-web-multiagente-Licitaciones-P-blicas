@@ -55,3 +55,17 @@ RAG_MAX_BASES_MB = int(os.environ.get("RAG_MAX_BASES_MB", "").strip() or "250")
 # HU-018: cuántos cronogramas lee cada ingesta (bases nuevas o cuya etapa cambió). Se leen sin OCR y
 # sin Gemini; las que no alcanzan quedan para la siguiente ejecución.
 SCHEDULE_MAX_PER_RUN = int(os.environ.get("CRONOGRAMA_MAX_POR_EJECUCION", "").strip() or "60")
+
+# Recuperación por correo. Resend por HTTPS permite operar en Render Free,
+# que bloquea los puertos SMTP habituales. No se habilita sin configuración.
+PASSWORD_MANAGEMENT_ENABLED = os.environ.get("PASSWORD_MANAGEMENT_ENABLED", "").strip().lower() in {"1", "true"}
+EMAIL_TRANSPORT = os.environ.get("EMAIL_TRANSPORT", "smtp").strip().lower()
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "").strip()
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = os.environ.get("SMTP_PORT", "587").strip()
+SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "").strip()
+SMTP_SECURITY = os.environ.get("SMTP_SECURITY", "starttls").strip().lower()

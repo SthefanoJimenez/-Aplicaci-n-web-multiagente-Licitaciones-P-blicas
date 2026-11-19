@@ -23,6 +23,8 @@ def main():
             "ACCOUNTS_DATABASE_URL": "sqlite:///" + (directory / "cuentas.sqlite3").as_posix(),
             "GEMINI_API_KEY": "", "LANGSMITH_API_KEY": "", "LANGCHAIN_API_KEY": "",
             "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false", "SECRET_KEY": secrets.token_hex(32),
+            "SMTP_HOST": "", "SMTP_USERNAME": "", "SMTP_PASSWORD": "", "SMTP_FROM": "", "PUBLIC_BASE_URL": "",
+            "RESEND_API_KEY": "", "EMAIL_FROM": "", "PASSWORD_MANAGEMENT_ENABLED": "1",
         })
         sys.path.insert(0, str(root / "app"))
         from app import app

@@ -22,7 +22,23 @@
     </details>
     {% endif %}
     <details class="eligibility-details"><summary>Documentos considerados por tipo y vigencia</summary>
-      <ul>{% for kind, counts in assessment.inventory.items() %}<li>{{ {'rnp':'RNP','experiencia':'Experiencia','personal':'Personal','otro':'Otro'}[kind] }}: {{ counts.current|length }} vigentes, {{ counts.expired|length }} vencidos y {{ counts.future|length }} aún no vigentes.</li>{% endfor %}</ul>
+      <p class="small muted eligibility-inventory-note">Estado al {{ assessment.on_date }}. Los documentos exigidos se indican en los requisitos de la convocatoria.</p>
+      <ul class="eligibility-inventory" role="list">
+        {% for kind, counts in assessment.inventory.items() %}
+        {% set current = counts.current|length %}
+        {% set expired = counts.expired|length %}
+        {% set future = counts.future|length %}
+        <li class="eligibility-inventory-row">
+          <strong>{{ {'rnp':'RNP','experiencia':'Experiencia','personal':'Personal','otro':'Otro'}[kind] }}</strong>
+          <div class="eligibility-inventory-states">
+            {% if current %}<span class="eligibility-document-badge eligibility-document-current">{{ current }} {{ 'vigente' if current == 1 else 'vigentes' }}</span>{% endif %}
+            {% if expired %}<span class="eligibility-document-badge eligibility-document-expired">{{ expired }} {{ 'vencido' if expired == 1 else 'vencidos' }}</span>{% endif %}
+            {% if future %}<span class="eligibility-document-badge eligibility-document-future">{{ future }} {{ 'aún no vigente' if future == 1 else 'aún no vigentes' }}</span>{% endif %}
+            {% if not (current or expired or future) %}<span class="eligibility-document-badge">Sin documentos guardados</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
       <a href="{{ url_for('company_documents.index') }}">Revisar documentos de mi empresa</a>
     </details>
     <p class="small"><a href="{{ assessment.guarantee.source }}" target="_blank" rel="noopener">Garantías: arts. 113 y 114</a> · <a href="{{ assessment.guarantee.exemption_source }}" target="_blank" rel="noopener">Excepciones: art. 139</a> · <a href="{{ assessment.guarantee.uit_source }}" target="_blank" rel="noopener">UIT 2026</a>. La condición MYPE permite retención en los supuestos aplicables; no reduce el porcentaje.</p>

@@ -8,7 +8,7 @@ import hashlib
 import secrets
 import re
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -73,6 +73,21 @@ class LoginAttempt(AccountBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
 
+class PasswordReset(AccountBase):
+    __tablename__ = "recuperaciones_contrasena"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    password_fingerprint: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class RecoveryThrottle(AccountBase):
+    __tablename__ = "limites_recuperacion"
+    fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class EmailTaken(ValueError):
     pass
 
@@ -86,9 +101,12 @@ def valid_ruc(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9]{11}", value) is not None
 
 
-def initialize_schema(engine):
+def initialize_schema(engine, *, password_management=False):
     """Migración aditiva e idempotente de cuentas existentes en SQLite o PostgreSQL."""
-    AccountBase.metadata.create_all(engine)
+    optional = {PasswordReset.__table__, RecoveryThrottle.__table__}
+    tables = None if password_management else [table for table in AccountBase.metadata.sorted_tables
+                                                if table not in optional]
+    AccountBase.metadata.create_all(engine, tables=tables)
     with engine.begin() as connection:
         columns = {column["name"] for column in inspect(connection).get_columns("empresas")}
         if "ruc" not in columns:
@@ -108,6 +126,92 @@ def initialize_schema(engine):
 
 def digest(token):
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def recovery_attempt(factory, fingerprint, limit):
+    """Contador compartido y atómico por ventana; no bloquea el inicio de sesión."""
+    moment = now()
+    with factory.begin() as db:
+        db.execute(delete(RecoveryThrottle).where(RecoveryThrottle.expires_at <= moment))
+        count = db.scalar(update(RecoveryThrottle).where(
+            RecoveryThrottle.fingerprint == fingerprint).values(
+                attempts=RecoveryThrottle.attempts + 1).returning(RecoveryThrottle.attempts))
+        if count is not None:
+            return count <= limit
+        # El savepoint resuelve dos primeras solicitudes simultáneas sin perder la transacción.
+        try:
+            with db.begin_nested():
+                db.add(RecoveryThrottle(fingerprint=fingerprint, attempts=1,
+                                       expires_at=moment + timedelta(minutes=15)))
+                db.flush()
+            return True
+        except IntegrityError:
+            count = db.scalar(update(RecoveryThrottle).where(
+                RecoveryThrottle.fingerprint == fingerprint).values(
+                    attempts=RecoveryThrottle.attempts + 1).returning(RecoveryThrottle.attempts))
+            return count is not None and count <= limit
+
+
+def issue_password_reset(factory, email):
+    """Solo guarda el hash del secreto; pedir otro enlace no invalida los anteriores."""
+    token = secrets.token_urlsafe(32)
+    with factory.begin() as db:
+        db.execute(delete(PasswordReset).where(PasswordReset.expires_at <= now()))
+        user = db.scalar(select(User).where(User.email == email))
+        if user is None:
+            return None
+        db.add(PasswordReset(token_hash=digest(token), user_id=user.id,
+                             password_fingerprint=digest(user.password_hash),
+                             expires_at=now() + timedelta(minutes=30)))
+    return token
+
+
+def revoke_password_reset(factory, token):
+    with factory.begin() as db:
+        db.execute(delete(PasswordReset).where(PasswordReset.token_hash == digest(token)))
+
+
+def reset_password(factory, token, password):
+    if not isinstance(token, str) or not 20 <= len(token) <= 128:
+        return False
+    hashed = generate_password_hash(password, method="scrypt")
+    with factory.begin() as db:
+        row = db.execute(select(PasswordReset.user_id, PasswordReset.password_fingerprint).where(
+            PasswordReset.token_hash == digest(token), PasswordReset.expires_at > now()
+        )).first()
+        if not row:
+            return False
+        user = db.get(User, row.user_id)
+        if not user or not secrets.compare_digest(row.password_fingerprint, digest(user.password_hash)):
+            return False
+        # Primero se actualiza el usuario con compare-and-swap. Así dos enlaces
+        # del mismo usuario no toman bloqueos de tokens en orden inverso en PostgreSQL.
+        active = select(PasswordReset.token_hash).where(
+            PasswordReset.token_hash == digest(token), PasswordReset.expires_at > now()).exists()
+        changed = db.execute(update(User).where(User.id == user.id, User.password_hash == user.password_hash, active)
+                             .values(password_hash=hashed)).rowcount
+        if not changed:
+            return False
+        db.execute(delete(LoginSession).where(LoginSession.user_id == user.id))
+        db.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id))
+    return True
+
+
+def change_password(factory, user_id, current_password, new_password):
+    with factory() as db:
+        user = db.get(User, user_id)
+        previous = user.password_hash if user else _DUMMY_HASH
+    if not user or not check_password_hash(previous, current_password):
+        return False
+    hashed = generate_password_hash(new_password, method="scrypt")
+    with factory.begin() as db:
+        changed = db.execute(update(User).where(User.id == user_id, User.password_hash == previous)
+                             .values(password_hash=hashed)).rowcount
+        if not changed:
+            return False
+        db.execute(delete(LoginSession).where(LoginSession.user_id == user_id))
+        db.execute(delete(PasswordReset).where(PasswordReset.user_id == user_id))
+    return True
 
 
 def create_user(factory, email, password, company_name):

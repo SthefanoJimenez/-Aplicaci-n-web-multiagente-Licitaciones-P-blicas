@@ -57,8 +57,10 @@ MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "set", "oct", 
 
 @app.template_filter("date_pe")
 def format_date(value):
-    """2025-03-14 -> 14 mar 2025."""
+    """Fecha de calendario; los instantes se muestran en la zona de Lima."""
     try:
+        if isinstance(value, datetime):
+            value = tenders.as_utc(value).astimezone(tenders.LIMA).date()
         d = date.fromisoformat(str(value)[:10])
     except ValueError:
         return "—"

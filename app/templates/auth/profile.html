@@ -38,6 +38,9 @@
       <a class="button button-secondary" href="{{ url_for('consortium.index') }}">Consorcios</a>
     </div>
   </form>
+  {% if password_management_enabled %}
+  <p class="hint"><a href="{{ url_for('auth.change_password') }}">Cambiar contraseña</a></p>
+  {% endif %}
 </section>
 {% endblock %}
 {% block scripts %}
