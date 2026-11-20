@@ -30,12 +30,25 @@
       </nav>
       <div class="nav-account" role="group" aria-label="Cuenta y ayuda">
         {% if current_user %}
-        <a href="{{ url_for('auth.profile') }}" {% if active_nav == "profile" %}aria-current="page"{% endif %}>Mi empresa</a>
-        <a href="{{ url_for('consortium.index') }}" {% if active_nav == "consortium" %}aria-current="page"{% endif %}>Consorcios</a>
-        <form class="nav-session" method="post" action="{{ url_for('auth.logout') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="nav-signout" type="submit">Cerrar sesión</button>
-        </form>
+        <details class="nav-account-menu" data-account-disclosure>
+          <summary class="nav-account-trigger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="8" r="3.25"/><path d="M5.5 20v-1a4.5 4.5 0 0 1 4.5-4.5h4a4.5 4.5 0 0 1 4.5 4.5v1" stroke-linecap="round"/>
+            </svg>
+            <span>Mi cuenta</span>
+            <svg class="nav-account-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="m4 6 4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </summary>
+          <div class="nav-account-dropdown">
+            <a href="{{ url_for('auth.profile') }}" {% if active_nav == "profile" %}aria-current="page"{% endif %}>Mi empresa</a>
+            <a href="{{ url_for('consortium.index') }}" {% if active_nav == "consortium" %}aria-current="page"{% endif %}>Consorcios</a>
+            <form class="nav-session" method="post" action="{{ url_for('auth.logout') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="nav-signout" type="submit">Cerrar sesión</button>
+            </form>
+          </div>
+        </details>
         {% else %}
         <a href="{{ url_for('auth.login') }}" {% if active_nav == "login" %}aria-current="page"{% endif %}>Iniciar sesión</a>
         <a href="{{ url_for('auth.register') }}" {% if active_nav == "register" %}aria-current="page"{% endif %}>Crear cuenta</a>
@@ -62,6 +75,7 @@
   </footer>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
   {% if current_user %}
+  <script src="{{ url_for('static', filename='js/account-disclosures.js') }}" defer></script>
   {% include "_assistant_widget.html" %}
   <script src="{{ url_for('static', filename='js/assistant-widget.js') }}" defer></script>
   {% endif %}

@@ -8,10 +8,12 @@ import hashlib
 import secrets
 import re
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, update
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from services.ruc_lookup import RucDetails
 
 
 def now():
@@ -109,6 +111,25 @@ class RecoveryThrottle(AccountBase):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class CompanyRucLookup(AccountBase):
+    __tablename__ = "empresas_ruc_consultas"
+    company_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), primary_key=True)
+    ruc: Mapped[str] = mapped_column(String(11))
+    company_name: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(64))
+    condition: Mapped[str] = mapped_column(String(64))
+
+
+class RucLookupQuota(AccountBase):
+    __tablename__ = "limites_consulta_ruc"
+    scope: Mapped[str] = mapped_column(String(40), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10))
+    attempts: Mapped[int] = mapped_column(Integer)
+
+
+class _RucLookupLimit(Exception):
+    pass
+
 class EmailTaken(ValueError):
     pass
 
@@ -122,12 +143,16 @@ def valid_ruc(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9]{11}", value) is not None
 
 
-def initialize_schema(engine, *, password_management=False):
+def initialize_schema(engine, *, password_management=False, ruc_lookup_enabled=False):
     """Migración aditiva e idempotente de cuentas existentes en SQLite o PostgreSQL."""
     from services import staff  # noqa: F401  (registra la tabla personal_empresa en AccountBase)
-    optional = {PasswordReset.__table__, RecoveryThrottle.__table__}
-    tables = None if password_management else [table for table in AccountBase.metadata.sorted_tables
-                                                if table not in optional]
+
+    optional = set()
+    if not password_management:
+        optional.update((PasswordReset.__table__, RecoveryThrottle.__table__))
+    if not ruc_lookup_enabled:
+        optional.update((CompanyRucLookup.__table__, RucLookupQuota.__table__))
+    tables = [table for table in AccountBase.metadata.sorted_tables if table not in optional]
     AccountBase.metadata.create_all(engine, tables=tables)
     with engine.begin() as connection:
         # Perfil: tipo de proveedor, categorías y registros del RNP (19/11/2026). Columnas que admiten vacío.
@@ -322,6 +347,41 @@ def get_profile(factory, user_id):
         return values
 
 
+def _saved_ruc_details(db, company):
+    row = db.get(CompanyRucLookup, company.id)
+    if row is not None and row.ruc == company.ruc and row.company_name == company.name:
+        return RucDetails(row.ruc, row.company_name, row.status, row.condition)
+    return None
+
+
+def get_saved_ruc_details(factory, user_id):
+    with factory() as db:
+        company = db.scalar(select(Company).where(Company.user_id == user_id))
+        return _saved_ruc_details(db, company)
+
+
+def reserve_ruc_lookup(factory, user_id, global_limit):
+    """Reserva un intento por cuenta y para el servicio; el cupo se comparte entre procesos."""
+    today = now().date().isoformat()
+    reserve = text("""
+        INSERT INTO limites_consulta_ruc (scope, day, attempts) VALUES (:scope, :day, 1)
+        ON CONFLICT (scope) DO UPDATE SET
+            day = excluded.day,
+            attempts = CASE WHEN limites_consulta_ruc.day = excluded.day
+                            THEN limites_consulta_ruc.attempts + 1 ELSE 1 END
+        WHERE limites_consulta_ruc.day != excluded.day OR limites_consulta_ruc.attempts < :limit
+        RETURNING attempts
+    """)
+    try:
+        with factory.begin() as db:
+            for scope, limit in ((f"cuenta:{user_id}", 5), ("global", global_limit)):
+                if db.scalar(reserve, {"scope": scope, "day": today, "limit": limit}) is None:
+                    raise _RucLookupLimit
+    except _RucLookupLimit:
+        return False
+    return True
+
+
 def save_ruc(factory, user_id, ruc):
     """Guarda un RUC opcional sin sustituir el existente ni tomar el de otra cuenta."""
     if not valid_ruc(ruc):
@@ -368,18 +428,32 @@ def remember_company_product(factory, user_id, catalog_code):
         product.profile_key = _product_profile_key(profile)
 
 
-def save_profile(factory, user_id, values):
+def save_profile(factory, user_id, values, *, ruc_lookup_enabled=False, ruc_details=None):
     if values.get("ruc") and not valid_ruc(values["ruc"]):
         raise ValueError("El RUC debe contener exactamente 11 dígitos.")
     try:
         with factory.begin() as db:
             company = db.scalar(select(Company).where(Company.user_id == user_id))
+            saved_details = _saved_ruc_details(db, company) if ruc_lookup_enabled else None
             if "ruc" in values:
                 duplicate = db.scalar(select(Company.id).where(Company.ruc == values["ruc"], Company.id != company.id))
                 if values["ruc"] and duplicate is not None:
                     raise RucTaken("Este RUC ya está asociado a otra cuenta.")
                 company.ruc = values["ruc"] or None
-            company.name = values["company_name"]
+            proposed = ruc_details or saved_details
+            if ruc_lookup_enabled:
+                row = db.get(CompanyRucLookup, company.id)
+                if proposed is not None and proposed.ruc == company.ruc:
+                    if row is None:
+                        row = CompanyRucLookup(company_id=company.id)
+                        db.add(row)
+                    row.ruc, row.company_name = proposed.ruc, proposed.company_name
+                    row.status, row.condition = proposed.status, proposed.condition
+                else:
+                    if row is not None:
+                        db.delete(row)
+                    proposed = None
+            company.name = proposed.company_name if ruc_lookup_enabled and proposed else values["company_name"]
             profile = db.get(CompanyProfile, company.id)
             if profile is None:
                 profile = CompanyProfile(company_id=company.id)

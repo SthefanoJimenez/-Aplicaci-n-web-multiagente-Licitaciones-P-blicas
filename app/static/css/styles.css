@@ -3073,6 +3073,85 @@ details.table-view summary {
     overflow-wrap: anywhere;
 }
 
+.profile-identity {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.profile-identity .profile-email {
+    margin: 0;
+}
+
+.profile-panel .profile-password {
+    margin-top: 4px;
+}
+
+.profile-password .button {
+    min-height: 44px;
+}
+
+.profile-entry-feedback:empty {
+    margin: 0;
+}
+
+.profile-panel input[type="text"][aria-invalid="true"],
+.profile-panel textarea[aria-invalid="true"] {
+    color: var(--bad);
+    border-color: var(--bad);
+}
+
+.profile-panel input[aria-invalid="true"]:focus,
+.profile-panel textarea[aria-invalid="true"]:focus,
+.profile-panel .ruc-input:has(input[aria-invalid="true"]):focus-within {
+    box-shadow: 0 0 0 3px var(--bad-tint);
+}
+
+.profile-privacy {
+    flex: none;
+}
+
+.profile-privacy > summary {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    color: var(--seal);
+    cursor: pointer;
+    list-style: none;
+}
+
+.profile-privacy > summary:hover,
+.profile-privacy[open] > summary {
+    background: var(--seal-tint);
+}
+
+.profile-privacy svg {
+    width: 19px;
+    height: 19px;
+}
+
+.profile-privacy-note {
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 100%;
+    inset-inline-start: 0;
+    inline-size: max-content;
+    max-inline-size: 100%;
+    margin: 2px 0 0;
+    padding: 8px 12px;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow);
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
 .profile-panel textarea {
     max-width: 100%;
     resize: vertical;
@@ -3082,6 +3161,63 @@ details.table-view summary {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 24px;
+}
+
+.ruc-input {
+    display: flex;
+    border: 1.5px solid var(--rule-strong);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.ruc-input:focus-within {
+    border-color: var(--seal);
+    box-shadow: var(--focus);
+}
+
+.ruc-input:has(input[aria-invalid="true"]) {
+    border-color: var(--bad);
+}
+
+.ruc-input input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    border-radius: 7px;
+    box-shadow: none;
+}
+
+.ruc-input .ruc-consult {
+    flex: none;
+    border: 0;
+    border-inline-start: 1px solid var(--rule-strong);
+    border-radius: 0 7px 7px 0;
+    padding: 0 14px;
+    background: var(--surface);
+    color: var(--seal);
+    cursor: pointer;
+    font: 700 14px/1.25 var(--font);
+}
+
+.ruc-consult:hover:not(:disabled) {
+    background: var(--seal-tint);
+}
+
+.ruc-consult:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--seal);
+}
+
+.ruc-consult:disabled {
+    color: var(--ink-3);
+    cursor: not-allowed;
+}
+
+#ruc-lookup-feedback:empty {
+    margin: 0;
+}
+
+.profile-panel #company_name[readonly] {
+    background: var(--paper);
 }
 
 .amount-input {
@@ -3189,7 +3325,8 @@ details.table-view summary {
 }
 
 .nav-account a,
-.nav-signout {
+.nav-signout,
+.nav-account-trigger {
     color: var(--ink-2);
     background: transparent;
     border: 0;
@@ -3201,7 +3338,7 @@ details.table-view summary {
 }
 
 .nav-account a:hover,
-.nav-signout:hover {
+.nav-account-trigger:hover {
     color: var(--ink);
     background: var(--paper);
 }
@@ -3211,10 +3348,72 @@ details.table-view summary {
     background: var(--seal-tint);
 }
 
-.nav-session {
-    margin: 0;
+.nav-account-menu {
+    position: relative;
+}
+
+.nav-account-trigger {
     display: flex;
     align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    list-style: none;
+}
+
+.nav-account-trigger::-webkit-details-marker,
+.profile-privacy > summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-account-trigger svg {
+    width: 18px;
+    height: 18px;
+    flex: none;
+}
+
+.nav-account-trigger .nav-account-chevron {
+    width: 14px;
+    height: 14px;
+}
+
+.nav-account-menu[open] > summary,
+.nav-account-menu:has(a[aria-current="page"]) > summary {
+    color: var(--seal);
+    background: var(--seal-tint);
+}
+
+.nav-account-menu[open] .nav-account-chevron {
+    transform: rotate(180deg);
+}
+
+.nav-account-dropdown {
+    position: absolute;
+    z-index: 8;
+    inset-inline-end: 0;
+    inset-block-start: calc(100% + 6px);
+    display: grid;
+    min-inline-size: 176px;
+    padding: 6px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.nav-session {
+    margin: 0;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+}
+
+.nav-signout {
+    width: 100%;
+    text-align: start;
+    color: var(--bad);
+}
+
+.nav-signout:hover {
+    background: var(--bad-tint);
 }
 
 .nav-account .nav-help {
@@ -3402,6 +3601,10 @@ details.table-view summary {
         grid-row: 2;
         justify-content: flex-start;
         flex-wrap: wrap;
+    }
+
+    .nav-account:has(.nav-account-menu) {
+        justify-content: flex-end;
     }
 
     .topbar-inner .nav {

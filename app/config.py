@@ -27,6 +27,10 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or None
 # Vacía = comparte DATABASE_URL; si tampoco existe, usa app/instance/cuentas.sqlite3.
 ACCOUNTS_DATABASE_URL = os.environ.get("ACCOUNTS_DATABASE_URL", "").strip() or None
 
+# Autocompletado del perfil: sin token se conserva el ingreso manual.
+MIAPI_RUC_TOKEN = os.environ.get("MIAPI_RUC_TOKEN", "").strip()
+MIAPI_RUC_DAILY_LIMIT = os.environ.get("MIAPI_RUC_DAILY_LIMIT", "20")
+
 # Nombre de cliente para la API OCDS. Por defecto, el de un navegador: desde el 28/10/2026 el
 # portal responde 403 a "LicitaFacil-SP005" (SP-006). Decisión del PO, registrada como riesgo.
 OCDS_USER_AGENT = os.environ.get("OCDS_USER_AGENT", "").strip() or (

@@ -17,7 +17,7 @@ def main():
             "SECRET_KEY": secrets.token_hex(32), "GEMINI_API_KEY": "", "LANGSMITH_API_KEY": "",
             "LANGCHAIN_API_KEY": "", "LANGSMITH_TRACING": "false", "LANGCHAIN_TRACING_V2": "false",
             "SMTP_HOST": "", "SMTP_USERNAME": "", "SMTP_PASSWORD": "", "SMTP_FROM": "", "PUBLIC_BASE_URL": "",
-            "RESEND_API_KEY": "", "EMAIL_FROM": "", "EMAIL_TRANSPORT": "smtp"}
+            "RESEND_API_KEY": "", "EMAIL_FROM": "", "EMAIL_TRANSPORT": "smtp", "MIAPI_RUC_TOKEN": ""}
         # La copia de pruebas local no necesita las cookies Secure del entorno Render.
         environment.pop("RENDER", None)
         result = subprocess.run([sys.executable, "-m", "pytest", "-q", *sys.argv[1:]],
