@@ -341,6 +341,13 @@ def validate_profile(form):
         except InvalidOperation:
             values[key] = raw
             errors[key] = "Escriba un monto mayor o igual a cero, sin separadores de miles y con hasta dos decimales."
+    # Opcionales (19/11/2026): quién postula, qué ofrece y en qué registros del RNP está inscrita.
+    supplier_type = form.get("supplier_type", "").strip()
+    if supplier_type and supplier_type not in accounts.SUPPLIER_TYPES:
+        errors["supplier_type"] = "Elija si postula como empresa o como persona natural."
+    values["supplier_type"] = supplier_type if supplier_type in accounts.SUPPLIER_TYPES else ""
+    values["categories"] = [c for c in accounts.CATEGORY_LABELS if c in form.getlist("categories")]
+    values["rnp_registers"] = [r for r in accounts.RNP_REGISTERS if r in form.getlist("rnp_registers")]
     years = form.get("experience_years", "").strip()
     if not re.fullmatch(r"\d{1,3}", years) or int(years) > 200:
         values["experience_years"] = years
@@ -368,4 +375,6 @@ def profile():
             values = accounts.get_profile(store(), g.current_user["id"])
     except SQLAlchemyError:
         return _service_unavailable()
-    return render_template("auth/profile.html", errors=errors, values=values, next_url=target), (400 if errors else 200)
+    return render_template("auth/profile.html", errors=errors, values=values, next_url=target,
+                           supplier_types=accounts.SUPPLIER_TYPES, category_labels=accounts.CATEGORY_LABELS,
+                           rnp_registers=accounts.RNP_REGISTERS), (400 if errors else 200)

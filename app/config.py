@@ -39,9 +39,19 @@ OCDS_MONTHS = int(os.environ.get("OCDS_MONTHS", "").strip() or "2")
 
 # Rubros piloto (familia UNSPSC): 1510 combustibles y 2510 vehículos.
 PILOT_RUBROS = tuple(r.strip() for r in os.environ.get("PILOT_RUBROS", "1510,2510").split(",") if r.strip())
-# RUBROS_INGESTA=todos: la ingesta guarda los bienes vigentes de TODOS los rubros que trae la API. Sin ella,
-# solo los piloto y los solicitados (EN-011). La lectura de bases atiende primero a piloto y solicitados.
-ALL_RUBROS = os.environ.get("RUBROS_INGESTA", "").strip().lower() == "todos"
+# RUBROS_INGESTA: qué rubros (familias UNSPSC) guarda la ingesta, dentro de las categorías de CATEGORIAS_INGESTA.
+#   todos (por defecto desde el 20/11/2026): las vigentes de TODOS los rubros que trae la API, de bienes,
+#     servicios y obras. La lectura de bases atiende primero a piloto y solicitados.
+#   solicitados: solo los piloto y los solicitados por las empresas (EN-011). Como los piloto son de bienes,
+#     servicios y obras solo entran si se solicita alguno de sus rubros.
+RUBROS_MODE = os.environ.get("RUBROS_INGESTA", "").strip().lower() or "todos"
+ALL_RUBROS = RUBROS_MODE not in ("solicitados", "piloto")
+# Categorías que guarda la ingesta: bienes, servicios y obras (pedido del asesor, 19/11/2026). Con
+# CATEGORIAS_INGESTA=bienes se vuelve al alcance anterior. Los rubros (piloto, solicitados o todos) se
+# aplican dentro de cada categoría.
+_CATEGORY_NAMES = ("bienes", "servicios", "obras")
+CATEGORIES = tuple(c for c in (p.strip().lower() for p in os.environ.get("CATEGORIAS_INGESTA", ",".join(_CATEGORY_NAMES)).split(","))
+                   if c in _CATEGORY_NAMES) or _CATEGORY_NAMES
 
 # RAG de las bases (EN-012). Modelo de embeddings de Gemini y tamaño del vector: 768 es una de las
 # dimensiones que recomienda Google para gemini-embedding-001 (por defecto entrega 3072).
@@ -55,6 +65,12 @@ RAG_MAX_BASES_MB = int(os.environ.get("RAG_MAX_BASES_MB", "").strip() or "250")
 # HU-018: cuántos cronogramas lee cada ingesta (bases nuevas o cuya etapa cambió). Se leen sin OCR y
 # sin Gemini; las que no alcanzan quedan para la siguiente ejecución.
 SCHEDULE_MAX_PER_RUN = int(os.environ.get("CRONOGRAMA_MAX_POR_EJECUCION", "").strip() or "60")
+# Bases que se leen a la vez (20/11/2026). Casi todo el tiempo es la descarga desde el SEACE, así que varias
+# a la vez acortan la lectura. 1 = una por una, como antes. Más de 8 no se permite, para no saturar al SEACE.
+RAG_WORKERS = min(8, max(1, int(os.environ.get("RAG_HILOS", "").strip() or "1")))
+# Tope de fragmentos por minuto que se envían a Gemini para los vectores (0 = sin tope: se aprende con el
+# primer 429). El límite es por proyecto de Google y se ve en https://aistudio.google.com/rate-limit.
+GEMINI_VECTORS_PER_MINUTE = max(0, int(os.environ.get("GEMINI_VECTORES_POR_MINUTO", "").strip() or "0"))
 
 # Recuperación por correo. Resend por HTTPS permite operar en Render Free,
 # que bloquea los puertos SMTP habituales. No se habilita sin configuración.

@@ -182,7 +182,7 @@ def test_tenders_screen_displays_required_fields_and_disclaimers(client, seed_te
     assert "3 días" in html
 
     # Aclaración del departamento de la entidad compradora
-    assert "El departamento mostrado corresponde a la sede de la entidad compradora convocante" in html
+    assert "El departamento es el de la entidad que convoca" in html and 'class="note-quiet"' in html
 
     # Enlace al SEACE
     assert "https://seace.gob.pe/doc/1001_bases.pdf" in html

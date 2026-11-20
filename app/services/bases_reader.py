@@ -17,7 +17,7 @@ from services import bases_download, schedule
 # pypdf avisa por cada diccionario repetido de los PDF del SEACE; no afecta la lectura
 logging.getLogger("pypdf").setLevel(logging.ERROR)
 
-READABLE_SUFFIXES = (".pdf", ".docx")
+READABLE_SUFFIXES = (".pdf", ".docx", ".doc")
 SCANNED_CHARS_PER_PAGE = 200      # menos en promedio = PDF escaneado (SP-005)
 CHARS_PER_TOKEN = 4               # estimación del SP-005
 SHORT_SECTION_TOKENS = 150        # menos suele ser una línea del índice (SP-006, 28/10)
@@ -30,8 +30,10 @@ NEXT_SECTION_PATTERN = re.compile(r"\n\s*(cap[ií]tulo|anexo|secci[oó]n)\s|\n\s
 # "PROPUESTA DE": en algunas bases el requerimiento titula "10.1. PROPUESTA DE REQUISITOS DE CALIFICACIÓN"
 # (hallado con --diagnosticar-bases en la base 1248982 del SP-005, página 32).
 # Numeración con coma: el OCR lee "10." como "10," y "10.1" como "10,1" (base 1262730, página 33, 03/11/2026).
+# Puntos repetidos tras el numeral: "XVI... REQUISITOS DE CALIFICACIÓN OBLIGATORIOS" (base 1266149, página 34,
+# 20/11/2026). Hasta 3: los índices usan 4 o más (INDEX_LEADERS) y esas líneas se descartan aparte.
 HEADING_PREFIX = re.compile(r"(^|\n)[ \t|\-–—()\[\]!_*•]*(cap[ií]tulo[ \t]+[ivx0-9]+[ \t]*[:.\-–]?[ \t]*)?"
-                            r"([0-9]+([.,][0-9]+)*[.,]?|[a-z]\.|[ivx]+\.)?[ \t]*(propuesta[ \t]+de[ \t]+)?$", re.I)
+                            r"([0-9]+([.,][0-9]+)*[.,]{0,3}|[a-z]\.|[ivx]+[.,]{1,3})?[ \t]*(propuesta[ \t]+de[ \t]+)?$", re.I)
 
 
 def _spaced(word):
@@ -122,6 +124,8 @@ def documents_in(content):
         return [("bases.pdf", content)]
     if kind == "docx":
         return [("bases.docx", content)]
+    if kind == "doc":
+        return [("bases.doc", content)]
     if kind == "zip":
         try:
             with zipfile.ZipFile(io.BytesIO(content)) as archive:
@@ -466,12 +470,51 @@ class DocumentText:
         return page
 
 
+def legacy_word_text(data):
+    """Texto de un Word 97-2003 (.doc), o None si esta computadora no tiene con qué convertirlo.
+
+    Lo publican algunas entidades (base 1265987, 20/11/2026). Se prueba, en orden: textutil (viene con
+    macOS), antiword y LibreOffice (soffice). En Windows sin LibreOffice queda None: la base sigue
+    «no legible» y se reintenta en otra computadora.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        source = Path(tmp) / "bases.doc"
+        source.write_bytes(data)
+        target = Path(tmp) / "bases.txt"
+        commands = []
+        if shutil.which("textutil"):
+            commands.append([shutil.which("textutil"), "-convert", "txt", "-encoding", "UTF-8",
+                             "-output", str(target), str(source)])
+        if shutil.which("antiword"):
+            commands.append([shutil.which("antiword"), "-m", "UTF-8.txt", str(source)])
+        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        if soffice:
+            # Perfil propio: dos soffice a la vez con el mismo perfil fallan (la lectura usa varios hilos)
+            commands.append([soffice, f"-env:UserInstallation={Path(tmp, 'perfil').as_uri()}", "--headless",
+                             "--convert-to", "txt:Text (encoded):UTF8", "--outdir", tmp, str(source)])
+        for command in commands:
+            try:
+                done = subprocess.run(command, capture_output=True, timeout=120)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if done.returncode != 0:
+                continue
+            raw = target.read_bytes() if target.exists() else done.stdout   # antiword escribe en la salida
+            text = raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+            if text.strip():
+                return text
+    return None
+
+
 def document_text(name, data, use_ocr, word_images=False):
     """DocumentText de un PDF o Word, o None si no se puede abrir.
 
     word_images: en un Word, además lee con OCR sus imágenes (algunas entidades pegan el Capítulo III
     como fotos: base 1255879, 03/11/2026). El texto de las imágenes va al final, en su orden.
     """
+    if name.lower().endswith(".doc"):
+        text = legacy_word_text(data)
+        return DocumentText(name=name, text=text, starts=[]) if text else None
     if name.lower().endswith(".docx"):
         try:
             text = docx_text(data)

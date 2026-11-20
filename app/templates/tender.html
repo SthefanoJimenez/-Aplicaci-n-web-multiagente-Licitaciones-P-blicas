@@ -26,6 +26,7 @@
     <figcaption>Datos de la convocatoria</figcaption>
     <dl>
       <div><dt>Código</dt><dd class="mono">{{ tender.code }}</dd></div>
+      <div><dt>Objeto</dt><dd data-category="{{ tender.category }}">{{ {"bienes": "Bienes", "servicios": "Servicios", "obras": "Obras"}.get(tender.category, "Bienes") }}</dd></div>
       {% if tender.method %}<div><dt>Procedimiento</dt><dd>{{ tender.method }}</dd></div>{% endif %}
       <div><dt>Departamento</dt><dd>{{ (tender.department or "—")|place }} <span class="muted small">(sede de la entidad)</span></dd></div>
       {% if rubros %}<div><dt>Rubro</dt><dd>{{ rubros|join(", ") }}</dd></div>{% endif %}
@@ -73,24 +74,24 @@
     </div>
     <div class="panel" data-schedule-status="{{ timeline.status or 'sin_leer' }}">
       <p class="panel-title" style="margin-top:0;"><strong>Cronograma</strong></p>
-      <h3 style="font-size:15px; margin:0 0 6px;">Según la API del OECE</h3>
+      <h3 style="font-size:15px; margin:0 0 6px;">Según el portal del OECE</h3>
       {% if timeline.enquiry or timeline.stage_documents %}
       <div class="table-wrap" data-api-dates>
         <table class="data-table">
-          <caption class="sr-only">Fechas publicadas en la API del OECE</caption>
+          <caption class="sr-only">Fechas publicadas en el portal del OECE</caption>
           <thead><tr><th scope="col">Qué</th><th scope="col">Fecha</th></tr></thead>
           <tbody>
             {% if timeline.enquiry %}
             <tr><td class="name">Plazo para formular consultas y observaciones</td><td>Del {{ timeline.enquiry.start }} al {{ timeline.enquiry.end }}</td></tr>
             {% endif %}
             {% for d in timeline.stage_documents %}
-            <tr><td class="name">Publicación de «{{ d.title }}»</td><td style="white-space:nowrap;">{{ d.published or "sin fecha en la API" }}</td></tr>
+            <tr><td class="name">Publicación de «{{ d.title }}»</td><td style="white-space:nowrap;">{{ d.published or "sin fecha" }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       {% else %}
-      <p class="muted" style="margin:0 0 8px;">La API no publica fechas de esta convocatoria.</p>
+      <p class="muted" style="margin:0 0 8px;">El portal del OECE no publica fechas de esta convocatoria.</p>
       {% endif %}
       <h3 style="font-size:15px; margin:16px 0 6px;">Según las bases</h3>
       {% if timeline.status == "leido" %}
@@ -113,16 +114,12 @@
       {% elif timeline.status in ("no_encontrado", "no_legible") %}
       <p style="margin:0 0 8px;"><strong>No se pudo leer el cronograma de las bases</strong> ({{ "las bases no tienen esa sección o no trae fechas reconocibles" if timeline.status == "no_encontrado" else "las bases no tienen texto legible" }}). Revisado el {{ timeline.read_at }}.</p>
       {% else %}
-      <p style="margin:0 0 8px;"><strong>El cronograma aún no se ha leído.</strong>{% if timeline.stage %} Se leerá de las bases en la próxima ingesta.{% endif %}</p>
+      <p style="margin:0 0 8px;"><strong>El cronograma aún no se ha leído.</strong>{% if timeline.stage %} Se leerá de las bases en la próxima actualización.{% endif %}</p>
       {% endif %}
       {% if timeline.reread_pending %}
-      <div class="notice notice-info" role="note" style="margin:8px 0;">
-        <p>La convocatoria pasó a «{{ timeline.stage_name }}»{% if timeline.stage_changed %} el {{ timeline.stage_changed }}{% endif %}. El cronograma se volverá a leer en la próxima ingesta.</p>
-      </div>
+      <p class="note-quiet" role="note">La convocatoria pasó a «{{ timeline.stage_name }}»{% if timeline.stage_changed %} el {{ timeline.stage_changed }}{% endif %}; el cronograma se volverá a leer en la próxima actualización.</p>
       {% endif %}
-      <div class="notice notice-warning" role="note" style="margin:8px 0 0;">
-        <p>El cronograma oficial es el de la ficha del SEACE y la entidad puede modificarlo, por ejemplo si absuelve las consultas fuera de plazo. Confírmelo antes de presentar consultas u ofertas.</p>
-      </div>
+      <p class="note-quiet" role="note">Las fechas oficiales son las de la ficha del SEACE y la entidad puede cambiarlas: confírmelas antes de presentar consultas u ofertas.</p>
       <p style="margin:12px 0 0;"><a href="{{ timeline.seace_search_url }}" target="_blank" rel="noopener">Ver el cronograma en el buscador del SEACE</a>{% if tender.entity %} <span class="muted small">(búsquela por la entidad: {{ tender.entity }})</span>{% endif %}</p>
     </div>
   </div>
@@ -138,11 +135,6 @@
     {% else %}Las bases vienen en Word, que no tiene números de página: ubique la sección por su título.{% endif %}
     Antes de postular, verifíquelos en las bases oficiales.
   </p>
-  {% if reqs.source == "ocr" %}
-  <div class="notice notice-info" role="note" style="margin:12px 0;">
-    <p>El texto de estas bases venía como imagen y se leyó con reconocimiento óptico (OCR): puede tener letras o números mal reconocidos.</p>
-  </div>
-  {% endif %}
   {% for block in reqs.blocks %}
   <article class="panel requirements-page" style="margin-top:12px;">
     {% if block.page %}<p style="margin:0 0 8px;"><span class="chip">Página {{ block.page }}</span></p>{% endif %}
@@ -156,7 +148,7 @@
   </article>
   {% endfor %}
   {% else %}
-  <div class="notice notice-warning" role="status" style="margin-top:12px;" data-requirements-status="{{ reqs.status }}">
+  <div class="panel" role="status" style="margin-top:12px;" data-requirements-status="{{ reqs.status }}">
     <p><strong>{{ reqs.title }}</strong> {{ reqs.detail }}</p>
     {% if seace_url %}
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">

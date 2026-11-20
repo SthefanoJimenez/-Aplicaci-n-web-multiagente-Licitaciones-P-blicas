@@ -12,7 +12,7 @@ from app import app, format_number, format_percent
 from services import data, llm
 
 CEMENT_I = 12771    
-WIRE_MESH = 1414    
+WIRE_MESH = 315597   # malla de alambre galvanizada: 7 adjudicaciones con 2023-2026 (20/11/2026)    
 TRACKSUIT = 392753    
 NONEXISTENT = 999999
 

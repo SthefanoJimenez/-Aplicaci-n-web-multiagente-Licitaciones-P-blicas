@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -138,7 +137,8 @@ def test_word_bases_have_no_page_numbers_and_the_sheet_says_so(indexed, client):
     assert 'class="chip">Página' not in page
 
 
-def test_ocr_requirements_carry_a_warning(factory, client):
+def test_ocr_requirements_show_without_technical_notice(factory, client):
+    """20/11/2026: el aviso del OCR confundía al cliente; los requisitos se muestran igual, sin ese aviso."""
     seed(factory, codes=("1001",))
     with factory.begin() as session:
         tender = session.query(db.Tender).one()
@@ -147,7 +147,7 @@ def test_ocr_requirements_carry_a_warning(factory, client):
                                                  source="ocr", file_name="bases.pdf", embedding=fake_embed(["x"])[0],
                                                  model="prueba", tokens_est=5))
     _status, page = sheet(client, "1001")
-    assert "Página 33" in page and "reconocimiento óptico (OCR)" in page and "bases.pdf" in page
+    assert "Página 33" in page and "bases.pdf" in page and "OCR" not in page and "reconocimiento óptico" not in page
 
 
 def test_the_list_links_each_tender_to_its_sheet(indexed, client):

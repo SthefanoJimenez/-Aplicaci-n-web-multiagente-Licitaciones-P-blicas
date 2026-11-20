@@ -42,9 +42,15 @@ def use_session_factory(factory):
     _factory = factory
 
 
+def category_of(row):
+    """bienes, servicios u obras. Las guardadas antes del 19/11/2026 no tienen categoría y eran solo bienes."""
+    return getattr(row, "category", None) or "bienes"
+
+
 def _to_contract(row):
     return tender_contract.Tender(
         ocid=row.ocid, code=row.code, title=row.title, entity=row.entity, method=row.method,
+        category=category_of(row),
         rubros=row.rubros.split() if row.rubros else [], state=row.state, description=row.description,
         department=row.department, published_at=as_utc(row.published_at), deadline_at=as_utc(row.deadline_at),
         estimated_value=row.estimated_value, currency=row.currency, item_status=row.item_status,
@@ -64,21 +70,31 @@ def _to_contract(row):
     )
 
 
-def open_tenders(rubro=None, method=None, department=None):
-    """Convocatorias vigentes, de la más reciente a la más antigua; con filtros opcionales."""
+def _postulable_rows(session, method=None, department=None):
+    query = (select(db.Tender).where(db.Tender.state == "vigente")
+             .options(selectinload(db.Tender.documents), selectinload(db.Tender.requirements))
+             .order_by(db.Tender.published_at.desc()))
+    if method:
+        query = query.where(db.Tender.method == method)
+    if department:
+        query = query.where(db.Tender.department == department)
+    # Las guardadas antes de excluir contrataciones directas y comparaciones de precios dejan de
+    # ser vigentes en la siguiente ingesta; mientras tanto, tampoco se muestran
+    return [r for r in session.scalars(query).all()
+            if ocds_source.is_postulable(r.method) and r.stage != schedule.BUENA_PRO]
+
+
+def open_tenders(rubro=None, method=None, department=None, category=None, categories=None):
+    """Convocatorias vigentes, de la más reciente a la más antigua; con filtros opcionales.
+
+    category: "bienes", "servicios" u "obras"; categories: varias (las que ofrece la empresa).
+    """
+    wanted = {category} if category else set(categories or ())
     try:
         with _session_factory()() as session:
-            query = (select(db.Tender).where(db.Tender.state == "vigente")
-                     .options(selectinload(db.Tender.documents), selectinload(db.Tender.requirements))
-                     .order_by(db.Tender.published_at.desc()))
-            if method:
-                query = query.where(db.Tender.method == method)
-            if department:
-                query = query.where(db.Tender.department == department)
-            # Las guardadas antes de excluir contrataciones directas y comparaciones de precios dejan de
-            # ser vigentes en la siguiente ingesta; mientras tanto, tampoco se muestran
-            rows = [r for r in session.scalars(query).all()
-                    if ocds_source.is_postulable(r.method) and r.stage != schedule.BUENA_PRO]
+            rows = _postulable_rows(session, method, department)
+            if wanted:
+                rows = [r for r in rows if category_of(r) in wanted]
             if rubro == "sin":          # bienes sin código de rubro en la API (RUBROS_INGESTA=todos)
                 rows = [r for r in rows if not (r.rubros or "").split()]
             elif rubro:
@@ -88,15 +104,39 @@ def open_tenders(rubro=None, method=None, department=None):
         raise TendersUnavailable("sin_conexion") from e
 
 
-def rubro_options(fallback):
-    """[(código, etiqueta)] del filtro de rubros: los piloto y los solicitados activos (EN-011).
+def category_counts():
+    """{categoría: vigentes postulables}, en el orden bienes, servicios, obras."""
+    try:
+        with _session_factory()() as session:
+            rows = _postulable_rows(session)
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+    counts = {name: 0 for name in ocds_source.CATEGORIES}
+    for row in rows:
+        counts[category_of(row)] = counts.get(category_of(row), 0) + 1
+    return counts
 
-    Si la base no responde, el filtro muestra solo los piloto (fallback).
+
+def method_options(category=None):
+    """Tipos de procedimiento postulables que hay en la base (no una lista escrita en el código)."""
+    try:
+        with _session_factory()() as session:
+            rows = _postulable_rows(session)
+    except SQLAlchemyError as e:
+        raise TendersUnavailable("sin_conexion") from e
+    return sorted({r.method for r in rows if r.method and (not category or category_of(r) == category)})
+
+
+def rubro_options(fallback, category=None):
+    """[(código, etiqueta)] del filtro de rubros, de los que tienen más vigentes a los que tienen menos.
+
+    category: solo los rubros con vigentes de ese objeto. Si la base no responde, el filtro muestra solo
+    los piloto (fallback).
     """
     from services import rubros
     try:
         with _session_factory()() as session:
-            return rubros.options(session)
+            return rubros.options(session, category)
     except (TendersUnavailable, SQLAlchemyError):
         return list(fallback)
 
@@ -123,17 +163,26 @@ def request_rubro(code, company=""):
         raise TendersUnavailable("sin_conexion") from e
 
 
-def rubro_catalog():
-    """Filas de la pantalla de rubros: el catálogo con vigentes guardadas y estado de cada rubro."""
+def rubro_catalog(category=None):
+    """Filas de la pantalla de rubros: el catálogo con vigentes guardadas y estado de cada rubro.
+
+    category (20/11/2026): solo los rubros con vigentes de bienes, servicios u obras, de mayor a menor.
+    """
     from services import rubros
     try:
         with _session_factory()() as session:
-            counts = rubros.open_counts(session)
+            counts = rubros.open_counts(session, category)
             first = set(rubros.ingestion_rubros(session))
             requested = set(rubros.requested_codes(session))
             all_names = rubros.names(session)
-            rows = [(r.code, r.tenders_month) for r in rubros.catalog(session)]
-            rows += [(code, 0) for code in rubros.ingestion_rubros(session) if code not in {c for c, _ in rows}]
+            month = {r.code: r.tenders_month for r in rubros.catalog(session)}
+            if category:
+                rows = [(code, month.get(code, 0)) for code in counts if code != rubros.NO_RUBRO]
+            else:
+                rows = [(r.code, r.tenders_month) for r in rubros.catalog(session)]
+                rows += [(code, 0) for code in rubros.ingestion_rubros(session) if code not in month]
+                seen = {code for code, _ in rows}
+                rows += [(code, 0) for code in counts if code not in seen and code != rubros.NO_RUBRO]
     except SQLAlchemyError as e:
         raise TendersUnavailable("sin_conexion") from e
     import config

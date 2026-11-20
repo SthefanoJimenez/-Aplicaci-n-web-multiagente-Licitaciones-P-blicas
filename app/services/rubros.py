@@ -92,12 +92,19 @@ def requests_table(session):
     return [(r.code, r.name, r.company, r.requested_at, r.active) for r in rows]
 
 
-def open_counts(session):
-    """{rubro: convocatorias vigentes guardadas}, de mayor a menor."""
+def open_counts(session, category=None):
+    """{rubro: convocatorias vigentes guardadas}, de mayor a menor (empate: por código).
+
+    category: solo las de bienes, servicios u obras (las anteriores sin categoría cuentan como bienes).
+    """
     from collections import Counter
-    counts = Counter(code for text in session.scalars(select(db.Tender.rubros).where(db.Tender.state == "vigente"))
+    from sqlalchemy import func
+    query = select(db.Tender.rubros).where(db.Tender.state == "vigente")
+    if category:
+        query = query.where(func.coalesce(db.Tender.category, "bienes") == category)
+    counts = Counter(code for text in session.scalars(query)
                      for code in (set((text or "").split()) or {NO_RUBRO}))
-    return dict(counts.most_common())
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
 def names(session):
@@ -133,17 +140,20 @@ def _with_count(label, count):
     return f"{label} · {count} vigente{'s' if count != 1 else ''}"
 
 
-def options(session):
-    """[(código, etiqueta)] del filtro de la pantalla de convocatorias (HU-013): el catálogo completo.
+def options(session, category=None):
+    """[(código, etiqueta)] del filtro de la pantalla de convocatorias (HU-013).
 
-    Orden: piloto y solicitados, luego el catálogo de mayor a menor, luego (con RUBROS_INGESTA=todos)
-    los rubros con vigentes que no están en el catálogo, y al final los bienes sin rubro. Cada etiqueta
-    dice cuántas vigentes hay guardadas o "sin datos" (entonces la pantalla ofrece solicitarlo).
+    Orden (20/11/2026): los rubros con más convocatorias vigentes primero, hasta los que tienen menos; luego
+    los del catálogo y los piloto o solicitados que hoy no tienen vigentes ("sin datos": la pantalla ofrece
+    solicitarlo), y al final las convocatorias sin rubro. Los piloto ya no van primero.
+    category: con un objeto elegido (bienes, servicios u obras), solo los rubros que tienen vigentes de ese
+    objeto, con su conteo.
     """
-    all_names, counts = names(session), open_counts(session)
-    codes = ingestion_rubros(session)
-    codes += [r.code for r in catalog(session) if r.code not in codes]
-    codes += [c for c in counts if c not in codes and c != NO_RUBRO]
+    all_names, counts = names(session), open_counts(session, category)
+    codes = [c for c in counts if c != NO_RUBRO]
+    if not category:
+        codes += [r.code for r in catalog(session) if r.code not in counts]
+        codes += [c for c in ingestion_rubros(session) if c not in codes]
     result = [(code, _with_count(_label(code, all_names), counts.get(code, 0))) for code in codes]
     if counts.get(NO_RUBRO):
         result.append((NO_RUBRO, _with_count(NO_RUBRO_LABEL, counts[NO_RUBRO])))
@@ -153,14 +163,16 @@ def options(session):
 # ---------------------------------------------------------------------------
 # Catálogo de rubros (HU-013)
 # ---------------------------------------------------------------------------
-CATALOG_DAYS = 30          # "el último mes": convocatorias de bienes publicadas en los últimos 30 días
+CATALOG_DAYS = 30          # "el último mes": convocatorias publicadas en los últimos 30 días
 NAME_EXAMPLES = 2          # cuántas descripciones UNSPSC forman el nombre del rubro
 
 
 def catalog_from_rows(rows, now, days=CATALOG_DAYS):
-    """[(rubro, nombre, convocatorias)] de los bienes publicados en los últimos `days` días, de mayor a menor.
+    """[(rubro, nombre, convocatorias)] de lo publicado en los últimos `days` días, de mayor a menor.
 
-    Cuenta todas las convocatorias de bienes (vigentes o no). La API no publica el nombre de la familia
+    Cuenta todas las convocatorias (vigentes o no) de las categorías de la ingesta: bienes, servicios y
+    obras (config.CATEGORIES). Los servicios y las obras también usan familias UNSPSC (p. ej. 7214,
+    construcción de edificios); una misma familia puede tener convocatorias de servicios y de obras. La API no publica el nombre de la familia
     UNSPSC: el nombre se arma con las descripciones UNSPSC más frecuentes de sus ítems, por ejemplo
     "Microscopios invertidos, balanzas analíticas".
     """
@@ -170,7 +182,7 @@ def catalog_from_rows(rows, now, days=CATALOG_DAYS):
     since = now - timedelta(days=days)
     tenders, descriptions = Counter(), defaultdict(Counter)
     for row in rows:
-        if not ocds_source.is_goods(row) or not row.get("ocid"):
+        if not ocds_source.in_categories(row) or not row.get("ocid"):
             continue
         published = ocds_source.parse_date(row.get("published"))
         if published is None or published < since:

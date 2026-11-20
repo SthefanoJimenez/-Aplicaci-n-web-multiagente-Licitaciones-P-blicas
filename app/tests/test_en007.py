@@ -18,6 +18,13 @@ import fake_ocds
 from app import app
 from services import db, ingest, ocds_source, tender_contract, tenders
 
+
+@pytest.fixture(autouse=True)
+def _alcance_de_bienes(monkeypatch):
+    """Estas pruebas son del alcance original (solo bienes) y usan servicios como caso excluido.
+    Servicios y obras se prueban en tests/test_categorias_servicios_obras.py."""
+    monkeypatch.setattr(config, "CATEGORIES", ("bienes",))
+
 LIMA = ocds_source.LIMA
 NOW = datetime(2026, 10, 30, 8, 30, tzinfo=LIMA)
 

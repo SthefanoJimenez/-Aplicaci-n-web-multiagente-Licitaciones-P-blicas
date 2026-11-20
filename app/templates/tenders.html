@@ -3,20 +3,27 @@
 {% block title %}Convocatorias vigentes{% endblock %}
 {% block page_class %}page-tenders{% endblock %}
 {% block content %}
-<h1 class="page-title">Convocatorias vigentes de bienes</h1>
-<p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado en los rubros piloto y en los que solicitan las empresas. Los datos provienen del portal de Contrataciones Abiertas (OCDS) del OECE y se actualizan diariamente.</p>
+<h1 class="page-title">{% if for_me %}Convocatorias para mi empresa{% elif f.category %}Convocatorias vigentes de {{ categories[f.category]|lower }}{% else %}Convocatorias vigentes de bienes, servicios y obras{% endif %}</h1>
+<p class="page-lead">Oportunidades de contratación en curso para proveedores del Estado. Los datos provienen del portal de Contrataciones Abiertas del OECE y se actualizan diariamente.</p>
 
 {% include "_tenders_notice.html" %}
 
-<div class="notice" role="note" style="margin-top:16px;">
-  <p><strong>Aviso sobre la ubicación:</strong> El departamento mostrado corresponde a la sede de la entidad compradora convocante, no necesariamente al lugar final de entrega de los bienes.</p>
-</div>
+<p class="note-quiet" role="note">El departamento es el de la entidad que convoca; la entrega, el servicio o la obra pueden realizarse en otro lugar.</p>
 
 <form class="filters tender-filters" method="get" action="{{ url_for('tenders_list') }}" aria-label="Filtros de convocatorias vigentes" style="margin-top:24px;">
   <div>
+    <label for="f-category">Objeto</label>
+    <select id="f-category" name="categoria" data-category-filter>
+      <option value="">Bienes, servicios y obras</option>
+      {% for key, label in categories.items() %}
+      <option value="{{ key }}" {% if f.category == key %}selected{% endif %}>{{ label }}{% if category_counts %} · {{ category_counts.get(key, 0) }} vigente{{ 's' if category_counts.get(key, 0) != 1 }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
     <label for="f-rubro">Rubro</label>
     <select id="f-rubro" name="rubro">
-      <option value="">Todos los rubros</option>
+      <option value="">Todos los rubros{% if f.category %} de {{ categories[f.category]|lower }}{% endif %}</option>
       {% for code, label in pilot_rubros %}
       <option value="{{ code }}" {% if f.rubro == code %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -40,9 +47,15 @@
       {% endfor %}
     </select>
   </div>
+  {% if current_user %}
+  <div>
+    <span class="label">Mi empresa</span>
+    <label style="display:block; margin-top:8px;"><input type="checkbox" name="para_mi" value="1" {% if for_me %}checked{% endif %} data-for-me> Solo a las que puedo postular</label>
+  </div>
+  {% endif %}
   <div class="tender-filter-actions">
     <button type="submit" class="button button-primary">Aplicar</button>
-    {% if f.rubro or f.department or f.method %}
+    {% if f.rubro or f.department or f.method or f.category or f.for_me %}
     <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Limpiar</a>
     {% endif %}
   </div>
@@ -71,7 +84,7 @@
   <div class="panel" style="margin-top:16px;" data-rubro-request>
     <p style="margin:0 0 8px;"><strong>El rubro {{ rubro_info.code }}{% if rubro_info.name %} · {{ rubro_info.name }}{% endif %} aún no tiene convocatorias cargadas.</strong></p>
     <p class="muted" style="margin:0 0 12px;">
-      {% if rubro_info.tenders_month %}En el último mes se publicaron {{ rubro_info.tenders_month }} convocatorias de bienes de este rubro.{% endif %}
+      {% if rubro_info.tenders_month %}En el último mes se publicaron {{ rubro_info.tenders_month }} convocatorias de este rubro.{% endif %}
       Si es lo que usted vende, solicítelo: desde la siguiente actualización diaria se descargarán sus convocatorias vigentes.
     </p>
     <form method="post" action="{{ url_for('request_rubro') }}" class="filters" style="margin:0; padding:0; border:0; grid-template-columns:minmax(0,360px) auto; justify-content:start;">
@@ -95,10 +108,23 @@
   {% endif %}
 {% endif %}
 
+{% if match %}
+<div class="panel" style="margin-top:16px;" data-match-summary>
+  <p style="margin:0 0 8px;"><strong>Su empresa es candidata en {{ match.counts.verde }} convocatoria{{ 's' if match.counts.verde != 1 }} por sí sola y en {{ match.counts.amarillo }} con atención</strong> (falta un dato, un documento o el aporte de un consorcio). En {{ match.counts.rojo }} no cumple ni en consorcio.</p>
+  <p class="muted small" style="margin:0;">
+    Alcance según <a href="{{ url_for('auth.profile') }}">Mi empresa</a>:
+    {% if match.scope.categories %}{{ match.scope.categories|map('capitalize')|join(', ') }}{% else %}todas las categorías (no declaró qué ofrece){% endif %}
+    · {% if match.scope.rubros %}rubros {% for r in match.scope.rubros %}{{ r.code }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}todos los rubros (no se reconoció un rubro en su perfil){% endif %}.
+    Ordenadas: primero verde, luego amarillo y rojo; dentro de cada color, la que vence antes.
+    {% if match.skipped %}Se evaluaron las {{ match.rows|length }} más recientes; {{ match.skipped }} más del mismo alcance quedan sin evaluar: use los filtros para acotar.{% endif %}
+  </p>
+</div>
+{% endif %}
+
 <div class="section">
   <div class="tender-results-heading">
     <h2 class="section-title">Resultados ({{ total_items }} convocatorias vigentes)</h2>
-    <span class="muted small">Ordenadas de la más reciente a la más antigua</span>
+    <span class="muted small">{% if match %}Ordenadas por semáforo{% else %}Ordenadas de la más reciente a la más antigua{% endif %}</span>
   </div>
 
   {% if tenders %}
@@ -129,6 +155,7 @@
         <tr>
           <td>
             <span class="chip">{{ t.code or t.ocid }}</span>
+            {% if t.category_label %}<br><span class="tag tag-category tag-category-{{ t.category }}" data-category="{{ t.category }}">{{ t.category_label }}</span>{% endif %}
             {% if t.method %}<br><span class="muted small">{{ t.method }}</span>{% endif %}
           </td>
           <td>
@@ -215,14 +242,14 @@
   {% else %}
   <div class="panel" style="text-align:center; padding:48px 24px;">
     <p class="lead" style="margin:0 0 8px;"><strong>No se encontraron convocatorias vigentes con los filtros seleccionados.</strong></p>
-    <p class="muted" style="margin:0 0 16px;">Intente seleccionando otro rubro o quitando el filtro de departamento.</p>
+    <p class="muted" style="margin:0 0 16px;">{% if for_me %}No hay vigentes de lo que su empresa ofrece con estos filtros. Revise sus categorías y rubros en Mi empresa o quite el filtro «Solo a las que puedo postular».{% else %}Intente seleccionando otro rubro u objeto, o quitando el filtro de departamento.{% endif %}</p>
     <a class="button button-secondary" href="{{ url_for('tenders_list') }}">Ver todas las convocatorias vigentes</a>
   </div>
   {% endif %}
   {% if total_pages > 1 %}<nav class="eligibility-pagination" aria-label="Páginas de convocatorias">
-    {% if page_number > 1 %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number-1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Anterior</a>{% endif %}
+    {% if page_number > 1 %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number-1, rubro=f.rubro, departamento=f.department, metodo=f.method, categoria=f.category, para_mi=f.for_me) }}">Anterior</a>{% endif %}
     <span>Página {{ page_number }} de {{ total_pages }}</span>
-    {% if page_number < total_pages %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number+1, rubro=f.rubro, departamento=f.department, metodo=f.method) }}">Siguiente</a>{% endif %}
+    {% if page_number < total_pages %}<a class="button button-secondary" href="{{ url_for('tenders_list', pagina=page_number+1, rubro=f.rubro, departamento=f.department, metodo=f.method, categoria=f.category, para_mi=f.for_me) }}">Siguiente</a>{% endif %}
   </nav>{% endif %}
   {% if eligibility_error %}<p class="notice notice-warning" role="status">{{ eligibility_error }}</p>{% endif %}
 </div>
@@ -244,6 +271,14 @@
 </div>
 
 <script>
+// Al cambiar el objeto, el filtro de rubros se recarga con los rubros de ese objeto (20/11/2026)
+document.querySelectorAll('[data-category-filter]').forEach(select => {
+  select.addEventListener('change', () => {
+    const form = select.form;
+    if (form && form.elements.rubro) form.elements.rubro.value = '';
+    if (form) form.submit();
+  });
+});
 document.querySelectorAll('[data-copy-search]').forEach(btn => {
   btn.addEventListener('click', () => {
     const code = btn.dataset.code || '';

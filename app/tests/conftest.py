@@ -21,6 +21,30 @@ class FormClient(FlaskClient):
         return super().post(*args, data=values, **kwargs)
 
 
+@pytest.fixture(autouse=True)
+def _configuracion_de_pruebas(monkeypatch):
+    """Las pruebas no dependen del .env de cada equipo (20/11/2026).
+
+    - Rubros: desde el 20/11/2026 la ingesta guarda todos por defecto (RUBROS_INGESTA=todos). Las pruebas de
+      EN-007, EN-011 y HU-012 cuentan con el modo de piloto y solicitados; las que prueban «todos» lo activan
+      con monkeypatch.setattr(config, "ALL_RUBROS", True).
+    - Lectura de bases: los valores por defecto (25 bases, 60 cronogramas, una a la vez), aunque el .env diga
+      RAG_MAX_BASES_PER_RUN=0, CRONOGRAMA_MAX_POR_EJECUCION=0 o RAG_HILOS=6. Las pruebas en paralelo pasan
+      workers explícitamente (SQLite en memoria no se comparte entre hilos).
+    """
+    import config
+    monkeypatch.setattr(config, "ALL_RUBROS", False)
+    monkeypatch.setattr(config, "CATEGORIES", ("bienes", "servicios", "obras"))
+    monkeypatch.setattr(config, "RAG_MAX_BASES_PER_RUN", 25)
+    monkeypatch.setattr(config, "SCHEDULE_MAX_PER_RUN", 60)
+    monkeypatch.setattr(config, "RAG_WORKERS", 1)
+    # Sin las esperas de Gemini (hasta 3,5 min): las pruebas que las necesitan las fijan en 0 s.
+    from services import rag
+    monkeypatch.setattr(rag, "EMBED_WAITS", ())
+    monkeypatch.setattr(rag, "_PACE", rag._GeminiPace())
+    monkeypatch.setattr("ingest_job.RAG_STOPPED", False)
+
+
 @pytest.fixture
 def account_factory(tmp_path, monkeypatch):
     from app import app

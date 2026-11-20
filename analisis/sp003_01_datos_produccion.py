@@ -1,8 +1,11 @@
 """SP-003 · Actividad 3: definir qué datos se despliegan en producción y medir su tamaño.
 
-Genera en datos/produccion/ los dos archivos que usará la aplicación:
-  - catalogo.csv         bienes que el clasificador puede sugerir (mínimo de SP-002)
-  - adjudicaciones.csv   compras de esos bienes, solo con las columnas que usa el analista
+Genera en datos/produccion/ los dos archivos que usará la aplicación (con el nombre que tienen en app/data/):
+  - catalog.csv   bienes que el clasificador puede sugerir (mínimo de SP-002)
+  - awards.csv    compras de esos bienes, solo con las columnas que usa el analista (con la unidad de medida,
+                  que el analista usa para filtrar; 20/11/2026: antes faltaba y se agregaba a mano)
+
+Para agregar un año sin los Excel anteriores, use en003_04_agregar_anio.py (ya genera estos dos).
 
 Uso:  python sp003_01_datos_produccion.py
 """
@@ -24,12 +27,12 @@ catalogo = grupos.loc[
 ]
 
 # Adjudicaciones: solo las de bienes del catálogo y solo las columnas que usa el analista
-COLUMNAS = ["codigoitem", "anio", "codigoconvocatoria", "precio_unitario",
+COLUMNAS = ["codigoitem", "unidad_medida", "anio", "codigoconvocatoria", "precio_unitario",
             "n_postores", "entidad_departamento"]
 adjudicaciones = analitica.loc[analitica["codigoitem"].isin(catalogo["codigoitem"]), COLUMNAS].copy()
 adjudicaciones["n_postores"] = adjudicaciones["n_postores"].astype("Int64")
 
-archivos = {"catalogo.csv": catalogo, "adjudicaciones.csv": adjudicaciones}
+archivos = {"catalog.csv": catalogo, "awards.csv": adjudicaciones}
 filas = []
 for nombre, tabla in archivos.items():
     ruta = PRODUCCION / nombre

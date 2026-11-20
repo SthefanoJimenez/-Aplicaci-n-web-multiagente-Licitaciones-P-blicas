@@ -230,7 +230,7 @@ def test_de_bases_administrativas_a_integradas(factory, source):
     assert row.stage == "absolucion" and row.schedule_due is True and row.schedule_status == "leido"
     html = sheet()
     assert 'aria-current="step">Absolución de consultas y observaciones' in html
-    assert "El cronograma se volverá a leer en la próxima ingesta." in html
+    assert "el cronograma se volverá a leer en la próxima actualización." in html
     assert "21 nov 2026" in html                                       # se conserva la lectura anterior
     assert 'Publicación de «Pliego de absolución de consultas y observaciones»</td><td style="white-space:nowrap;">12 nov 2026, 08:30' in html
     assert "Del 4 nov 2026, 00:01 al 6 nov 2026, 23:59" in html            # plazo de consultas de la API

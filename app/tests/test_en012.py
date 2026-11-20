@@ -1,4 +1,3 @@
-
 import hashlib
 import io
 import os
@@ -507,7 +506,7 @@ def test_bases_diagnosis_and_reread_options(tmp_path, monkeypatch, capsys):
     assert "Documento leído: Bases Administrativas (pdf)" in out
     assert statuses(factory)["1003"] == "seccion_no_encontrada"            # el diagnóstico no guarda nada
     assert ingest_job.main_with(["--releer-sin-seccion"]) == 0
-    assert "1 bases sin la sección vuelven a quedar pendientes" in capsys.readouterr().out
+    assert "1 bases sin la sección o no legibles vuelven a quedar pendientes" in capsys.readouterr().out
     engine.dispose()
 
 

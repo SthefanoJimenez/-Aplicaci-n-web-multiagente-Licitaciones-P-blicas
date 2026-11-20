@@ -10,11 +10,13 @@ import rules
 import auth
 import documents
 import consortium
+import staff_views
 from agents import classifier, evaluator, writer
 from services import analytics, bases_download, charts, data, llm, schedule, tenders
 from services import accounts, company_documents, eligibility, eligibility_chat, eligibility_store
 from services.formatting import format_amount, format_pen, format_pen_total, format_quantity, markdown, unit_text
 from services.chat_formatting import render_assistant_text
+from services.ocds_source import CATEGORY_LABELS
 
 
 app = Flask(__name__)
@@ -22,12 +24,14 @@ app.secret_key = config.SECRET_KEY
 auth.init_app(app)
 documents.init_app(app)
 consortium.init_app(app)
+staff_views.init_app(app)
 
 
 @app.context_processor
 def common_context():
     return {"app_name": config.APP_NAME, "max_length": config.MAX_DESCRIPTION_LENGTH,
-            "chat_history": _chat_state()[0] if g.get("current_user") else []}
+            "chat_history": _chat_state()[0] if g.get("current_user") else [],
+            "data_period": data.PERIOD, "data_period_words": data.PERIOD_WORDS, "data_last_award": data.LAST_AWARD}
 
 
 app.template_filter("pen")(format_pen)
@@ -389,15 +393,25 @@ PILOT_RUBRO_OPTIONS = [
 
 @app.get("/convocatorias")
 def tenders_list():
-    """Pantalla de convocatorias vigentes de bienes en los rubros piloto y los solicitados (EN-011)."""
+    """Convocatorias vigentes de bienes, servicios y obras de los rubros de la ingesta (EN-011).
+
+    para_mi=1 (con sesión): solo lo que ofrece la empresa, evaluado y ordenado por semáforo
+    (services/matching.py, pedido del asesor del 19/11/2026).
+    """
+    from services import matching
     rubro = request.args.get("rubro", "").strip() or None
     department = request.args.get("departamento", "").strip().upper() or None
     request_notice = request.args.get("solicitud")        # "ok" o "invalida", tras «Solicitar este rubro»
     method = request.args.get("metodo", "").strip() or None
+    category = request.args.get("categoria", "").strip().lower()
+    category = category if category in CATEGORY_LABELS else None
+    for_me = bool(g.get("current_user")) and request.args.get("para_mi") == "1"
 
     tenders_state = tenders.availability()
     items = []
     rubro_info = None
+    category_counts, methods = {}, []
+    match = None
     if tenders_state["ok"] and rubro and rubro != "sin":
         try:
             rubro_info = tenders.rubro_status(rubro)       # HU-013: ¿tiene datos? ¿se puede solicitar?
@@ -405,7 +419,12 @@ def tenders_list():
             rubro_info = None
     if tenders_state["ok"]:
         try:
-            raw_tenders = tenders.open_tenders(rubro=rubro, method=method, department=department)
+            raw_tenders = tenders.open_tenders(rubro=rubro, method=method, department=department, category=category)
+            category_counts = tenders.category_counts()
+            methods = tenders.method_options(category)
+            if for_me:
+                match = matching.candidates(auth.store(), g.current_user["id"], raw_tenders)
+                raw_tenders = [t for t, _ in match["rows"]]
             now_utc = datetime.now(timezone.utc)
             for t in raw_tenders:
                 item_dict = {
@@ -415,6 +434,8 @@ def tenders_list():
                     "entity": t.entity,
                     "department": t.department,
                     "method": t.method,
+                    "category": t.category,
+                    "category_label": CATEGORY_LABELS.get(t.category, ""),
                     "rubros": t.rubros,
                     "published_at": t.published_at,
                     "deadline_at": t.deadline_at,
@@ -422,31 +443,26 @@ def tenders_list():
                     "estimated_value": t.estimated_value,
                     "seace_url": tenders.seace_url(t),
                     "bases_label": bases_download.declared_label(tenders.bases_format(t)),
-                    "catalog_code": tenders.match_catalog_item(t.title or t.description),
+                    # La ficha de precios históricos existe solo para bienes (precio unitario por CUBSO)
+                    "catalog_code": tenders.match_catalog_item(t.title or t.description) if t.category == "bienes" else None,
                 }
                 items.append(item_dict)
-        except tenders.TendersUnavailable:
+        except (tenders.TendersUnavailable, SQLAlchemyError, ValueError):
             # Antes se ignoraba y la pantalla decía «0 convocatorias vigentes» (13/11/2026): ahora avisa
             tenders_state = dict(tenders_state, ok=False, reason="sin_conexion")
+            match = None
 
-    # Métodos y departamentos disponibles para los filtros
     total_items = len(items)
     page_number = max(1, request.args.get("pagina", 1, type=int) or 1)
     items = items[(page_number - 1) * 50:page_number * 50]
     eligibility_results, eligibility_error = {}, None
-    if g.get("current_user") and items:
+    if match:
+        eligibility_results = {str(t.code): r for t, r in match["rows"]}
+    elif g.get("current_user") and items:
         try:
             eligibility_results = eligibility.evaluate_many(auth.store(), g.current_user["id"], [t["code"] for t in items if t["code"]])
         except (SQLAlchemyError, tenders.TendersUnavailable, ValueError):
             eligibility_error = "No se pudo consultar la elegibilidad de su empresa; intente de nuevo."
-    method_options = [
-        "Subasta Inversa Electrónica",
-        "Licitación Pública Abreviada",
-        "Licitación Pública",
-        "Concurso Público Abreviado",
-        "Concurso Público",
-        "Adjudicación Simplificada",
-    ]
 
     return render_template(
         "tenders.html",
@@ -454,12 +470,15 @@ def tenders_list():
         eligibility_results=eligibility_results, eligibility_error=eligibility_error,
         total_items=total_items, page_number=page_number, total_pages=max(1, (total_items + 49) // 50),
         tenders_state=tenders_state,
-        pilot_rubros=tenders.rubro_options(PILOT_RUBRO_OPTIONS),   # catálogo completo de rubros (HU-013)
+        pilot_rubros=tenders.rubro_options(PILOT_RUBRO_OPTIONS, category or None),   # de más a menos vigentes
         rubro_info=rubro_info,
         request_notice=request_notice,
         departments=analytics.DEPARTMENTS,
-        methods=method_options,
-        f={"rubro": rubro or "", "department": department or "", "method": method or ""},
+        methods=methods,
+        categories=CATEGORY_LABELS, category_counts=category_counts,
+        match=match, for_me=for_me,
+        f={"rubro": rubro or "", "department": department or "", "method": method or "",
+           "category": category or "", "for_me": "1" if for_me else ""},
     )
 
 
@@ -480,9 +499,12 @@ def request_rubro():
 
 @app.get("/rubros")
 def rubro_catalog():
-    """Catálogo de rubros (HU-013): todas las familias UNSPSC con convocatorias de bienes del último mes."""
+    """Catálogo de rubros (HU-013): familias UNSPSC con convocatorias de bienes, servicios y obras del último
+    mes. Filtro «Objeto» (20/11/2026): solo los rubros con vigentes de bienes, servicios u obras."""
+    category = request.args.get("categoria", "").strip().lower()
+    category = category if category in CATEGORY_LABELS else ""
     try:
-        rows = tenders.rubro_catalog()
+        rows = tenders.rubro_catalog(category or None)
         state = {"ok": True}
     except tenders.TendersUnavailable:
         rows, state = [], {"ok": False}
@@ -490,7 +512,8 @@ def rubro_catalog():
     if query:
         needle = query.lower()
         rows = [r for r in rows if needle in r["code"] or needle in (r["name"] or "").lower()]
-    return render_template("rubros.html", rows=rows, state=state, q=query)
+    return render_template("rubros.html", rows=rows, state=state, q=query, category=category,
+                           categories=CATEGORY_LABELS)
 
 
 @app.get("/convocatorias/estado")

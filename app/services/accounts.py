@@ -48,7 +48,28 @@ class CompanyProfile(AccountBase):
     experience_years: Mapped[int] = mapped_column(Integer)
     similar_contracts_amount: Mapped[Decimal] = mapped_column(Numeric(16, 2))
     specialized_staff: Mapped[str] = mapped_column(Text)
+    # 19/11/2026 (asesor): quién postula y qué ofrece. Vacíos en los perfiles anteriores.
+    supplier_type: Mapped[str | None] = mapped_column(String(20), nullable=True)   # SUPPLIER_TYPES
+    categories: Mapped[str | None] = mapped_column(String(40), nullable=True)      # "bienes servicios obras"
+    rnp_registers: Mapped[str | None] = mapped_column(String(80), nullable=True)   # RNP_REGISTERS, separados por espacio
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+# Quién postula. El consorcio no es un tipo de cuenta: se forma en /consorcio con otras cuentas.
+SUPPLIER_TYPES = {"empresa": "Empresa (persona jurídica)",
+                  "persona_natural": "Persona natural (profesional o especialista independiente)"}
+CATEGORY_LABELS = {"bienes": "Bienes", "servicios": "Servicios", "obras": "Obras"}
+# Registros del RNP según la Directiva de procedimientos y trámites ante el RNP del OECE (2025):
+# proveedor de bienes, proveedor de servicios, ejecutor de obras y consultor de obras.
+RNP_REGISTERS = {"bienes": "Proveedor de bienes", "servicios": "Proveedor de servicios",
+                 "ejecutor_obras": "Ejecutor de obras", "consultor_obras": "Consultor de obras"}
+PROFILE_EXTRA_COLUMNS = {"supplier_type": "VARCHAR(20)", "categories": "VARCHAR(40)", "rnp_registers": "VARCHAR(80)"}
+
+
+def split_choices(text, allowed):
+    """'bienes obras' → ['bienes', 'obras'] en el orden de allowed; ignora lo desconocido."""
+    found = set(str(text or "").split())
+    return [key for key in allowed if key in found]
 
 
 class CompanyProduct(AccountBase):
@@ -103,11 +124,17 @@ def valid_ruc(value):
 
 def initialize_schema(engine, *, password_management=False):
     """Migración aditiva e idempotente de cuentas existentes en SQLite o PostgreSQL."""
+    from services import staff  # noqa: F401  (registra la tabla personal_empresa en AccountBase)
     optional = {PasswordReset.__table__, RecoveryThrottle.__table__}
     tables = None if password_management else [table for table in AccountBase.metadata.sorted_tables
                                                 if table not in optional]
     AccountBase.metadata.create_all(engine, tables=tables)
     with engine.begin() as connection:
+        # Perfil: tipo de proveedor, categorías y registros del RNP (19/11/2026). Columnas que admiten vacío.
+        profile_columns = {column["name"] for column in inspect(connection).get_columns("perfiles_empresa")}
+        for name, kind in PROFILE_EXTRA_COLUMNS.items():
+            if name not in profile_columns:
+                connection.exec_driver_sql(f"ALTER TABLE perfiles_empresa ADD COLUMN {name} {kind}")
         columns = {column["name"] for column in inspect(connection).get_columns("empresas")}
         if "ruc" not in columns:
             optional = " IF NOT EXISTS" if engine.dialect.name == "postgresql" else ""
@@ -289,6 +316,9 @@ def get_profile(factory, user_id):
             for field in ("business_activity", "rubros", "monthly_sales", "experience_years",
                           "similar_contracts_amount", "specialized_staff"):
                 values[field] = getattr(profile, field)
+            values["supplier_type"] = profile.supplier_type or ""
+            values["categories"] = split_choices(profile.categories, CATEGORY_LABELS)
+            values["rnp_registers"] = split_choices(profile.rnp_registers, RNP_REGISTERS)
         return values
 
 
@@ -357,6 +387,13 @@ def save_profile(factory, user_id, values):
             for key in ("business_activity", "rubros", "monthly_sales", "experience_years",
                         "similar_contracts_amount", "specialized_staff"):
                 setattr(profile, key, values[key])
+            # Opcionales: un formulario anterior que no los envía no los borra.
+            if "supplier_type" in values:
+                profile.supplier_type = values["supplier_type"] if values["supplier_type"] in SUPPLIER_TYPES else None
+            if "categories" in values:
+                profile.categories = " ".join(split_choices(" ".join(values["categories"]), CATEGORY_LABELS)) or None
+            if "rnp_registers" in values:
+                profile.rnp_registers = " ".join(split_choices(" ".join(values["rnp_registers"]), RNP_REGISTERS)) or None
     except IntegrityError as error:
         if "ruc" in str(error.orig).lower():
             raise RucTaken("Este RUC ya está asociado a otra cuenta.") from error

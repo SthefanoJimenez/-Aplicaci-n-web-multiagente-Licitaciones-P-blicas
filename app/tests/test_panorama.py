@@ -76,7 +76,9 @@ def test_overview_and_data_screens(client, no_model):
     filtered = client.get("/panorama?anio=2024&lugar=LA+LIBERTAD").get_data(as_text=True)
     assert "Mostrando: 2024, La Libertad" in filtered
     html = client.get("/datos").get_data(as_text=True)
-    assert "60,024" in html and "199,985" in html
+    analytic = f"{len(data.AWARDS_DETAIL):,}"                       # filas de la tabla analítica
+    integrated = f"{int(data.CLEANING_FUNNEL['filas'].iloc[0]):,}"     # adjudicaciones de la tabla integrada
+    assert analytic in html and integrated in html and data.PERIOD in html
 
 
 def test_good_sheet_is_separate_from_the_evaluation_flow(client, no_model):

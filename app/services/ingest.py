@@ -3,13 +3,13 @@
 Una ejecución:
 1. registra el inicio en "actualizaciones";
 2. descarga los archivos mensuales de la API OCDS (mes actual y anterior, configurable);
-3. se queda con los bienes vigentes (algún ítem CONVOCADO) de los rubros de la ingesta: los piloto
-   más los que solicitaron las empresas (EN-011, services/rubros.py), o de todos los rubros si
-   RUBROS_INGESTA=todos;
+3. se queda con las convocatorias vigentes (algún ítem CONVOCADO) de bienes, servicios y obras
+   (config.CATEGORIES, CATEGORIAS_INGESTA) de los rubros de la ingesta: los piloto más los que
+   solicitaron las empresas (EN-011, services/rubros.py), o de todos los rubros si RUBROS_INGESTA=todos;
 4. en UNA transacción: crea o actualiza cada convocatoria por ocid, agrega sus documentos y
    pasa a "no_vigente" las que la fuente ya no trae vigentes (no se borran);
 5. registra el resultado, los conteos de OE8 y cuántas vigentes quedaron guardadas por rubro, y rehace
-   el catálogo de rubros con las convocatorias de bienes del último mes (HU-013).
+   el catálogo de rubros con las convocatorias del último mes de esas categorías (HU-013).
 
 Si la fuente falla o algo sale mal a mitad, la transacción se deshace: quedan los datos de la
 ejecución anterior y la ejecución figura como "fallida" con su error.
@@ -31,13 +31,15 @@ def as_utc(value):
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def pilot_open_rows(rows, now, rubros=None):
-    """(bienes vigentes de todo el país, vigentes de los rubros pedidos) según las reglas del SP-005.
+def pilot_open_rows(rows, now, rubros=None, categories=None):
+    """(vigentes de todo el país, vigentes de los rubros pedidos) según las reglas del SP-005.
 
-    rubros: los de la ingesta; si no se indican, los piloto.
+    rubros: los de la ingesta; si no se indican, los piloto. categories: bienes, servicios u obras;
+    si no se indican, las de config.CATEGORIES. El nombre open_goods se conserva por compatibilidad:
+    desde el 19/11/2026 incluye servicios y obras.
     """
     rubros = set(rubros or config.PILOT_RUBROS)
-    open_goods = [r for r in rows if ocds_source.is_goods(r) and ocds_source.is_open(r, now)]
+    open_goods = [r for r in rows if ocds_source.in_categories(r, categories) and ocds_source.is_open(r, now)]
     pilot = [r for r in open_goods if set(ocds_source.rubros_of(r)) & rubros and r.get("ocid")]
     return open_goods, pilot
 
@@ -73,6 +75,7 @@ def _apply_row(tender, row, now, run_id):
     tender.entity = row.get("entity")
     tender.department = row.get("department")
     tender.method = row.get("method")
+    tender.category = ocds_source.category_of(row)
     tender.rubros = " ".join(ocds_source.rubros_of(row))
     tender.item_status = (row.get("item_status") or None)
     tender.published_at = as_utc(ocds_source.parse_date(row.get("published")))
@@ -233,9 +236,10 @@ def run_ingestion(session_factory, now=None, fetch=None, months=None, rubros=Non
         return {"run_id": run_id, "status": "fallida", "error": f"{type(error).__name__}: {error}", "rubros": codes}
 
     new_by_rubro = count_by_rubro(new_rubros, codes, all_rubros)
+    by_category = {name: sum(1 for r in pilot if ocds_source.category_of(r) == name) for name in config.CATEGORIES}
     return {"run_id": run_id, "status": "ok", "source_open_goods": len(open_goods), "source_open_pilot": len(pilot),
             "saved_open": saved_open, "new": new_count, "updated": updated_count, "closed": closed_count,
             "documents_added": documents_added, "stage_changes": stage_changes, "skipped_months": skipped, "rubros": codes, "all_rubros": all_rubros,
-            "catalog": catalog_size,
+            "catalog": catalog_size, "categories": list(config.CATEGORIES), "by_category": by_category,
             # por rubro: (vigentes en la fuente, vigentes guardadas tras la ejecución, nuevas en esta ejecución)
             "by_rubro": {c: (source_by_rubro[c], saved_by_rubro[c], new_by_rubro[c]) for c in saved_by_rubro}}

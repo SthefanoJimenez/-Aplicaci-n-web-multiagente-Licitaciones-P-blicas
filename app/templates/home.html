@@ -3,7 +3,6 @@
 {% block title %}Venda al Estado con datos{% endblock %}
 {% block page_class %}page-home{% endblock %}
 {% block content %}
-{% set y0, y1 = s.years %}
 
 {# ------------------------------------------------------------------ Portada #}
 <section class="hero" aria-labelledby="hero-title">
@@ -11,7 +10,7 @@
     <div class="hero-copy">
       <p class="pill">
         <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 011.4-1.4L8 12.6l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd"/></svg>
-        Datos abiertos del OECE, {{ y0 }}–{{ y1 }}
+        Datos abiertos del OECE
       </p>
       <h1 class="hero-title" id="hero-title">Sepa si le conviene venderle al Estado antes de preparar su propuesta</h1>
       <p class="hero-lead">Use el perfil de su empresa para elegir su producto y comparar su costo con lo que el Estado pagó por el mismo bien. Vea dónde se compra, qué entidades lo compran, quiénes ganan y por qué montos. No necesita saber de analítica.</p>
@@ -193,7 +192,7 @@
       <ol class="verify-steps">
         <li><strong>Descargue las compras</strong><span>Desde el panorama o la ficha de cualquier bien, en CSV, con los mismos filtros que está viendo.</span></li>
         <li><strong>Ubique el proceso en el SEACE</strong><span>Con la entidad, la fecha de la buena pro y la nomenclatura del proceso, en el buscador público del SEACE.</span></li>
-        <li><strong>Compare con la fuente</strong><span>Los archivos de adjudicaciones, convocatorias y postores {{ y0 }}–{{ y1 }} del <a href="https://www.gob.pe/14272-acceder-al-portal-de-datos-abiertos-del-oece" rel="noopener">portal de datos abiertos del OECE</a>.</span></li>
+        <li><strong>Compare con la fuente</strong><span>Los archivos de adjudicaciones, convocatorias y postores del <a href="https://www.gob.pe/14272-acceder-al-portal-de-datos-abiertos-del-oece" rel="noopener">portal de datos abiertos del OECE</a>.</span></li>
       </ol>
       <div class="hero-actions" style="margin-top:24px">
         <a class="button button-secondary" href="{{ url_for('data_preparation') }}">Cómo preparamos los datos</a>

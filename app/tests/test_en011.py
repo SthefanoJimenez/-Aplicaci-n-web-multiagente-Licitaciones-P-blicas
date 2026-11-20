@@ -20,6 +20,13 @@ import fake_ocds
 from app import app
 from services import db, ingest, ocds_source, rubros, tenders
 
+
+@pytest.fixture(autouse=True)
+def _alcance_de_bienes(monkeypatch):
+    """Estas pruebas son del alcance original (solo bienes) y usan servicios como caso excluido.
+    Servicios y obras se prueban en tests/test_categorias_servicios_obras.py."""
+    monkeypatch.setattr(config, "CATEGORIES", ("bienes",))
+
 LIMA = ocds_source.LIMA
 NOW = datetime(2026, 11, 6, 8, 30, tzinfo=LIMA)
 
@@ -263,17 +270,22 @@ def test_all_rubros_mode_also_saves_goods_without_a_classification_code(factory,
         tenders.use_session_factory(None)
 
 
-def test_all_rubros_mode_reads_bases_of_pilots_and_requests_first(factory, source, monkeypatch):
+def test_all_rubros_mode_no_longer_reads_pilots_and_requests_first(factory, source, monkeypatch):
+    """20/11/2026: con todos los rubros, los piloto y solicitados ya no van primero; la lectura sigue
+    la fecha (y reparte entre bienes, servicios y obras). Con RUBROS_INGESTA=solicitados sí van primero."""
     from services import rag
     monkeypatch.setattr(config, "ALL_RUBROS", True)
     run(factory, source)
-    with factory() as session:
-        codes = [session.get(db.Tender, i).code for i in rag.pending_ids(session, None)]
-    assert set(codes[:3]) == {"201", "202", "208"}                           # 1510 y 2510 primero
     request(factory, "4111")
     with factory() as session:
         codes = [session.get(db.Tender, i).code for i in rag.pending_ids(session, None)]
-    assert set(codes[:4]) == {"201", "202", "205", "208"} and set(codes[4:]) == {"203", "204", "209"}
+        newest_first = [t.code for t in session.query(db.Tender).filter_by(state="vigente")
+                        .order_by(db.Tender.published_at.desc(), db.Tender.id.desc())]
+    assert codes == [c for c in newest_first if c in codes]          # todas son bienes: solo cuenta la fecha
+    monkeypatch.setattr(config, "ALL_RUBROS", False)
+    with factory() as session:
+        codes = [session.get(db.Tender, i).code for i in rag.pending_ids(session, None)]
+    assert set(codes[:4]) == {"201", "202", "205", "208"}            # piloto y solicitado (4111) primero
 
 
 def test_all_rubros_summary_shows_the_largest_and_totals_the_rest(tmp_path, monkeypatch, capsys, source):
@@ -287,10 +299,10 @@ def test_all_rubros_summary_shows_the_largest_and_totals_the_rest(tmp_path, monk
         factory, now=NOW, fetch=lambda n, m: ocds_source.fetch_rows(n, m, session=session), months=2, trigger=trigger))
     assert ingest_job.main_with(["--sin-rag"]) == 0
     out = capsys.readouterr().out
-    assert "rubros: todos los de bienes (prioridad: 1510, 2510)" in out
+    assert "rubros: todos ·" in out and "prioridad" not in out
     assert "- 3011: 3 guardadas" in out                                     # el mayor de los demás
     assert "- … y 2 rubros más con 2 vigentes guardadas" in out
-    assert "Cobertura: 7 de 7 bienes vigentes de la fuente, en 5 rubros · todos cargados." in out
+    assert "Cobertura: 7 de 7 vigentes de la fuente, en 5 rubros · todos cargados." in out
     assert ingest_job.main_with(["--solicitar-rubro", "4229"]) == 0
     assert "hoy ya hay 1 vigente guardada de este rubro" in capsys.readouterr().out
     assert ingest_job.main_with(["--solicitar-rubro", "9999"]) == 0

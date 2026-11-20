@@ -37,6 +37,15 @@ AWARDS_DETAIL = pd.read_csv(
            "entidad": "string", "provincia_entrega": "string", "departamento_entrega": "string"},
 )
 
+# Período de los datos (20/11/2026: se agregó 2026, con las buenas pro publicadas hasta mediados de
+# noviembre). Los textos de la app lo toman de aquí, no de un año escrito a mano.
+YEAR_FROM = int(AWARDS_DETAIL["anio"].min())
+YEAR_TO = int(AWARDS_DETAIL["anio"].max())
+PERIOD = f"{YEAR_FROM}-{YEAR_TO}"                 # "2023-2026"
+PERIOD_WORDS = f"{YEAR_FROM} y {YEAR_TO}"         # "entre 2023 y 2026"
+_LAST = pd.to_datetime(AWARDS_DETAIL["fecha_buenapro"], errors="coerce").max()
+LAST_AWARD = _LAST.strftime("%d/%m/%Y") if pd.notna(_LAST) else None     # última buena pro incluida
+
 # Pasos de limpieza de EN-003 y calidad por año (DO-002), para "Cómo preparamos los datos"
 CLEANING_FUNNEL = pd.read_csv(DATA_DIR / "cleaning_funnel.csv")
 DATA_QUALITY = pd.read_csv(DATA_DIR / "data_quality.csv")

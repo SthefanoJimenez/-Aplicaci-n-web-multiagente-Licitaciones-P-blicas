@@ -1,7 +1,10 @@
 import re
+import threading
 import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from sqlalchemy import case, or_, select
+from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import selectinload
 
 import config
@@ -68,23 +71,119 @@ def _download(url, fetch):
     return b"".join(file.chunks)
 
 
-def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
+# Ritmo de Gemini para los vectores (20/11/2026). La primera ejecución con 6 bases a la vez se detuvo en la
+# base 34 por un 429 (límite por minuto: un vector de prueba funcionaba al mismo tiempo, y el límite es por
+# proyecto, no por clave). Ahora el ritmo se aprende solo, sin tocar RAG_HILOS:
+# - todos los hilos piden vectores por un mismo turno (_PACE), que cuenta los fragmentos enviados en el último
+#   minuto;
+# - con un 429, todos esperan (EMBED_WAITS) y el tope pasa a ~80 % de lo que se envió en el último minuto;
+#   con cada respuesta correcta el tope sube de a 1;
+# - GEMINI_VECTORES_POR_MINUTO fija un tope desde el inicio (por ejemplo, el que muestra AI Studio);
+# - si una base sigue sin vectores tras todas las esperas (unos 5,5 min), la lectura se detiene como antes
+#   y lo pendiente queda para la próxima ejecución; con una clave inválida (400/401/403), de inmediato.
+EMBED_WAITS = (30, 60, 60, 60, 60, 60)
+MIN_PER_MINUTE = 10
+STOP_NOW_CODES = (400, 401, 403)
+
+
+class _GeminiPace:
+    """Turno compartido por los hilos para pedir vectores a Gemini, con un tope de fragmentos por minuto."""
+
+    def __init__(self, per_minute=None, window=60.0):
+        self.lock = threading.Lock()
+        self.window = window
+        self.sent = deque()          # (momento, fragmentos) enviados dentro de la ventana
+        self.per_minute = config.GEMINI_VECTORS_PER_MINUTE if per_minute is None else per_minute   # 0 = sin tope
+        self.paused_until = 0.0
+
+    def _used(self, now):
+        while self.sent and now - self.sent[0][0] >= self.window:
+            self.sent.popleft()
+        return sum(n for _, n in self.sent)
+
+    def wait_turn(self, n=1):
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                used = self._used(now)
+                wait = self.paused_until - now
+                if wait <= 0:
+                    if not self.per_minute or not self.sent or used + n <= self.per_minute:
+                        self.sent.append((now, n))
+                        return
+                    wait = self.sent[0][0] + self.window - now
+            time.sleep(max(wait, 0.05))
+
+    def slow_down(self, pause):
+        """Gemini respondió 429: todos esperan `pause` s y el tope baja. Devuelve (es un aviso nuevo, tope)."""
+        with self.lock:
+            now = time.monotonic()
+            new = self.paused_until <= now + 1          # no había una pausa en curso (varios hilos avisan a la vez)
+            self.paused_until = max(self.paused_until, now + pause)
+            if new:
+                guess = max(MIN_PER_MINUTE, int(self._used(now) * 0.8))
+                self.per_minute = min(self.per_minute, guess) if self.per_minute else guess
+            return new, self.per_minute
+
+    def went_well(self):
+        with self.lock:
+            if self.per_minute:
+                self.per_minute += 1
+
+
+_PACE = _GeminiPace()
+
+
+def _embed_patiently(embed, texts):
+    for wait in EMBED_WAITS + (None,):
+        _PACE.wait_turn(len(texts))
+        try:
+            vectors = embed(texts, "RETRIEVAL_DOCUMENT")
+        except llm.ModelError as e:
+            if wait is None or (e.code in STOP_NOW_CODES and "embeddings" not in str(e)):
+                raise IndexingStopped(str(e)) from e
+            new, limit = _PACE.slow_down(wait)
+            if new:
+                print(f"  Gemini pidió bajar el ritmo ({e}): las lecturas esperan {wait} s y luego envían como "
+                      f"máximo {limit} fragmentos por minuto (sube solo si Gemini responde bien)…", flush=True)
+            continue
+        _PACE.went_well()
+        return vectors
+
+
+def prepare_bases(url, fetch=None, embed=None, use_ocr=None):
+    """Lo lento de leer unas bases, sin tocar la base de datos: descarga, lectura (con OCR) y vectores.
+
+    Devuelve (resultado de la lectura, fragmentos, vectores). Lanza BasesUnavailable si no se pudo
+    descargar e IndexingStopped si Gemini no da los vectores. Separado el 20/11/2026: con las esperas por el
+    límite de Gemini, una conexión a Neon abierta durante minutos se cortaba y la base quedaba en «error».
+    """
+    fetch = fetch or (lambda u: bases_download.open_bases(u, max_bytes=config.RAG_MAX_BASES_MB * 1024 * 1024))
+    embed = embed or llm.embed_texts
+    result = bases_reader.read_bases(_download(url, fetch), use_ocr=use_ocr)
+    if result.status != "extraido":
+        return result, [], []
+    pieces = chunk_section(result.section)
+    return result, pieces, _embed_patiently(embed, [p for p, _ in pieces])
+
+
+def index_tender(session, tender, fetch=None, embed=None, use_ocr=None, prepared=None):
     """Lee las bases de una convocatoria y guarda sus fragmentos. Devuelve un resumen (dict).
 
+    prepared: lo que devolvió prepare_bases, si ya se leyó fuera de la transacción.
     Lanza IndexingStopped si Gemini no responde, para no gastar el resto de la ejecución.
     """
-    fetch = fetch or (lambda url: bases_download.open_bases(url, max_bytes=config.RAG_MAX_BASES_MB * 1024 * 1024))
-    embed = embed or llm.embed_texts
     document = _bases_of(tender)
     if document is None:
         tender.requirements_status = "no_legible"
         return {"status": "no_legible", "chunks": 0, "tokens": 0, "detail": "la convocatoria no publica bases"}
-    try:
-        content = _download(document.url, fetch)
-    except bases_download.BasesUnavailable as e:
-        tender.requirements_status = "error"
-        return {"status": "error", "chunks": 0, "tokens": 0, "detail": e.reason}
-    result = bases_reader.read_bases(content, use_ocr=use_ocr)
+    if prepared is None:
+        try:
+            prepared = prepare_bases(document.url, fetch=fetch, embed=embed, use_ocr=use_ocr)
+        except bases_download.BasesUnavailable as e:
+            tender.requirements_status = "error"
+            return {"status": "error", "chunks": 0, "tokens": 0, "detail": e.reason}
+    result, pieces, vectors = prepared
     if result.schedule is not None:          # HU-018: el cronograma sale de la misma lectura
         schedule.save(tender, result.schedule, document, db.utcnow())
     if result.status != "extraido":
@@ -104,11 +203,6 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
         return {"status": result.status, "chunks": 0, "tokens": 0, "detail": result.detail}
     tender.chunks.clear()                                   # si las bases cambiaron, se reemplaza todo
     session.flush()                                         # borra los anteriores antes de insertar (clave única)
-    pieces = chunk_section(result.section)
-    try:
-        vectors = embed([p for p, _ in pieces], "RETRIEVAL_DOCUMENT")
-    except llm.ModelError as e:
-        raise IndexingStopped(str(e)) from e
     tokens = 0
     for i, ((piece, page), vector) in enumerate(zip(pieces, vectors)):
         estimate = round(len(piece) / bases_reader.CHARS_PER_TOKEN)
@@ -121,85 +215,179 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None):
     return {"status": "extraido", "chunks": len(pieces), "tokens": tokens, "detail": result.section.source}
 
 
-def reindex_codes(session_factory, codes, fetch=None, embed=None, use_ocr=None, progress=None):
-    """Vuelve a leer las bases de las convocatorias indicadas (por ejemplo, tras mejorar el lector)."""
-    summary = {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0, "conservado": 0,
-               "chunks": 0, "tokens": 0, "stopped": None, "details": []}
-    with session_factory() as session:
-        ids = list(session.scalars(select(db.Tender.id).where(db.Tender.code.in_([str(c) for c in codes]))))
-    for number, tender_id in enumerate(ids, 1):
-        started = time.perf_counter()
-        try:
-            with session_factory.begin() as session:
-                tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents),
-                                                                    selectinload(db.Tender.chunks)])
-                result = index_tender(session, tender, fetch=fetch, embed=embed, use_ocr=use_ocr)
-                code = tender.code
-        except IndexingStopped as e:
-            summary["stopped"] = str(e)
-            break
-        summary["processed"] += 1
-        summary[result["status"]] += 1
-        summary["chunks"] += result["chunks"]
-        summary["tokens"] += result["tokens"]
-        summary["details"].append((code, result["status"], result["detail"]))
-        if progress:
-            progress(number, len(ids), code, result["status"], time.perf_counter() - started)
-    summary["remaining"] = 0
-    return summary
+def _each(ids, one, workers):
+    """Genera (resultado, segundos) de one(id) para cada id, en orden de término.
 
-
-def pending_ids(session, limit):
-    """Convocatorias vigentes por indexar. Orden: primero las de los rubros piloto y solicitados (EN-011:
-    con RUBROS_INGESTA=todos hay muchas más bases que tiempo para leerlas), luego las nuevas ("pendiente")
-    antes que las que fallaron, y de la más reciente a la más antigua."""
-    from services import rubros
-    # Los rubros se guardan como "1510 3011": todos de 4 dígitos, así que '%1510%' solo calza con 1510
-    priority = [db.Tender.rubros.like(f"%{code}%") for code in rubros.ingestion_rubros(session)]
-    first = case((or_(*priority), 0), else_=1) if priority else None
-    order = ([first] if first is not None else []) + [
-        case((db.Tender.requirements_status == "pendiente", 0), else_=1), db.Tender.published_at.desc()]
-    query = (select(db.Tender.id).where(db.Tender.state == "vigente")
-             .where(db.Tender.requirements_status.in_(RETRY_STATUSES)).order_by(*order))
-    if limit:
-        query = query.limit(limit)
-    return list(session.scalars(query))
-
-
-def index_pending(session_factory, limit=None, fetch=None, embed=None, use_ocr=None, progress=None):
-    """Indexa hasta `limit` convocatorias, cada una en su propia transacción. Devuelve el resumen.
-
-    progress(número, total, código, estado, segundos): se llama al terminar cada base, para mostrar el avance.
+    workers > 1: varias a la vez (20/11/2026). Casi todo el tiempo de una base es la descarga desde el SEACE,
+    así que leer varias a la vez acorta la ejecución. Cada una usa su propia sesión y su propia transacción.
+    Si one lanza IndexingStopped (Gemini sin cuota), no empieza ninguna más; las que estaban en curso
+    terminan y se guardan, y después sale la excepción. Con Ctrl+C pasa lo mismo.
     """
-    limit = config.RAG_MAX_BASES_PER_RUN if limit is None else limit
-    summary = {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0, "conservado": 0,
-               "chunks": 0, "tokens": 0, "stopped": None, "details": []}
-    with session_factory() as session:
-        ids = pending_ids(session, limit)
-    for number, tender_id in enumerate(ids, 1):
+    if workers <= 1:
+        for item in ids:
+            started = time.perf_counter()
+            yield one(item), time.perf_counter() - started
+        return
+    stop = threading.Event()
+
+    def guarded(item):
+        if stop.is_set():
+            return None
         started = time.perf_counter()
         try:
+            return one(item), time.perf_counter() - started
+        except IndexingStopped:
+            stop.set()
+            raise
+
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="bases")
+    stopped = None
+    try:
+        for future in as_completed([pool.submit(guarded, item) for item in ids]):
+            try:
+                outcome = future.result()
+            except IndexingStopped as e:
+                stopped = stopped or e
+                continue
+            if outcome is not None:
+                yield outcome
+    except BaseException:
+        stop.set()                      # Ctrl+C: no empieza ninguna más
+        pool.shutdown(wait=True, cancel_futures=True)
+        raise
+    pool.shutdown(wait=True)
+    if stopped is not None:
+        raise stopped
+
+
+def _workers(workers):
+    return max(1, int(config.RAG_WORKERS if workers is None else workers))
+
+
+def _new_summary():
+    return {"processed": 0, "extraido": 0, "seccion_no_encontrada": 0, "no_legible": 0, "error": 0, "conservado": 0,
+            "chunks": 0, "tokens": 0, "stopped": None, "details": []}
+
+
+def _index_ids(session_factory, ids, fetch, embed, use_ocr, progress, workers):
+    """Lee las bases de las convocatorias `ids` (cada una en su propia transacción) y devuelve el resumen."""
+    summary = _new_summary()
+
+    def one(tender_id):
+        try:
+            # 1. Dirección de las bases (consulta corta). 2. Descarga, OCR y vectores sin conexión abierta
+            # a la base: pueden tardar minutos. 3. Se guarda todo en una transacción corta.
+            with session_factory() as session:
+                tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents)])
+                document = _bases_of(tender)
+                url = document.url if document else None
+            prepared, unavailable = None, None
+            if url:
+                try:
+                    prepared = prepare_bases(url, fetch=fetch, embed=embed, use_ocr=use_ocr)
+                except bases_download.BasesUnavailable as e:
+                    unavailable = e.reason
             with session_factory.begin() as session:
                 tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents),
                                                                     selectinload(db.Tender.chunks)])
-                result = index_tender(session, tender, fetch=fetch, embed=embed, use_ocr=use_ocr)
-                code = tender.code
-        except IndexingStopped as e:
-            summary["stopped"] = str(e)
-            break
+                if unavailable is not None:
+                    tender.requirements_status = "error"
+                    return tender.code, {"status": "error", "chunks": 0, "tokens": 0, "detail": unavailable}
+                current = _bases_of(tender)
+                if prepared is not None and (current is None or current.url != url):
+                    prepared = None          # cambiaron las bases mientras se leían: se leen de nuevo aquí
+                result = index_tender(session, tender, fetch=fetch, embed=embed, use_ocr=use_ocr, prepared=prepared)
+                return tender.code, result
+        except IndexingStopped:
+            raise
         except Exception as e:      # un archivo raro no debe detener las demás: queda en "error"
             with session_factory.begin() as session:
                 tender = session.get(db.Tender, tender_id)
                 tender.requirements_status = "error"
                 code = tender.code
-            result = {"status": "error", "chunks": 0, "tokens": 0, "detail": f"{type(e).__name__}: {e}"[:200]}
-        summary["processed"] += 1
-        summary[result["status"]] += 1
-        summary["chunks"] += result["chunks"]
-        summary["tokens"] += result["tokens"]
-        summary["details"].append((code, result["status"], result["detail"]))
-        if progress:
-            progress(number, len(ids), code, result["status"], time.perf_counter() - started)
+            return code, {"status": "error", "chunks": 0, "tokens": 0, "detail": f"{type(e).__name__}: {e}"[:200]}
+
+    try:
+        for number, ((code, result), seconds) in enumerate(_each(ids, one, _workers(workers)), 1):
+            summary["processed"] += 1
+            summary[result["status"]] += 1
+            summary["chunks"] += result["chunks"]
+            summary["tokens"] += result["tokens"]
+            summary["details"].append((code, result["status"], result["detail"]))
+            if progress:
+                progress(number, len(ids), code, result["status"], seconds)
+    except IndexingStopped as e:
+        summary["stopped"] = str(e)
+    return summary
+
+
+def reindex_codes(session_factory, codes, fetch=None, embed=None, use_ocr=None, progress=None, workers=None):
+    """Vuelve a leer las bases de las convocatorias indicadas (por ejemplo, tras mejorar el lector)."""
+    with session_factory() as session:
+        ids = list(session.scalars(select(db.Tender.id).where(db.Tender.code.in_([str(c) for c in codes]))))
+    summary = _index_ids(session_factory, ids, fetch, embed, use_ocr, progress, workers)
+    summary["remaining"] = 0
+    return summary
+
+
+CATEGORY_ORDER = ("bienes", "servicios", "obras")
+
+
+def _priority_rubros(session):
+    """Condiciones de los rubros que se leen primero: piloto y solicitados, solo con RUBROS_INGESTA=solicitados."""
+    if config.ALL_RUBROS:
+        return []
+    from services import rubros
+    # Los rubros se guardan como "1510 3011": todos de 4 dígitos, así que '%1510%' solo calza con 1510
+    return [db.Tender.rubros.like(f"%{code}%") for code in rubros.ingestion_rubros(session)]
+
+
+def pending_ids(session, limit):
+    """Convocatorias vigentes por indexar.
+
+    Orden: las nuevas ("pendiente") antes que las que fallaron. Dentro de cada grupo se reparten entre
+    bienes, servicios y obras (20/11/2026): siempre sigue la categoría que tiene menos bases ya leídas, de la
+    más reciente a la más antigua. Así, si la lectura se corta (cuota de Gemini), las tres categorías quedan
+    parejas. Con RUBROS_INGESTA=todos los rubros piloto y solicitados ya no van primero (20/11/2026); con
+    RUBROS_INGESTA=solicitados sí, porque solo se guardan esos.
+    """
+    priority = _priority_rubros(session)
+    first = case((or_(*priority), 0), else_=1) if priority else literal(1)
+    retry = case((db.Tender.requirements_status == "pendiente", 0), else_=1)
+    rows = session.execute(
+        select(db.Tender.id, db.Tender.category, first, retry)
+        .where(db.Tender.state == "vigente").where(db.Tender.requirements_status.in_(RETRY_STATUSES))
+        .order_by(first, retry, db.Tender.published_at.desc(), db.Tender.id.desc())).all()
+    category = func.coalesce(db.Tender.category, "bienes")       # las anteriores sin categoría eran bienes
+    read = dict(session.execute(
+        select(category, func.count()).where(db.Tender.state == "vigente")
+        .where(db.Tender.requirements_status.not_in(RETRY_STATUSES)).group_by(category)).all())
+    ordered, groups = [], {}
+    for tender_id, cat, group_a, group_b in rows:
+        groups.setdefault((group_a, group_b), {}).setdefault(cat or "bienes", deque()).append(tender_id)
+    for key in sorted(groups):
+        queues = groups[key]
+        while queues:
+            cat = min(queues, key=lambda c: (read.get(c, 0), CATEGORY_ORDER.index(c) if c in CATEGORY_ORDER else 9))
+            ordered.append(queues[cat].popleft())
+            read[cat] = read.get(cat, 0) + 1
+            if not queues[cat]:
+                del queues[cat]
+            if limit and len(ordered) >= limit:
+                return ordered
+    return ordered
+
+
+def index_pending(session_factory, limit=None, fetch=None, embed=None, use_ocr=None, progress=None, workers=None):
+    """Indexa hasta `limit` convocatorias, cada una en su propia transacción. Devuelve el resumen.
+
+    progress(número, total, código, estado, segundos): se llama al terminar cada base, para mostrar el avance.
+    workers: cuántas a la vez (por defecto config.RAG_WORKERS).
+    """
+    limit = config.RAG_MAX_BASES_PER_RUN if limit is None else limit
+    with session_factory() as session:
+        ids = pending_ids(session, limit)
+    summary = _index_ids(session_factory, ids, fetch, embed, use_ocr, progress, workers)
     with session_factory() as session:
         summary["remaining"] = len(pending_ids(session, None))
     return summary
@@ -209,10 +397,9 @@ def index_pending(session_factory, limit=None, fetch=None, embed=None, use_ocr=N
 # Cronograma (HU-018)
 # ---------------------------------------------------------------------------
 def due_schedule_ids(session, limit=None):
-    """Convocatorias vigentes cuyo cronograma hay que leer: nunca se leyó o cambió la etapa. Mismo orden
-    que las bases pendientes: primero los rubros piloto y solicitados, luego de la más reciente a la más antigua."""
-    from services import rubros
-    priority = [db.Tender.rubros.like(f"%{code}%") for code in rubros.ingestion_rubros(session)]
+    """Convocatorias vigentes cuyo cronograma hay que leer: nunca se leyó o cambió la etapa. De la más
+    reciente a la más antigua (con RUBROS_INGESTA=solicitados, primero los rubros piloto y solicitados)."""
+    priority = _priority_rubros(session)
     first = case((or_(*priority), 0), else_=1) if priority else None
     order = ([first] if first is not None else []) + [db.Tender.stage_changed_at.desc(), db.Tender.published_at.desc()]
     query = (select(db.Tender.id).where(db.Tender.state == "vigente")
@@ -222,7 +409,7 @@ def due_schedule_ids(session, limit=None):
     return list(session.scalars(query))
 
 
-def read_due_schedules(session_factory, limit=None, fetch=None, progress=None):
+def read_due_schedules(session_factory, limit=None, fetch=None, progress=None, workers=None):
     """Lee el cronograma de las bases de hasta `limit` convocatorias (sin OCR ni Gemini). Devuelve el resumen.
 
     Si la descarga falla, la convocatoria queda para la siguiente ejecución; nunca se guarda una fecha
@@ -234,31 +421,32 @@ def read_due_schedules(session_factory, limit=None, fetch=None, progress=None):
     summary.update({status: 0 for status in schedule.SCHEDULE_STATUSES})
     with session_factory() as session:
         ids = due_schedule_ids(session, limit)
-    for number, tender_id in enumerate(ids, 1):
-        started, code = time.perf_counter(), None
+
+    def one(tender_id):
+        code = None
         try:
             with session_factory.begin() as session:
                 tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents)])
                 code, document = tender.code, _bases_of(tender)
                 if document is None:
                     tender.schedule_due = False
-                    status, detail = "sin_bases", "la convocatoria no publica bases"
-                else:
-                    try:
-                        content = _download(document.url, fetch)
-                    except bases_download.BasesUnavailable as e:
-                        status, detail = "error", e.reason            # queda para la siguiente ejecución
-                    else:
-                        result = bases_reader.read_schedule(content)
-                        schedule.save(tender, result, document, db.utcnow())
-                        status, detail = result.status, result.detail
+                    return code, "sin_bases", "la convocatoria no publica bases"
+                try:
+                    content = _download(document.url, fetch)
+                except bases_download.BasesUnavailable as e:
+                    return code, "error", e.reason            # queda para la siguiente ejecución
+                result = bases_reader.read_schedule(content)
+                schedule.save(tender, result, document, db.utcnow())
+                return code, result.status, result.detail
         except Exception as e:      # un archivo raro no detiene las demás
-            status, detail = "error", f"{type(e).__name__}: {e}"[:200]
+            return code, "error", f"{type(e).__name__}: {e}"[:200]
+
+    for number, ((code, status, detail), seconds) in enumerate(_each(ids, one, _workers(workers)), 1):
         summary["processed"] += 1
         summary[status] += 1
         summary["details"].append((code, status, detail))
         if progress:
-            progress(number, len(ids), code, status, time.perf_counter() - started)
+            progress(number, len(ids), code, status, seconds)
     with session_factory() as session:
         summary["remaining"] = len(due_schedule_ids(session))
     return summary

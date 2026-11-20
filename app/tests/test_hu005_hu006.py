@@ -7,7 +7,7 @@ from app import app
 from services import data, llm
 
 CEMENT_I = 12771      # cemento portland tipo I, con veredicto y confianza alta
-WIRE_MESH = 1414      # entre MIN_CATALOG y MIN_VERDICT: sin veredicto
+WIRE_MESH = 315597    # entre MIN_CATALOG y MIN_VERDICT: sin veredicto (7 adjudicaciones con 2023-2026)
 
 
 @pytest.fixture

@@ -401,7 +401,7 @@ def good_detail(code, unit):
 # Cómo preparamos los datos
 # ---------------------------------------------------------------------------
 FUNNEL_HELP = {
-    "Tabla integrada": "Adjudicaciones 2023-2025 unidas con sus convocatorias y postores",
+    "Tabla integrada": f"Adjudicaciones {data.PERIOD} unidas con sus convocatorias y postores",
     "Solo bienes": "Se quitan servicios, obras y consultorías",
     "Solo moneda nacional": "Se quitan compras en dólares u otras monedas",
     "Solo con código CUBSO válido": "Sin código del catálogo no se puede agrupar el bien",

@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
-from services import accounts, company_documents, data, db, eligibility_store, guarantees, requirements, schedule, tenders
+from services import accounts, company_documents, data, db, eligibility_store, guarantees, requirements, schedule, staff, tenders
 
 LABELS = {"verde": "Cumple por sí sola", "amarillo": "Requiere atención", "rojo": "No cumple ni en consorcio"}
 REVIEW_OPTIONS = {"pending": "Por revisar", "own": "Cumplo por mí misma",
@@ -115,6 +115,7 @@ def load_tenders(codes):
             for entry in entries:
                 entry["key"] = hashlib.sha256(f"{row.ocid}|{entry['page']}|{entry['file_name']}|{entry['text']}".encode()).hexdigest()[:24]
             result[str(row.code)] = {"id": row.id, "code": str(row.code), "title": row.title or row.description,
+                "category": tenders.category_of(row), "method": row.method,
                 "state": row.state, "stage": row.stage, "deadline_at": row.deadline_at, "published_at": row.published_at,
                 "offer_day": _offer_day(row.schedule) if not row.deadline_at else None,
                 "currency": row.currency, "estimated_value": row.estimated_value,
@@ -160,12 +161,34 @@ def _minimum(text, topic, amount=None):
     return None
 
 
+CONSULTING_WORKS = re.compile(r"consultori\w*\s+de\s+obra|supervision\s+de\s+(?:la\s+)?(?:ejecucion\s+de\s+(?:la\s+)?)?obra|"
+                              r"expediente\s+tecnico|elaboracion\s+del?\s+(?:estudio|expediente)")
+
+
+def contract_kind(tender):
+    """bienes, servicios, obras o consultoria_obras. La consultoría de obras llega como servicio en OCDS,
+    pero tiene su propio registro en el RNP y no tiene la excepción de garantía de 50 UIT (art. 139.a)."""
+    category = tender.get("category") or "bienes"
+    if category == "servicios" and (CONSULTING_WORKS.search(plain(tender.get("title")))
+                                    or "consultoria" in plain(tender.get("method")) and "obra" in plain(tender.get("title"))):
+        return "consultoria_obras"
+    return category
+
+
+# Registro del RNP que corresponde a cada objeto (Directiva de procedimientos y trámites ante el RNP, OECE 2025)
+REGISTER_FOR_KIND = {"bienes": "bienes", "servicios": "servicios", "obras": "ejecutor_obras",
+                     "consultoria_obras": "consultor_obras"}
+
+
 def _check(key, label, status, reason, **extra):
     return {"key": key, "label": label, "status": status, "reason": reason, **extra}
 
 
-def evaluate(tender, profile, documents, values=None, today=None, policy=None):
-    """Función pura: mismo semáforo en listado, ficha y asistente. Recalcula vigencia y fuentes."""
+def evaluate(tender, profile, documents, values=None, today=None, policy=None, members=None):
+    """Función pura: mismo semáforo en listado, ficha y asistente. Recalcula vigencia y fuentes.
+
+    members: personal clave registrado (services/staff.py), para contrastarlo con lo que piden las bases.
+    """
     instant = datetime.now(timezone.utc) if today is None else datetime.combine(today, time.min, tzinfo=ZoneInfo("America/Lima"))
     values, today = values or {}, today or company_documents.today()
     on_date = _evaluation_day(tender, today)
@@ -184,10 +207,27 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
         checks.append(_check("vigencia", "Vigencia de la convocatoria", "fail", "La convocatoria ya no acepta ofertas."))
     if not profile.get("business_activity") or not profile.get("rubros"):
         checks.append(_check("perfil", "Perfil de la empresa", "pending", "Complete el giro y los rubros en Mi empresa."))
+    category, kind = tender.get("category") or "bienes", contract_kind(tender)
+    category_label = accounts.CATEGORY_LABELS.get(category, category).lower()
+    if profile.get("categories") and category not in profile["categories"]:
+        checks.append(_check("categoria", "Objeto de la convocatoria", "pending",
+                             f"Es una convocatoria de {category_label} y su perfil no declara que ofrezca {category_label}."))
+    register = REGISTER_FOR_KIND[kind]
+    if profile.get("rnp_registers") and register not in profile["rnp_registers"]:
+        checks.append(_check("rnp_registro", "Registro del RNP", "pending",
+                             f"El objeto pide inscripción vigente como {accounts.RNP_REGISTERS[register].lower()} en el RNP "
+                             "y su perfil no la declara. Un socio del consorcio no sustituye la inscripción propia."))
     amount = decimal(tender.get("estimated_value"))
     amount = amount if amount is not None and amount > 0 else None
     details, amount_source = [], "publicado"
-    if amount is None:
+    if amount is None and category != "bienes":
+        # Los precios históricos son de bienes (precio unitario por CUBSO y unidad). En servicios y obras
+        # el ítem suele ser «1 servicio»: no hay un precio unitario comparable que multiplicar.
+        amount_source = "no publicado"
+        checks.append(_check("monto", "Monto de la convocatoria", "pending",
+                             f"La fuente no publica el valor estimado y no hay precios históricos de {category_label} "
+                             "para estimarlo; tómelo del valor referencial de las bases."))
+    elif amount is None:
         items = tender.get("items") or []
         if values.get("quantity") and values.get("catalog_code") and values.get("whole_contract") and len(items) <= 1:
             item = dict(items[0]) if items else {}
@@ -222,7 +262,7 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
         checks.append(_check("moneda_requisitos", "Moneda de los requisitos", "pending", "Hay requisitos en otra moneda; falta una conversión sustentada para compararlos con los importes en soles."))
     if "garantia" in full_text and "prestaciones accesorias" in full_text:
         values = dict(values, accessory_required=True)
-    guarantee = guarantees.calculate(amount, values, on_date, policy)
+    guarantee = guarantees.calculate(amount, values, on_date, policy, kind=kind)
     checks.append(_check("garantia", "Garantías", guarantee["status"], guarantee["reason"]))
     if tender.get("requirements_status") != "extraido" or not tender.get("requirements"):
         checks.append(_check("bases", "Requisitos de las bases", "pending",
@@ -280,14 +320,26 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
         # La ficha 1265895 cita un Reglamento Técnico del cemento, no personal técnico.
         # Se conserva el resto del bloque para detectar exigencias reales en esa misma página.
         staff_text = re.sub(r"\breglamentos?\s+tecnicos?\b", "", normalized)
+        required = staff.required_staff(staff_text)
+        if required:
+            doc_types.add("personal")
+            if not members and category != "bienes":
+                # En servicios y obras el personal clave decide la calificación: se pide el registro detallado.
+                labels = ", ".join(r["label"].lower() for r in required)
+                problems.append(f"Las bases piden personal clave ({labels}); registre a su personal en Mi empresa › Personal clave.")
+            elif members:
+                for found in staff.match_requirements(required, members):
+                    if found["problem"]:
+                        problems.append(found["problem"] + " Puede incorporarlo antes de la oferta o aportarlo en consorcio.")
         if re.search(r"\b(?:personal|" + jobs + r")\b", staff_text):
             doc_types.add("personal")
-            if not str(profile.get("specialized_staff") or "").strip():
+            if not str(profile.get("specialized_staff") or "").strip() and not members:
                 problems.append("El perfil no declara personal especializado.")
             counts = {"un":1,"uno":1,"dos":2,"tres":3,"cuatro":4,"cinco":5,"seis":6,"siete":7,"ocho":8,"nueve":9,"diez":10}
             count_text = re.sub(r"\b(" + "|".join(counts) + r")\s+(?=" + jobs + ")", lambda m:str(counts[m.group(1)])+" ", staff_text)
             count = re.search(r"(\d+)\s*\)?\s*(?:" + jobs + ")", count_text)
-            if count and (values.get("staff_count") is None or int(values["staff_count"]) < int(count.group(1))):
+            declared = values.get("staff_count") if values.get("staff_count") is not None else (len(members) if members else None)
+            if count and (declared is None or int(declared) < int(count.group(1))):
                 problems.append("La cantidad de personal declarada no acredita el mínimo exigido; revise también su especialidad.")
         if re.search(r"osinergmin|hidrocarburos|licencia|autorizacion|certificad", normalized):
             doc_types.add("otro")
@@ -316,6 +368,7 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None):
     color = "rojo" if any(c["status"] == "fail" for c in checks) else "amarillo" if any(c["status"] != "pass" for c in checks) else "verde"
     decisive = [c["reason"] for c in checks if c["status"] == "fail"] or [c["reason"] for c in checks if c["status"] != "pass"]
     return {"code": tender["code"], "title": tender["title"], "color": color, "label": LABELS[color],
+            "category": category, "kind": kind,
             "company": {"name": profile.get("company_name", ""), "ruc": profile.get("ruc", "")},
             "reason": decisive[0] if decisive else "Todos los requisitos revisados y los controles disponen de sustento declarado compatible.",
             "checks": checks, "amount": amount, "amount_source": amount_source, "estimate": details,
@@ -329,8 +382,10 @@ def evaluate_many(account_factory, user_id, codes, today=None):
     profile = accounts.get_profile(account_factory, user_id)
     documents = company_documents.list_documents(account_factory, user_id)
     saved = eligibility_store.load_inputs(account_factory, user_id, [str(c) for c in codes])
+    members = staff.list_staff(account_factory, user_id)
     contexts = load_tenders(codes)
-    return {code: evaluate(tender, profile, documents, saved.get(code), today) for code, tender in contexts.items()}
+    return {code: evaluate(tender, profile, documents, saved.get(code), today, members=members)
+            for code, tender in contexts.items()}
 
 
 def parse_form(form, requirement_keys, owned_documents):

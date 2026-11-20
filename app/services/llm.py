@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 import time
 
 from google import genai
@@ -24,9 +25,15 @@ RETRYABLE = (429, 500, 503)
 
 
 _client = None
+_client_lock = threading.Lock()     # la lectura de bases puede pedir vectores desde varios hilos a la vez
 
 
 def _get_client():
+    with _client_lock:
+        return _create_client() if _client is None else _client
+
+
+def _create_client():
     global _client
     if _client is None:
         if not config.GEMINI_API_KEY:

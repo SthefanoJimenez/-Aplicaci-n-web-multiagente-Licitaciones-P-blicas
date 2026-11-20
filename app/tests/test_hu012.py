@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta
 
 import pytest
@@ -7,6 +6,13 @@ import config
 import fake_ocds
 from app import app
 from services import db, ingest, ocds_source, rubros, tenders
+
+
+@pytest.fixture(autouse=True)
+def _alcance_de_bienes(monkeypatch):
+    """Estas pruebas son del alcance original (solo bienes) y usan servicios como caso excluido.
+    Servicios y obras se prueban en tests/test_categorias_servicios_obras.py."""
+    monkeypatch.setattr(config, "CATEGORIES", ("bienes",))
 
 LIMA = ocds_source.LIMA
 NOW = datetime(2026, 11, 6, 8, 30, tzinfo=LIMA)
@@ -223,9 +229,9 @@ def test_catalog_command_prints_the_count_per_family(tmp_path, monkeypatch, caps
     monkeypatch.setattr(ingest, "run_ingestion", lambda factory, trigger=None: real_run(
         factory, now=NOW, fetch=lambda n, m: ocds_source.fetch_rows(n, m, session=session), months=2, trigger=trigger))
     assert ingest_job.main_with(["--sin-rag"]) == 0
-    assert "Catálogo de rubros: 4 rubros con convocatorias de bienes en los últimos 30 días" in capsys.readouterr().out
+    assert "Catálogo de rubros: 4 rubros con convocatorias en los últimos 30 días" in capsys.readouterr().out
     assert ingest_job.main_with(["--catalogo"]) == 0
     out = capsys.readouterr().out
-    assert "Catálogo de rubros: 4 rubros · 7 convocatorias de bienes en los últimos 30 días" in out
+    assert "Catálogo de rubros: 4 rubros · 7 convocatorias en los últimos 30 días" in out
     assert "- 3011 · 4 · 0 · sin datos · Ej.: Cemento, arena" in out
     assert "- 1510 · 1 · 1 · piloto · Combustibles y lubricantes" in out

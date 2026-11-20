@@ -93,6 +93,6 @@
       </tbody>
     </table>
   </div>
-  <p class="source">Fuente: archivos de adjudicaciones, convocatorias y postores del portal CONOSCE del OECE, 2023-2025.</p>
+  <p class="source">Fuente: archivos de adjudicaciones, convocatorias y postores del portal CONOSCE del OECE, {{ data_period }}{% if data_last_award %} (buenas pro hasta el {{ data_last_award }}){% endif %}.</p>
 </section>
 {% endblock %}

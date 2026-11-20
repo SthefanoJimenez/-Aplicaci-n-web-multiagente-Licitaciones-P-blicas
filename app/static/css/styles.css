@@ -4283,3 +4283,60 @@ body.lf-chat-open .lf-chat-launcher {
 .password-help-card p {
     margin: 0;
 }
+
+/* Objeto de la convocatoria (bienes, servicios u obras). Neutro: los colores quedan para el semáforo. */
+.tag-category {
+    display: inline-block;
+    margin: 4px 0 0;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    font-weight: 600;
+}
+
+/* Perfil: preguntas de selección (tipo de proveedor, categorías y registros del RNP) */
+.profile-panel fieldset.field {
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px 8px;
+    margin: 0 0 16px;
+}
+.profile-panel fieldset.field legend {
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+/* Nota discreta (20/11/2026): avisos útiles sin recuadro de alerta. Texto pequeño y gris con una «i». */
+.note-quiet {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-3);
+}
+
+.note-quiet::before {
+    content: "i";
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    font-style: italic;
+    line-height: 14px;
+    text-align: center;
+    color: var(--ink-3);
+}
+
+.note-quiet p {
+    margin: 4px 0 0;
+}
+
+.note-quiet strong {
+    color: var(--ink-2);
+}

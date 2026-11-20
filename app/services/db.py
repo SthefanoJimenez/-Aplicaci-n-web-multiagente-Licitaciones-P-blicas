@@ -92,6 +92,9 @@ class Tender(Base):
     entity: Mapped[str | None] = mapped_column(String(300))
     department: Mapped[str | None] = mapped_column(String(80))
     method: Mapped[str | None] = mapped_column(String(120))
+    # bienes, servicios u obras (mainProcurementCategory). Vacío en las guardadas antes del 19/11/2026,
+    # que eran solo bienes: services.tenders.category_of las trata como bienes hasta la siguiente ingesta.
+    category: Mapped[str | None] = mapped_column(String(10))
     rubros: Mapped[str] = mapped_column(String(80), default="")  
     state: Mapped[str] = mapped_column(String(12), default="vigente", index=True)
     item_status: Mapped[str | None] = mapped_column(String(200))
@@ -229,6 +232,7 @@ def create_tables(engine):
 ADDED_COLUMNS = {
     "actualizaciones": ("rubros", "per_rubro"),                      # EN-011
     "convocatorias": ("items",                                      # HU-010
+                      "category",                                   # bienes, servicios y obras
                       "stage", "stage_changed_at", "schedule_status", "schedule", "schedule_page",   # HU-018
                       "schedule_file", "schedule_document_id", "schedule_read_at", "schedule_stage", "schedule_due",
                       "enquiry_start", "enquiry_end"),

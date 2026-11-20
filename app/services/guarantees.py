@@ -1,8 +1,14 @@
-"""Garantías orientativas para bienes bajo Ley 32069; parámetros versionados y configurables.
+"""Garantías orientativas bajo Ley 32069 para bienes, servicios y obras; parámetros versionados y configurables.
 
 Fuentes revisadas el 13/11/2026: DS 009-2025-EF arts. 113, 114 y 139,
 modificado por DS 001-2026-EF; UIT 2026, DS 301-2025-EF.
 Una MYPE puede optar por retención: no se reduce el porcentaje por ser MYPE.
+
+Obras (revisado el 19/11/2026 en el texto del DS 001-2026-EF publicado en El Peruano el 08/01/2026):
+- art. 114.1: la retención procede hasta S/ 480 000 en bienes y servicios y hasta S/ 5 000 000 en obras;
+  para una MYPE, con independencia del monto, también en obras.
+- art. 139.a: la excepción de 50 UIT es «en los contratos de bienes y servicios»; no alcanza a obras.
+  Para la consultoría de obras no se aplica la excepción y se pide confirmarla en las bases.
 """
 from dataclasses import dataclass
 from datetime import date
@@ -22,6 +28,7 @@ class Policy:
     uit: Decimal = Decimal("5500")
     exempt_uit: Decimal = Decimal("50")
     retention_limit: Decimal = Decimal("480000")
+    works_retention_limit: Decimal = Decimal("5000000")
     year: int = 2026
     effective_from: date = date(2026, 1, 14)
 
@@ -36,8 +43,11 @@ class Policy:
         return cls(**fields)
 
 
-def calculate(amount, values, on_date=None, policy=None):
-    """No decide solvencia a partir de ventas ni aplica normativa a un régimen desconocido."""
+def calculate(amount, values, on_date=None, policy=None, kind="bienes"):
+    """No decide solvencia a partir de ventas ni aplica normativa a un régimen desconocido.
+
+    kind: "bienes", "servicios", "obras" o "consultoria_obras" (services.eligibility.contract_kind).
+    """
     policy = policy or Policy.configured()
     day = on_date or date.today()
     result = {"status": "pending", "amount": None, "accessory": None, "advance": None,
@@ -50,18 +60,25 @@ def calculate(amount, values, on_date=None, policy=None):
     amount = Decimal(str(amount))
     if not values.get("whole_contract"):
         return result | {"reason": "Confirme que el monto comprende todos los ítems o contratos que se le adjudicarían en este proceso."}
-    exempt = amount <= policy.exempt_uit * policy.uit
+    # Art. 139.a: la excepción de 50 UIT es solo para contratos de bienes y servicios.
+    exempt = kind in ("bienes", "servicios") and amount <= policy.exempt_uit * policy.uit
     principal = Decimal("0") if exempt else (amount * policy.rate).quantize(Decimal("0.01"))
     accessory_base = Decimal(str(values.get("accessory_amount") or "0"))
     advance_base = Decimal(str(values.get("advance_amount") or "0"))
     accessory = Decimal("0") if exempt else (accessory_base * policy.accessory_rate).quantize(Decimal("0.01"))
     advance = (advance_base * policy.advance_rate).quantize(Decimal("0.01"))
-    retention = bool(values.get("mype") or amount <= policy.retention_limit)
+    limit = policy.works_retention_limit if kind == "obras" else policy.retention_limit
+    retention = bool(values.get("mype") or amount <= limit)
     result |= {"amount": principal, "accessory": accessory, "advance": advance,
                "retention_allowed": retention, "exempt": exempt}
     note = "Cálculo orientativo sobre el monto evaluado; debe recalcularse con el monto contractual. "
     if exempt:
         note += "El monto no supera 50 UIT: excepción del art. 139, sujeta a la suma de ítems adjudicados al mismo postor. "
+    elif kind in ("obras", "consultoria_obras") and amount <= policy.exempt_uit * policy.uit:
+        note += ("La excepción de 50 UIT del art. 139 es para bienes y servicios; no se aplica a "
+                 + ("obras. " if kind == "obras" else "la consultoría de obras sin confirmarlo en las bases. "))
+    if kind == "obras":
+        note += "En obras la retención procede hasta S/ 5 000 000 o, para una MYPE, con independencia del monto (art. 114.1). "
     if values.get("guarantee_method") == "retention" and retention:
         needed = advance  # Los adelantos no se garantizan mediante retención.
         note += "Retención disponible según art. 114; ser MYPE no elimina ni reduce la garantía. "

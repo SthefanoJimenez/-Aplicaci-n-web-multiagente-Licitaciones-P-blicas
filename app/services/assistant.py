@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from services import eligibility, eligibility_store, eligibility_chat, assistant_profile, accounts, company_documents, consortia, legal, llm, rubros, schedule, tenders
+from services import data, eligibility, eligibility_store, eligibility_chat, assistant_profile, accounts, company_documents, consortia, legal, llm, rubros, schedule, tenders
 
 PROMPT_ANSWER = (Path(__file__).resolve().parent.parent / "prompts" / "assistant_answer.txt").read_text(encoding="utf-8")
 PROMPT_NOTE = (Path(__file__).resolve().parent.parent / "prompts" / "assistant_note.txt").read_text(encoding="utf-8")
@@ -34,7 +34,17 @@ PROMPT_NOTE = (Path(__file__).resolve().parent.parent / "prompts" / "assistant_n
 DETAIL_MARKER = "\n<!--detalle-->\n"
 
 MAX_TENDERS = 8
+# Se evalúan más de las que se muestran para poder ordenar por semáforo («¿con cuál soy candidato?»,
+# asesor, 19/11/2026): primero verde, luego amarillo y rojo.
+MAX_EVALUATED = 20
+SEMAPHORE_ORDER = {"verde": 0, "amarillo": 1, "gris": 2, "rojo": 3}
 SOON_DAYS = 5
+# Lo que la consulta dice ofrecer, solo para esta búsqueda (no cambia el perfil guardado).
+QUERY_CATEGORY = {
+    "obras": re.compile(r"\bobras?\b|\bejecut\w*\s+(?:de\s+)?obras?\b", re.IGNORECASE),
+    "servicios": re.compile(r"\bservicios?\b|\bconsultor[ií]as?\b", re.IGNORECASE),
+    "bienes": re.compile(r"\bbienes\b|\bproductos?\b", re.IGNORECASE),
+}
 RUC_RE = re.compile(r"(?<!\d)((?:10|15|17|20)\d{9})(?!\d)")
 EXP_AMOUNT = re.compile(
     r"(?:experiencia|facturaci[oó]n|contratos?\s+similares)[^.]{0,260}?S\s*/\s*\.?\s*([\d][\d\s.,]*\d)",
@@ -78,6 +88,7 @@ class AssistantState(TypedDict, total=False):
     rubros: List[Dict[str, Any]]
     tenders: List[Any]
     evaluations: List[Dict[str, Any]]
+    evaluated: int
     answer: str
     status: str
     db_reason: Optional[str]
@@ -275,8 +286,21 @@ def resolve_rubros_node(state: AssistantState) -> dict:
     return {"rubros": found, "status": "rubros_ready" if found else "need_rubro"}
 
 
+def query_categories(query):
+    """Categorías que la consulta menciona («ejecuto obras», «vendo bienes»), en el orden bienes, servicios, obras."""
+    return [name for name in ("bienes", "servicios", "obras") if QUERY_CATEGORY[name].search(query or "")]
+
+
+def wanted_categories(state):
+    """Lo que dice la consulta manda; si no dice nada, lo que declara el perfil; si tampoco, todas."""
+    return query_categories(state.get("query")) or list((state.get("profile") or {}).get("categories") or [])
+
+
 def route_after_profile(state: AssistantState) -> str:
     if state.get("status") == "need_rubro" and not eligibility_chat._code(state.get("query", "")):
+        # Sin rubro reconocido, pero con categorías declaradas (o pedidas): se busca por categoría.
+        if wanted_categories(state):
+            return "search"
         return "need_rubro"
     return "search"
 
@@ -292,13 +316,16 @@ def search_tenders_node(state: AssistantState) -> dict:
         # Sin base configurada o sin conexión: se responde con un aviso, no con un error 503.
         return {"status": "db_unavailable", "tenders": [], "db_reason": str(error)}
 
+    categories = set(wanted_categories(state))
     candidates = []
     for tender in available:
         if tender.stage == schedule.BUENA_PRO:
             continue
         if selected_code and str(tender.code) != selected_code:
             continue
-        if not selected_code and not (codes & set(tender.rubros or [])):
+        if not selected_code and categories and tender.category not in categories:
+            continue
+        if not selected_code and codes and not (codes & set(tender.rubros or [])):
             continue
         deadline = _as_datetime(tender.deadline_at)
         if deadline and deadline.date() < today:
@@ -306,7 +333,7 @@ def search_tenders_node(state: AssistantState) -> dict:
         candidates.append(tender)
     candidates.sort(key=lambda tender: _as_datetime(tender.published_at) or datetime.min.replace(tzinfo=timezone.utc),
                     reverse=True)
-    selected = candidates[:MAX_TENDERS]
+    selected = candidates[:MAX_EVALUATED]
     return {"tenders": selected, "status": "tenders_ready" if selected else "no_tenders"}
 
 
@@ -387,6 +414,7 @@ def _evaluate_tender(tender, reqs, state, today):
         "entity": tender.entity or "Entidad no publicada",
         "department": tender.department,
         "method": tender.method,
+        "category": tender.category,
         "stage": tender.stage,
         "stage_label": stage_label,
         "deadline_text": deadline_text,
@@ -429,7 +457,9 @@ def evaluate_node(state: AssistantState) -> dict:
         except tenders.TendersUnavailable:
             reqs = None
         evaluations.append(_evaluate_tender(tender, reqs, updated, today))
-    return {"evaluations": evaluations}
+    # «¿Con cuál de todas soy candidata?»: primero las verdes; dentro de cada color, el orden de publicación.
+    evaluations.sort(key=lambda item: SEMAPHORE_ORDER.get(item["semaphore"], 9))
+    return {"evaluations": evaluations[:MAX_TENDERS], "evaluated": len(evaluations)}
 
 
 # ---------------------------------------------------------------------------
@@ -524,10 +554,16 @@ def _render(state, evaluations, payload):
         n = len(evaluations)
         plural = "s" if n != 1 else ""
         verb = "coinciden" if n != 1 else "coincide"
-        lines.append(f"Revisé las convocatorias vigentes del OECE para su perfil y encontré "
-                     f"**{n}** convocatoria{plural} que {verb} con sus rubros. Estas son, "
-                     f"con lo que se pudo verificar en las bases:")
+        evaluated = state.get("evaluated") or n
+        scope = ", ".join(wanted_categories(state)) or "bienes, servicios y obras"
+        lines.append(f"Revisé las convocatorias vigentes del OECE de **{scope}** para su perfil y evalué "
+                     f"**{evaluated}**. Le muestro {n} convocatoria{plural} que {verb} con lo que ofrece, "
+                     f"primero aquellas en las que es candidata por sí sola:")
     lines.append("")
+    missing = _profile_questions(state)
+    if missing:
+        lines.append(missing)
+        lines.append("")
     by_code = {row["code"]: row["text"] for row in (payload or {}).get("items", [])}
     counts = {key: sum(1 for item in evaluations if item["semaphore"] == key)
               for key in ("verde", "amarillo", "gris", "rojo")}
@@ -569,6 +605,21 @@ def _render(state, evaluations, payload):
     return "\n".join(lines)
 
 
+def _profile_questions(state):
+    """Lo que el asesor pidió que el asistente pregunte (19/11/2026), si el perfil no lo dice."""
+    profile = state.get("profile") or {}
+    asks = []
+    if not profile.get("supplier_type"):
+        asks.append("si postula como **empresa** o como **persona natural** (especialista)")
+    if not profile.get("categories") and not query_categories(state.get("query")):
+        asks.append("si ofrece **bienes**, **servicios** u **obras**")
+    if not asks:
+        return ""
+    consortium = " Si va a postular con otras empresas, forme el grupo en [Consorcios](/consorcio)." if not state.get("consortium") else ""
+    return ("Para afinar la búsqueda, indíqueme " + " y ".join(asks)
+            + ", o complételo en [Mi empresa](/perfil)." + consortium)
+
+
 def _with_legal(text):
     """Cierra toda respuesta con la norma vigente y las fuentes oficiales."""
     sources = "\n".join(f"- [{item['label']}]({item['url']})" for item in legal.sources())
@@ -605,26 +656,30 @@ def _greeting_answer(state):
             "Soy el asistente de postulación de LicitaFácil. Reviso el perfil de su empresa, sus "
             "documentos y las convocatorias vigentes del OECE para decirle a cuáles puede postular "
             "sin que lo rechacen.\n\n"
-            "Para empezar, cuénteme **qué vende su empresa** (por ejemplo «diésel y gasolina» o "
-            "«cemento y acero») o complete sus datos en [Mi empresa](/perfil).")
+            "Para empezar, cuénteme **qué ofrece su empresa**: bienes (por ejemplo «diésel y gasolina»), "
+            "servicios (por ejemplo «mantenimiento de redes») u obras (por ejemplo «construcción de "
+            "pistas»), y si postula como empresa o como persona natural. También puede completarlo en "
+            "[Mi empresa](/perfil).")
 
 
 def _rubro_answer(state):
     profile = state["profile"]
     declared = (profile.get("rubros") or profile.get("business_activity") or "").strip()
-    lines = ["### Necesito saber qué vende su empresa", ""]
+    lines = ["### Necesito saber qué ofrece su empresa", ""]
     if declared:
         lines.append(f"En su perfil figura «{declared}», pero no encontré un rubro del catálogo del OECE "
                      f"que coincida con ese texto.")
     else:
-        lines.append("Su perfil todavía no indica qué bienes vende, y sin eso no puedo buscar convocatorias.")
-    lines += ["", "Escríbame el producto principal (por ejemplo «diésel y gasolina» o «cemento y acero») "
-                  "y lo busco en el catálogo completo; o actualícelo en [Mi empresa](/perfil)."]
+        lines.append("Su perfil todavía no indica qué bienes, servicios u obras ofrece, y sin eso no puedo buscar convocatorias.")
+    lines += ["", "Escríbame lo principal que ofrece (por ejemplo «diésel y gasolina», «mantenimiento de redes» "
+                  "o «ejecuto obras de saneamiento») y lo busco en el catálogo completo; o marque en "
+                  "[Mi empresa](/perfil) si ofrece bienes, servicios u obras."]
     return "\n".join(lines)
 
 
 def _no_tenders_answer(state):
-    names = ", ".join(f"**{item['name']}** ({item['code']})" for item in state.get("rubros") or [])
+    names = ", ".join(f"**{item['name']}** ({item['code']})" for item in state.get("rubros") or []) \
+        or ("**" + ", ".join(wanted_categories(state)) + "**")
     return ("### No hay convocatorias vigentes para esos rubros\n\n"
             f"El OECE no publica hoy convocatorias vigentes de {names} que cumplan el filtro "
             f"(etapa abierta y plazo no vencido).\n\n"
@@ -679,7 +734,7 @@ def _db_answer(state):
                 "No voy a inventar convocatorias.\n\n"
                 "- Para habilitarlo, configure `DATABASE_URL` y ejecute la ingesta (`python ingest_job.py`).\n"
                 "- Mientras tanto, puede revisar el [panorama del mercado](/panorama) con las "
-                "adjudicaciones históricas 2023-2025.\n"
+                "adjudicaciones históricas.\n"
                 "- [Ver el estado de los datos](/convocatorias/estado)")
     return ("### No puedo consultar las convocatorias ahora\n\n"
             "La base de convocatorias del OECE no respondió en este momento. No voy a inventar "

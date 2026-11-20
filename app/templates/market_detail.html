@@ -2,7 +2,7 @@
    del panorama (good.html). Variables: m, d, has_evidence, ficha, period, per_unit. #}
 {% if d %}
 <dl class="figures">
-  <div><dt>Compras del Estado</dt><dd>{{ "{:,}".format(m.n_awards) }}<small>{{ period }}</small></dd></div>
+  <div><dt>Compras del Estado</dt><dd>{{ "{:,}".format(m.n_awards) }}<small>adjudicaciones</small></dd></div>
   <div><dt>Entidades que lo compraron</dt><dd>{{ "{:,}".format(d.n_entities) }}<small>en {{ d.n_places }} departamentos</small></dd></div>
   <div><dt>Monto típico de una compra</dt><dd>{{ d.median_amount|amount }}<small>mediana por adjudicación</small></dd></div>
   <div><dt>Cantidad típica</dt><dd>{{ d.median_quantity|number }}<small>{{ m.unit|unit_text }} por compra</small></dd></div>
@@ -46,7 +46,7 @@
     </div>
     <p class="range-help">Una de cada cuatro compras se pagó a {{ m.p25|pen }} o menos; la mitad, a {{ m.median|pen }} o menos (marca negra); y tres de cada cuatro, a {{ m.p75|pen }} o menos.</p>
   </div>
-  <p class="source">{{ "{:,}".format(m.n_awards) }} adjudicaciones · {{ period }} · procedimientos de selección (OECE)
+  <p class="source">{{ "{:,}".format(m.n_awards) }} adjudicaciones · procedimientos de selección (OECE)
     {% if d and d.n_atypical %} · {{ d.n_atypical }} precios atípicos incluidos, que no mueven el rango{% endif %}</p>
 </section>
 

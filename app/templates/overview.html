@@ -130,16 +130,16 @@
   <h2 class="panel-title" id="places-title">¿Dónde se compra?</h2>
   {% set sp = o.special %}
   {% if f.department == "MULTIDEPARTAMENTAL" %}
-  <div class="notice notice-info place-note" role="note">
+  <div class="note-quiet" role="note" style="margin:10px 0 20px;"><div>
     <strong>¿Qué significa «multidepartamental»?</strong>
     <p>Son compras que la entidad entrega en <b>más de un departamento</b>. El OECE las registra como «MULTIDEPARTAMENTAL» (y su provincia como «MULTIPROVINCIAL») sin indicar cuáles departamentos son. Por eso el mapa aparece rayado completo: significa «varios departamentos sin detalle», no que haya compras en cada uno.</p>
-    {% if sp.top_entity %}<p>Suelen ser compras centralizadas de entidades nacionales: {{ sp.top_entity.name|title }} hizo {{ "{:,}".format(sp.top_entity.n) }} de estas {{ "{:,}".format(o.n_awards) }} compras ({{ "%.0f"|format(sp.top_entity.pct) }}%).</p>{% endif %}
-  </div>
+    {% if sp.top_entity %}<p style="margin:4px 0 0;">Suelen ser compras centralizadas de entidades nacionales: {{ sp.top_entity.name|title }} hizo {{ "{:,}".format(sp.top_entity.n) }} de estas {{ "{:,}".format(o.n_awards) }} compras ({{ "%.0f"|format(sp.top_entity.pct) }}%).</p>{% endif %}
+  </div></div>
   {% elif f.department == "EXTERIOR" %}
-  <div class="notice notice-info place-note" role="note">
+  <div class="note-quiet" role="note" style="margin:10px 0 20px;"><div>
     <strong>¿Qué significa «exterior»?</strong>
     <p>Son compras con entrega <b>fuera del Perú</b>, por lo general a proveedores extranjeros no domiciliados. El OECE las registra como «EXTERIOR» y no publica el país de entrega ni el del proveedor; por eso no las ubicamos en un mapa. Abajo está cada compra para que pueda revisarla.</p>
-  </div>
+  </div></div>
   {% else %}
   <p class="panel-lead">{{ i.top_place|title }} concentra {{ "{:,}".format(i.top_place_n) }} compras.{% if not f.department %} La Libertad tiene {{ "{:,}".format(i.local) }} ({{ "%.1f"|format(i.local_share) }}%).{% endif %} Haga clic en un departamento del mapa para filtrar todo el panorama.</p>
   {% endif %}
@@ -319,6 +319,6 @@
   </div>
 </section>
 
-<p class="source">Fuente: adjudicaciones de bienes del OECE 2023-2025 después de la limpieza de datos. <a href="{{ url_for('data_preparation') }}">Vea cómo preparamos los datos</a>.</p>
+<p class="source">Fuente: adjudicaciones de bienes del OECE después de la limpieza de datos. <a href="{{ url_for('data_preparation') }}">Vea cómo preparamos los datos</a>.</p>
 {% endif %}
 {% endblock %}

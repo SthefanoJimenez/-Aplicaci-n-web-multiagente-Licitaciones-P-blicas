@@ -276,6 +276,17 @@ def compiled_releases(objects):
 GOODS_VALUES = {"goods", "bien", "bienes"}
 OPEN_STATUS = {"active", "convocado"}
 
+# Categorías del objeto de la contratación (mainProcurementCategory de OCDS). En la muestra de octubre de 2026
+# (analisis/salidas/sp005/pruebas_api/04_2026_10.zip) la API publica "goods", "services" y "works": 649, 659 y
+# 343 vigentes. La consultoría (en general y de obras) llega como "services".
+CATEGORY_VALUES = {
+    "bienes": GOODS_VALUES,
+    "servicios": {"services", "servicio", "servicios", "consultingservices", "consultoria"},
+    "obras": {"works", "obra", "obras"},
+}
+CATEGORY_LABELS = {"bienes": "Bienes", "servicios": "Servicios", "obras": "Obras"}
+CATEGORIES = tuple(CATEGORY_VALUES)
+
 
 def _buyer_party(release):
     buyer_id = (release.get("buyer") or {}).get("id")
@@ -370,8 +381,23 @@ def normalize_release(release):
     }
 
 
+def category_of(row_or_value):
+    """'bienes', 'servicios' u 'obras' según mainProcurementCategory; None si la fuente no lo dice."""
+    value = row_or_value.get("category") if isinstance(row_or_value, dict) else row_or_value
+    text = normalize(value or "").replace(" ", "")
+    return next((name for name, values in CATEGORY_VALUES.items() if text in values), None)
+
+
 def is_goods(row):
-    return normalize(row["category"]) in GOODS_VALUES
+    return category_of(row) == "bienes"
+
+
+def in_categories(row, categories=None):
+    """True si la convocatoria es de alguna de las categorías de la ingesta (config.CATEGORIES)."""
+    if categories is None:
+        import config
+        categories = config.CATEGORIES
+    return category_of(row) in set(categories)
 
 
 # Procedimientos a los que un proveedor no puede postular por su cuenta (entrevista con el experto, 11/11/2026):

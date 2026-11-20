@@ -109,11 +109,11 @@ def ask(factory, uid, query, **kwargs):
 # Casos 1-10: preguntas de prueba con respuesta esperada
 # ---------------------------------------------------------------------------
 def test_caso_01_sin_rubro_pide_el_producto_con_una_frase(account_factory, tenders_db):
-    """«¿A qué puedo postular?» sin perfil ni rubro: pregunta qué vende, no exige RUC."""
+    """«¿A qué puedo postular?» sin perfil ni rubro: pregunta qué ofrece (bienes, servicios u obras), no exige RUC."""
     uid = make_user(account_factory, profile=False)
     result = ask(account_factory, uid, "Hola, ¿a qué convocatorias puedo postular?")
     assert result["status"] == "need_rubro"
-    assert "vende" in result["response"].lower()
+    assert "ofrece" in result["response"].lower() and "obras" in result["response"].lower()
     assert "RUC" not in result["response"]
     assert "2001" not in result["response"]
 

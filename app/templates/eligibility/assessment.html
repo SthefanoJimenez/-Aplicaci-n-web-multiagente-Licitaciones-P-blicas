@@ -17,8 +17,8 @@
     </div>
     {% if assessment.estimate %}
     <details class="eligibility-details"><summary>Cómo se estimó el monto</summary>
-      <p class="muted small">Estimación con precios históricos de 2023–2025; no representa un precio vigente ni el monto publicado. Se exige el mismo CUBSO y unidad de medida, sin conversión.</p>
-      <ul>{% for item in assessment.estimate %}<li>{{ item.name }} (CUBSO {{ item.code }}): {{ item.quantity|quantity }} {{ item.unit }} × mediana {{ item.median|pen }} = {{ item.amount|pen_total }}. {{ item.n }} adjudicaciones, {{ item.year_from }}–{{ item.year_to }}.</li>{% endfor %}</ul>
+      <p class="muted small">Estimación con precios históricos; no es un precio vigente ni el monto publicado.</p>
+      <ul>{% for item in assessment.estimate %}<li>{{ item.name }} (CUBSO {{ item.code }}): {{ item.quantity|quantity }} {{ item.unit }} × mediana {{ item.median|pen }} = {{ item.amount|pen_total }}. {{ item.n }} adjudicaciones.</li>{% endfor %}</ul>
     </details>
     {% endif %}
     <details class="eligibility-details"><summary>Documentos considerados por tipo y vigencia</summary>
@@ -78,6 +78,7 @@
         <label class="eligibility-checkbox"><input type="checkbox" name="whole_contract" value="1" {% if saved_inputs.get('whole_contract') %}checked{% endif %}> Confirmé que el monto evaluado comprende todos los ítems o contratos que se me adjudicarían en este proceso.</label>
         <label class="eligibility-checkbox"><input type="checkbox" name="accessory_required" value="1" {% if saved_inputs.get('accessory_required') %}checked{% endif %}> Las bases exigen garantía por prestaciones accesorias.</label>
       </fieldset>
+      {% if assessment.category in (None, 'bienes') %}
       <fieldset><legend>Si no hay monto ni cantidades suficientes en la fuente</legend>
         <p class="small">Puede declarar la cantidad y el CUBSO exacto de un único bien que abarque el contrato evaluado. Para varios bienes se usan todos los ítems de la fuente; no use aquí una cantidad parcial. La mediana se calcula automáticamente.</p>
         {% if assessment.item_count > 1 %}<p>La fuente contiene varios ítems. Se calcula la suma de todos; no se sustituye por una cantidad parcial declarada.</p>{% else %}
@@ -87,6 +88,9 @@
         </div>
         {% endif %}
       </fieldset>
+      {% else %}
+      <p class="small" data-amount-note>En servicios y obras el monto sale del valor referencial publicado: no hay precios históricos unitarios para estimarlo.</p>
+      {% endif %}
       <fieldset><legend>Personal y eventual consorcio</legend>
         <div class="profile-grid">
           <div><label for="elig-staff">Cantidad de personal que cumple la especialidad exigida</label><input id="elig-staff" name="staff_count" type="number" min="0" max="999999" step="1" value="{{ saved_inputs.get('staff_count','') }}"></div>

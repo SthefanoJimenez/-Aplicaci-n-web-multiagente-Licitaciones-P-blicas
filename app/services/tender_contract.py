@@ -69,13 +69,14 @@ class RequirementChunk:
 
 @dataclass
 class Tender:
-    """Convocatoria de bienes de los rubros piloto. Tabla "convocatorias"."""
+    """Convocatoria vigente de bienes, servicios u obras de los rubros de la ingesta. Tabla "convocatorias"."""
     ocid: str                            # identificador OCDS, clave única (ocds-dgv273-seacev3-…)
     code: Optional[str]                  # tender.id de la fuente (por ejemplo 1258029)
     title: Optional[str]
     entity: Optional[str]                # entidad compradora
     method: Optional[str]                # tipo de procedimiento (procurementMethodDetails)
     rubros: list = field(default_factory=list)   # familias UNSPSC de sus ítems, por ejemplo ["1510"]
+    category: Optional[str] = None       # "bienes", "servicios" u "obras" (mainProcurementCategory)
     state: str = "vigente"               # "vigente" o "no_vigente"; nunca se borra
     description: Optional[str] = None
     department: Optional[str] = None     # departamento de la entidad (no el de entrega)
@@ -112,7 +113,7 @@ class IngestionRun:
     finished_at: Optional[datetime] = None
     trigger: Optional[str] = None        # "schedule", "workflow_dispatch" (manual) o "local"
     months: Optional[str] = None         # archivos leídos, por ejemplo "2026-10,2026-09"
-    source_open_goods: Optional[int] = None     # bienes vigentes en la fuente (todo el país)
+    source_open_goods: Optional[int] = None     # vigentes en la fuente (todo el país) de las categorías de la ingesta
     source_open_pilot: Optional[int] = None     # vigentes de los rubros piloto en la fuente (OE8)
     saved_open: Optional[int] = None            # vigentes de los pilotos guardadas tras la ejecución (OE8)
     new_count: Optional[int] = None

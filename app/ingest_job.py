@@ -6,13 +6,18 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
                                           un 403 es un mes aún no publicado o un bloqueo
     python ingest_job.py --sin-rag        solo la ingesta, sin leer las bases
     python ingest_job.py --solo-rag       solo lee las bases pendientes (RAG, EN-012)
+    python ingest_job.py --sin-limite --hilos 6
+                                          ingesta y luego todas las bases y cronogramas pendientes, 6 a la
+                                          vez (20/11/2026); también con RAG_MAX_BASES_PER_RUN=0,
+                                          CRONOGRAMA_MAX_POR_EJECUCION=0 y RAG_HILOS=6 en .env
     python ingest_job.py --buscar "experiencia mínima" [--codigo 1258127]
                                           prueba la búsqueda en los fragmentos guardados
     python ingest_job.py --diagnosticar-bases [--codigo 1262871]
                                           por qué no se encontró la sección de requisitos
                                           (vuelve a descargar las bases; no guarda nada)
     python ingest_job.py --releer-sin-seccion
-                                          vuelve a leer las bases "sin la sección" (tras mejorar el lector)
+                                          vuelve a leer las bases "sin la sección" y las "no legibles"
+                                          (tras mejorar el lector; desde el 20/11/2026 lee Word 97-2003)
     python ingest_job.py --solicitar-rubro 3011 [--solicitar-rubro 4111] --empresa "Nombre" [--nombre "Cemento"]
                                           registra rubros solicitados (EN-011) mientras no exista la
                                           pantalla de HU-013; se descargan desde la siguiente ingesta
@@ -20,7 +25,7 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
                                           desactiva el pedido (de esa empresa o de todas)
     python ingest_job.py --ver-rubros     rubros de la ingesta y pedidos registrados
     python ingest_job.py --espacio        espacio que ocupa cada tabla en la base (Neon)
-    python ingest_job.py --catalogo       catálogo de rubros (HU-013): convocatorias de bienes del último mes
+    python ingest_job.py --catalogo       catálogo de rubros (HU-013): convocatorias del último mes
     python ingest_job.py --ejecuciones [N]
                                           últimas N ejecuciones registradas en la base (por defecto 10)
     python ingest_job.py --muestra-bases  una convocatoria vigente por formato de bases, para probar la descarga
@@ -41,8 +46,8 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
 La ingesta diaria se ejecuta en una computadora del equipo (scripts/imac/ o scripts/windows/): el portal del
 OECE responde 403 a la red de GitHub Actions. INGEST_TRIGGER da el origen que queda registrado
 ("programada_imac" o "programada_windows").
-    RUBROS_INGESTA=todos python ingest_job.py
-                                          guarda los bienes vigentes de todos los rubros de la API
+    RUBROS_INGESTA=solicitados python ingest_job.py
+                                          guarda solo los rubros piloto y solicitados (por defecto: todos)
 
 Crea las tablas que falten, ejecuta la ingesta y, si hay GEMINI_API_KEY, lee las bases de las
 convocatorias nuevas y guarda su sección de requisitos con vectores (RAG). Escribe el resumen en
@@ -127,10 +132,10 @@ def run_rag(factory, codes=None):
         print("Aviso: esta computadora no tiene OCR (tesseract con español y pdftoppm). Las bases escaneadas "
               "quedan para leerse en una computadora con OCR; las que ya se leyeron no se borran.", flush=True)
     if codes:
-        print(f"Volviendo a leer las bases de {len(codes)} convocatoria(s)…", flush=True)
+        print(f"Volviendo a leer las bases de {len(codes)} convocatoria(s){reading_mode()}…", flush=True)
         result = rag.reindex_codes(factory, codes, progress=show)
     else:
-        print("Leyendo bases pendientes…", flush=True)
+        print(f"Leyendo bases pendientes{reading_mode()}…", flush=True)
         result = rag.index_pending(factory, progress=show)
     read_codes = [code for code, _status, _detail in result["details"]]
     lines = [f"Lectura de bases (RAG): {result['processed']} procesadas · con requisitos: {result['extraido']} · "
@@ -140,8 +145,9 @@ def run_rag(factory, codes=None):
              + (f" · lecturas anteriores conservadas: {result['conservado']}" if result.get("conservado") else "")]
     if result["extraido"]:
         lines.append(f"Tokens estimados por base con requisitos: {result['tokens'] // result['extraido']:,}")
-    if config.ALL_RUBROS and read_codes:
-        lines.append(priority_line(factory, read_codes))
+    lines.append(category_line(factory))
+    global RAG_STOPPED
+    RAG_STOPPED = bool(result["stopped"])
     if result["stopped"]:
         lines.append(f"Se detuvo la lectura de bases porque Gemini no respondió ({scrub(result['stopped'])}). "
                      "Las pendientes se leerán en la próxima ejecución.")
@@ -153,14 +159,25 @@ def run_rag(factory, codes=None):
     return lines
 
 
+RAG_STOPPED = False      # la última lectura de bases se detuvo porque Gemini no respondió
+
+
 def run_schedules(factory, limit=None):
-    """Lee el cronograma de las bases pendientes (HU-018) y devuelve las líneas del resumen. No hace fallar la ingesta."""
+    """Lee el cronograma de las bases pendientes (HU-018) y devuelve las líneas del resumen. No hace fallar la ingesta.
+
+    Si la lectura de bases se detuvo por Gemini y no hay límite de cronogramas, no se leen todos aparte
+    (20/11/2026: eran 4,314 descargas de más): la lectura de las bases guarda el cronograma de cada una,
+    así que quedan para la próxima ejecución. Con límite se leen como siempre.
+    """
     from services import rag
+    if RAG_STOPPED and limit is None and not config.SCHEDULE_MAX_PER_RUN:
+        return ["Cronogramas: no se leyeron aparte porque la lectura de bases se detuvo; se leerán junto con "
+                "las bases en la próxima ejecución."]
 
     def show(number, total, code, status, seconds):
         print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
 
-    print("Leyendo cronogramas pendientes (etapa nueva o sin leer)…", flush=True)
+    print(f"Leyendo cronogramas pendientes (etapa nueva o sin leer){reading_mode()}…", flush=True)
     result = rag.read_due_schedules(factory, limit=limit, progress=show)
     lines = [f"Cronogramas (HU-018): {result['processed']} revisados · con fechas en las bases: {result['leido']} · "
              f"remiten a la ficha del SEACE: {result['remite_seace']} · sin la sección: {result['no_encontrado']} · "
@@ -233,6 +250,19 @@ def show_stages(factory, limit=10):
                                                   "no apareció en esta muestra"))
     print("Fechas del proceso en la API: " + (", ".join(f"{k} en {v}" for k, v in period_keys.items()) or "ninguna"))
     return 0
+
+
+def category_line(factory):
+    """Bases vigentes con requisitos leídos, por categoría: la lectura las reparte para que queden parejas."""
+    from sqlalchemy import func, select
+    category = func.coalesce(db.Tender.category, "bienes")
+    with factory() as session:
+        read = dict(session.execute(select(category, func.count()).where(db.Tender.state == "vigente")
+                                    .where(db.Tender.requirements_status == "extraido").group_by(category)).all())
+        total = dict(session.execute(select(category, func.count()).where(db.Tender.state == "vigente")
+                                     .group_by(category)).all())
+    parts = [f"{name} {read.get(name, 0):,} de {total.get(name, 0):,}" for name in ("bienes", "servicios", "obras")]
+    return "Vigentes con requisitos leídos, por categoría: " + " · ".join(parts)
 
 
 def priority_line(factory, codes):
@@ -339,7 +369,7 @@ def run_requests(factory, options):
 
 
 def show_catalog(factory, top=25):
-    """Catálogo de rubros (HU-013): familias UNSPSC con convocatorias de bienes del último mes."""
+    """Catálogo de rubros (HU-013): familias UNSPSC con convocatorias del último mes (bienes, servicios y obras)."""
     with factory() as session:
         rows = rubros.catalog(session)
         counts = rubros.open_counts(session)
@@ -348,9 +378,9 @@ def show_catalog(factory, top=25):
         print("El catálogo aún no se generó: se arma con la próxima ingesta.")
         return 1
     total = sum(r.tenders_month for r in rows)
-    print(f"Catálogo de rubros: {len(rows)} rubros · {total:,} convocatorias de bienes en los últimos "
+    print(f"Catálogo de rubros: {len(rows)} rubros · {total:,} convocatorias en los últimos "
           f"{rubros.CATALOG_DAYS} días · actualizado {rows[0].updated_at:%Y-%m-%d %H:%M} UTC")
-    print("Rubro · convocatorias del mes · vigentes cargadas · estado · bienes que incluye")
+    print("Rubro · convocatorias del mes · vigentes cargadas · estado · lo que incluye")
     for r in rows[:top]:
         state = ("piloto" if r.code in config.PILOT_RUBROS else "solicitado" if r.code in requested
                  else "con datos" if counts.get(r.code) else "sin datos")
@@ -539,7 +569,7 @@ def rubro_lines(result, labels, priority=()):
     if result.get("all_rubros"):
         for _code, (in_source, saved, new) in no_rubro:
             lines.append(f"- {rubros.NO_RUBRO_LABEL}: {saved:,} guardadas ({in_source:,} en la fuente · {new:,} nuevas)")
-        lines.append(f"Cobertura: {result['source_open_pilot']:,} de {result['source_open_goods']:,} bienes vigentes "
+        lines.append(f"Cobertura: {result['source_open_pilot']:,} de {result['source_open_goods']:,} vigentes "
                      f"de la fuente, en {len(result['rubros'])} rubros"
                      + (" · todos cargados." if result["source_open_pilot"] == result["source_open_goods"] else "."))
     return lines
@@ -573,12 +603,36 @@ def parse(args):
     parser.add_argument("--ocr", action="store_true")
     parser.add_argument("--cronogramas", nargs="?", type=int, const=0)
     parser.add_argument("--etapas", nargs="?", type=int, const=10)
+    parser.add_argument("--hilos", type=int)
+    parser.add_argument("--sin-limite", action="store_true")
     # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
     return parser.parse_args(args)
 
 
+def apply_reading_options(options):
+    """--hilos y --sin-limite cambian la lectura de bases y cronogramas de esta ejecución.
+    Devuelve un mensaje de error o None."""
+    if options.hilos is not None:
+        if not 1 <= options.hilos <= 8:
+            return "--hilos debe estar entre 1 y 8 (más saturaría al SEACE)"
+        config.RAG_WORKERS = options.hilos
+    if options.sin_limite:
+        config.RAG_MAX_BASES_PER_RUN = 0
+        config.SCHEDULE_MAX_PER_RUN = 0
+    return None
+
+
+def reading_mode():
+    """«(6 a la vez)» para los mensajes de la lectura de bases y cronogramas."""
+    return f" ({config.RAG_WORKERS} a la vez)" if config.RAG_WORKERS > 1 else ""
+
+
 def main(args=None):
     options = parse(sys.argv[1:] if args is None else args)
+    problem = apply_reading_options(options)
+    if problem:
+        print(problem)
+        return 2
     if options.diagnostico:
         return run_diagnosis()
     if options.ocr:
@@ -637,9 +691,9 @@ def main(args=None):
         from sqlalchemy import update
         with factory.begin() as session:
             reset = session.execute(update(db.Tender).where(db.Tender.state == "vigente")
-                                    .where(db.Tender.requirements_status == "seccion_no_encontrada")
+                                    .where(db.Tender.requirements_status.in_(("seccion_no_encontrada", "no_legible")))
                                     .values(requirements_status="pendiente")).rowcount
-        print(f"{reset} bases sin la sección vuelven a quedar pendientes.", flush=True)
+        print(f"{reset} bases sin la sección o no legibles vuelven a quedar pendientes.", flush=True)
         options.solo_rag = True
     if options.solo_rag:
         lines = run_rag(factory)
@@ -652,8 +706,8 @@ def main(args=None):
     with factory() as session:
         labels = dict(rubros.named_options(session))      # sin el conteo del filtro: el resumen trae el suyo
         priority = rubros.ingestion_rubros(session)       # piloto + solicitados
-    shown = f"todos los de bienes (prioridad: {', '.join(priority)})" if config.ALL_RUBROS else ', '.join(priority)
-    print(f"Ingesta · meses: {config.OCDS_MONTHS} · rubros: {shown} · "
+    shown = "todos" if config.ALL_RUBROS else ', '.join(priority)
+    print(f"Ingesta · meses: {config.OCDS_MONTHS} · categorías: {', '.join(config.CATEGORIES)} · rubros: {shown} · "
           f"nombre de cliente: {client} · origen: {trigger}", flush=True)
     started = time.perf_counter()
     result = ingest.run_ingestion(factory, trigger=trigger)
@@ -662,8 +716,9 @@ def main(args=None):
     if result["status"] == "ok":
         lines = [
             f"Ejecución {result['run_id']}: correcta · {len(result['rubros'])} rubros · ingesta en {ingest_seconds:.0f} s.",
-            f"Bienes vigentes en la fuente: {result['source_open_goods']:,} · de los rubros de la ingesta: "
-            f"{result['source_open_pilot']:,}",
+            f"Vigentes en la fuente ({', '.join(result.get('categories') or config.CATEGORIES)}): "
+            f"{result['source_open_goods']:,} · de los rubros de la ingesta: {result['source_open_pilot']:,}",
+            "Por categoría: " + " · ".join(f"{name} {count:,}" for name, count in (result.get("by_category") or {}).items()),
             f"Vigentes guardadas: {result['saved_open']:,} · nuevas: {result['new']:,} · actualizadas: "
             f"{result['updated']:,} · pasaron a no vigentes: {result['closed']:,} · documentos nuevos: {result['documents_added']:,}",
         ]
@@ -672,7 +727,7 @@ def main(args=None):
                          "Su cronograma se vuelve a leer.")
         lines += rubro_lines(result, labels, priority)
         if result.get("catalog"):
-            lines.append(f"Catálogo de rubros: {result['catalog']} rubros con convocatorias de bienes "
+            lines.append(f"Catálogo de rubros: {result['catalog']} rubros con convocatorias "
                          f"en los últimos {rubros.CATALOG_DAYS} días (pantalla /rubros).")
         for month, reason in result.get("skipped_months", []):
             lines.append(f"Mes {month} omitido: {reason}. Se volverá a intentar en la próxima ejecución.")

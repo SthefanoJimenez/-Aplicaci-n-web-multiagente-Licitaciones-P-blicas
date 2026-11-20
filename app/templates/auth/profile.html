@@ -13,6 +13,28 @@
   <form method="post" action="{{ url_for('auth.profile') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <fieldset class="field" data-supplier-type>
+      <legend class="label">¿Cómo postula?</legend>
+      {% for key, label in supplier_types.items() %}
+      <label style="display:block;"><input type="radio" name="supplier_type" value="{{ key }}" {% if values.get('supplier_type') == key %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+      <p class="hint">Si va a postular junto con otras empresas, forme el grupo en <a href="{{ url_for('consortium.index') }}">Consorcios</a>.</p>
+      {% if errors.get('supplier_type') %}<p class="error">{{ errors.supplier_type }}</p>{% endif %}
+    </fieldset>
+    <fieldset class="field" data-categories>
+      <legend class="label">¿Qué ofrece al Estado?</legend>
+      {% for key, label in category_labels.items() %}
+      <label style="display:inline-block; margin-right:16px;"><input type="checkbox" name="categories" value="{{ key }}" {% if key in (values.get('categories') or []) %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+      <p class="hint">Se usa para mostrarle primero las convocatorias de lo que ofrece.</p>
+    </fieldset>
+    <fieldset class="field" data-rnp-registers>
+      <legend class="label">Registros vigentes en el RNP</legend>
+      {% for key, label in rnp_registers.items() %}
+      <label style="display:inline-block; margin-right:16px;"><input type="checkbox" name="rnp_registers" value="{{ key }}" {% if key in (values.get('rnp_registers') or []) %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+      <p class="hint">Cada convocatoria pide la inscripción vigente en el registro de su objeto: bienes, servicios, ejecución de obras o consultoría de obras. Suba la constancia en Documentos de mi empresa.</p>
+    </fieldset>
     <div class="profile-grid">
       {{ input('ruc', 'RUC de la empresa (opcional)', values, errors, required=false, minimum=11, maximum=11, hint='Solo se valida el formato de 11 dígitos. No es una consulta ni una verificación de SUNAT.') }}
       {{ input('company_name', 'Razón social de la empresa', values, errors, autocomplete='organization', minimum=2, hint='Escriba el nombre legal de la empresa tal como figura en su RUC.') }}
@@ -27,7 +49,7 @@
       <textarea id="specialized_staff" name="specialized_staff" rows="4" maxlength="3000" required
                 aria-describedby="staff-hint{% if errors.get('specialized_staff') %} staff-error{% endif %}"
                 {% if errors.get('specialized_staff') %}aria-invalid="true"{% endif %}>{{ values.get('specialized_staff', '') }}</textarea>
-      <p class="hint" id="staff-hint">Indique los puestos y la experiencia disponible. Si no cuenta con personal especializado, escriba «No cuento con personal especializado».</p>
+      <p class="hint" id="staff-hint">Indique los puestos y la experiencia disponible. Si no cuenta con personal especializado, escriba «No cuento con personal especializado». Para que el semáforo compare a cada profesional con las bases, regístrelos en <a href="{{ url_for('staff.index') }}">Personal clave</a>.</p>
       {% if errors.get('specialized_staff') %}<p class="error" id="staff-error">{{ errors.specialized_staff }}</p>{% endif %}
     </div>
     <p class="hint">Este perfil registra información declarada por su empresa. Guardarlo todavía no emite un veredicto sobre una convocatoria.</p>
@@ -35,6 +57,7 @@
       <button class="button button-primary" type="submit">Guardar perfil</button>
       <a class="button button-secondary" href="{{ url_for('evaluate_company_product') }}">Evaluar mi producto</a>
       <a class="button button-secondary" href="{{ url_for('company_documents.index') }}">Documentos de mi empresa</a>
+      <a class="button button-secondary" href="{{ url_for('staff.index') }}">Personal clave</a>
       <a class="button button-secondary" href="{{ url_for('consortium.index') }}">Consorcios</a>
     </div>
   </form>

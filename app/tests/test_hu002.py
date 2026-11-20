@@ -10,7 +10,7 @@ from services import data, llm
 
 CEMENT_I = 12771           
 DIESEL = 233280            
-WIRE_MESH = 1414           
+WIRE_MESH = 315597   # malla de alambre galvanizada: 7 adjudicaciones con 2023-2026 (20/11/2026)           
 NONEXISTENT = 999999
 
 
@@ -107,10 +107,11 @@ def test_screen_shows_range_unit_awards_and_period(client, no_model):
     html = client.get("/mercado").get_data(as_text=True)
     r = market_analyst.analyze(CEMENT_I)
     for text in ("P25", "Mediana", "P75", "por unidad", format_pen(r["p25"]), format_pen(r["median"]),
-                 format_pen(r["p75"]), f"{r['n_awards']:,} adjudicaciones", "2023–2025",
+                 format_pen(r["p75"]), f"{r['n_awards']:,} adjudicaciones",
                  "Competitivo", "Con cautela", "Alto costo", "Ingresar mi costo"):
         assert text in html, text
     assert "Sin evidencia suficiente" not in html
+    assert data.PERIOD.replace("-", "–") not in html      # 20/11/2026: el período solo va en «Cómo preparamos los datos»
 
 
 def test_screen_warns_when_below_minimum(client, no_model):
