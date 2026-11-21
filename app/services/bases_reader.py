@@ -8,10 +8,12 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import config
 from services import bases_download, schedule
 
 # pypdf avisa por cada diccionario repetido de los PDF del SEACE; no afecta la lectura
@@ -24,6 +26,9 @@ SHORT_SECTION_TOKENS = 150        # menos suele ser una línea del índice (SP-0
 MAX_SECTION_CHARS = 12000        # las secciones reales medidas llegan a ~7000; sin final claro se corta aquí
 OCR_DPI = 150
 OCR_MAX_PAGES = 160               # la base escaneada más larga del SP-005 tiene 137 páginas
+GEMINI_MAX_PAGES = 400            # Gemini admite hasta 1000 páginas por PDF; más que esto no es una base
+GEMINI_PAGES_PER_CALL = 10        # páginas escaneadas por pedido. Eran 30 hasta el 20/11/2026: una respuesta
+                                  # tan larga puede cortarse y perder justo las páginas de los requisitos
 
 INDEX_LEADERS = re.compile(r"\.{4,}|…{2,}|_{4,}")
 NEXT_SECTION_PATTERN = re.compile(r"\n\s*(cap[ií]tulo|anexo|secci[oó]n)\s|\n\s*[0-9.]*\s*factores\s+de\s+evaluaci", re.I)
@@ -52,6 +57,7 @@ class Section:
     document: str                       # nombre del archivo dentro de lo descargado
     source: str                         # "texto" u "ocr"
     page_marks: list = field(default_factory=list)   # [(posición en text, página)]; vacío en Word
+    ocr_engine: str | None = None       # con source "ocr": "gemini" o "tesseract" (20/11/2026)
 
     def page_at(self, position):
         page = None
@@ -67,6 +73,10 @@ class ReadResult:
     section: Section | None = None
     detail: str = ""
     schedule: object = None              # schedule.ScheduleResult de los documentos leídos (HU-018), o None
+    context: str = ""                    # partes de las bases fuera de la sección que también se analizan
+                                         # (cuantía, consorcio, personal clave, equipamiento; 20/11/2026)
+    used_gemini: bool = False            # alguna página escaneada se leyó con Gemini
+    gemini_failed: bool = False          # Gemini no respondió en alguna (se usó tesseract): vale reintentar
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +370,100 @@ def _tesseract(image, psm):
     return clean_ocr(OCR_ORDINAL.sub("o", result.stdout)) if result.returncode == 0 else ""
 
 
+# ---------------------------------------------------------------------------
+# Lectura con Gemini de las páginas escaneadas (20/11/2026)
+# ---------------------------------------------------------------------------
+GEMINI_PROMPT = """Este PDF tiene páginas escaneadas de las bases de un procedimiento de contratación pública del Perú.
+Sus páginas corresponden, en orden, a estas páginas del documento original: {pages}.
+
+Para CADA página escribe primero una línea exacta «=== PÁGINA N ===», donde N es el número original. Luego:
+- Si la página contiene, aunque sea en parte, los requisitos de calificación, los requisitos de habilitación,
+  el personal clave, la experiencia del postor, el cronograma del procedimiento o el índice: transcribe todo su
+  texto de forma literal, con sus títulos, numeración, montos y fechas tal como aparecen. No resumas, no
+  corrijas y no completes lo que no se lee.
+- En cualquier otra página: escribe solo su título o su primera línea.
+Responde solo con el texto, sin comentarios ni formato markdown."""
+GEMINI_PAGE_MARK = re.compile(r"^\s*=+\s*P[ÁA]GINA\s+(\d+)\s*=+\s*$", re.M | re.I)
+
+
+GEMINI_FAILURES_TO_SWITCH = 3      # fallos seguidos de Gemini (sin decir que es la cuota del día) para pasar a tesseract
+_ocr_failures = {"seguidos": 0}
+_ocr_lock = threading.Lock()
+
+
+def _gemini_answered():
+    with _ocr_lock:
+        _ocr_failures["seguidos"] = 0
+
+
+def _gemini_failed(error):
+    """Gemini no leyó unas páginas. Si se acabó la cuota (o falló varias veces seguidas), el resto de la
+    ejecución lee las escaneadas con tesseract, sin volver a intentar con Gemini (20/11/2026)."""
+    from services import llm
+    with _ocr_lock:
+        _ocr_failures["seguidos"] += 1
+        switch = llm.out_of_quota(error) or _ocr_failures["seguidos"] >= GEMINI_FAILURES_TO_SWITCH
+    if switch and llm.mark_exhausted("texto"):
+        print(f"  Gemini se quedó sin cuota ({error}): las páginas escaneadas se leen con tesseract desde ahora. "
+              "Esas bases quedan para releer con Gemini (--releer-escaneadas) cuando haya cuota.", flush=True)
+
+
+def gemini_ocr_enabled():
+    """True si las páginas escaneadas se leen con Gemini (OCR_MOTOR=gemini, o auto con clave)."""
+    engine = config.OCR_ENGINE
+    return engine == "gemini" or (engine == "auto" and bool(config.GEMINI_API_KEY))
+
+
+def _pdf_of_pages(content, page_numbers):
+    """PDF nuevo solo con esas páginas (desde 1), en ese orden."""
+    from pypdf import PdfReader, PdfWriter
+    reader, writer = PdfReader(io.BytesIO(content)), PdfWriter()
+    for number in page_numbers:
+        writer.add_page(reader.pages[number - 1])
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def split_marked_pages(text, page_numbers):
+    """{página: texto} de la respuesta de Gemini, separada por «=== PÁGINA N ===»."""
+    marks = list(GEMINI_PAGE_MARK.finditer(text or ""))
+    pages = {}
+    for i, mark in enumerate(marks):
+        number = int(mark.group(1))
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        if number in page_numbers:
+            pages[number] = (pages.get(number, "") + "\n" + text[mark.end():end]).strip()
+    return pages
+
+
+def gemini_pages(content, page_numbers, transcribe=None):
+    """Texto de las páginas escaneadas leído con Gemini, de a GEMINI_PAGES_PER_CALL por pedido.
+
+    Devuelve ({página: texto}, tokens usados). Lanza llm.ModelError si Gemini no responde.
+    """
+    if transcribe is None:
+        from services import llm
+        transcribe = llm.transcribe_pdf
+    texts, tokens = {}, 0
+    for start in range(0, len(page_numbers), GEMINI_PAGES_PER_CALL):
+        group = page_numbers[start:start + GEMINI_PAGES_PER_CALL]
+        answer, used = transcribe(_pdf_of_pages(content, group),
+                                  GEMINI_PROMPT.format(pages=", ".join(map(str, group))))
+        tokens += used
+        found = split_marked_pages(answer, set(group))
+        texts.update({number: found.get(number, "") for number in group})
+    return texts, tokens
+
+
+def _fill_missing(content, texts):
+    """Las páginas que Gemini dejó vacías (respuesta cortada o sin su marca) se leen con tesseract."""
+    missing = [n for n, text in texts.items() if not text.strip()]
+    if missing and ocr_available():
+        texts.update(ocr_pages(content, missing))
+    return texts
+
+
 def ocr_pages(content, page_numbers):
     """Texto de las páginas indicadas (desde 1) con pdftoppm + tesseract en español."""
     texts = {}
@@ -461,6 +565,8 @@ class DocumentText:
     ocr_pages: set = field(default_factory=set)       # páginas leídas con OCR
     unread_scan: bool = False    # escaneado que no se pudo leer (sin OCR o demasiado largo)
     image_text_from: int | None = None   # en Word: desde dónde el texto sale de las imágenes (OCR)
+    ocr_engine: str | None = None        # "gemini" o "tesseract": con qué se leyeron las páginas escaneadas
+    gemini_failed: bool = False          # Gemini no respondió y se usó tesseract (20/11/2026)
 
     def page_of(self, position):
         page = None
@@ -506,7 +612,7 @@ def legacy_word_text(data):
     return None
 
 
-def document_text(name, data, use_ocr, word_images=False):
+def document_text(name, data, use_ocr, word_images=False, engine=None):
     """DocumentText de un PDF o Word, o None si no se puede abrir.
 
     word_images: en un Word, además lee con OCR sus imágenes (algunas entidades pegan el Capítulo III
@@ -541,10 +647,32 @@ def document_text(name, data, use_ocr, word_images=False):
                    or (big_image[i] and len(p.strip()) < IMAGE_PAGE_MAX_CHARS)]
     scanned = sum(len(p.strip()) for p in pages) / len(pages) < SCANNED_CHARS_PER_PAGE
     ocr_done = set()
-    if image_pages and use_ocr and len(image_pages) <= OCR_MAX_PAGES:
+    forced, (read_pages, engine), gemini_failed = engine, (None, None), False
+    if (image_pages and use_ocr and forced != "tesseract" and gemini_ocr_enabled()
+            and len(image_pages) <= GEMINI_MAX_PAGES):
+        # 20/11/2026: primero Gemini; si no responde (cuota, red), tesseract como antes. Si ya se sabe que se
+        # acabó la cuota, ni se intenta: la base queda para releer con Gemini (gemini_failed).
+        from services import llm
+        if llm.exhausted("texto"):
+            gemini_failed = True
+        else:
+            try:
+                read_pages, _tokens = gemini_pages(data, image_pages)
+                _gemini_answered()
+                read_pages = _fill_missing(data, read_pages)
+                engine = "gemini"
+            except llm.ModelError as error:
+                gemini_failed = True
+                _gemini_failed(error)
+                logging.getLogger(__name__).info("Gemini no leyó las páginas escaneadas (%s); se usa tesseract", error)
+    tesseract_ok = not gemini_ocr_enabled() or ocr_available()     # tras Gemini, solo si tesseract está instalado
+    if read_pages is None and image_pages and use_ocr and tesseract_ok and len(image_pages) <= OCR_MAX_PAGES:
         # Escaneado completo, o PDF con texto que trae escaneadas justo las páginas del
         # requerimiento (pasó en 4 de las bases del SP-005): solo esas páginas pasan por OCR
-        for number, page_text in ocr_pages(data, image_pages).items():
+        read_pages = ocr_pages(data, image_pages)
+        engine = "tesseract"
+    if read_pages is not None:
+        for number, page_text in read_pages.items():
             pages[number - 1] = page_text
         ocr_done = set(image_pages)
         scanned = False
@@ -553,7 +681,8 @@ def document_text(name, data, use_ocr, word_images=False):
         starts.append(pos)
         pos += len(page) + 1
     return DocumentText(name=name, text="\n".join(pages), starts=starts, pages=len(pages),
-                        image_pages=image_pages, ocr_pages=ocr_done, unread_scan=scanned)
+                        image_pages=image_pages, ocr_pages=ocr_done, unread_scan=scanned,
+                        ocr_engine=engine if ocr_done else None, gemini_failed=gemini_failed)
 
 
 def _section_of(doc):
@@ -573,17 +702,74 @@ def _section_of(doc):
     begin, end = found
     if not doc.starts:
         from_images = doc.image_text_from is not None and begin >= doc.image_text_from
-        return Section(text=doc.text[begin:end], document=doc.name, source="ocr" if from_images else "texto")
+        return Section(text=doc.text[begin:end], document=doc.name, source="ocr" if from_images else "texto",
+                       ocr_engine="tesseract" if from_images else None)
     starts = doc.starts
     marks = [(max(0, s - begin), i + 1) for i, s in enumerate(starts)
              if s < end and (i + 1 == len(starts) or starts[i + 1] > begin)]
     source = "ocr" if any(number in doc.ocr_pages for _, number in marks) else "texto"
-    return Section(text=doc.text[begin:end], document=doc.name, source=source, page_marks=marks)
+    return Section(text=doc.text[begin:end], document=doc.name, source=source, page_marks=marks,
+                   ocr_engine=doc.ocr_engine if source == "ocr" else None)
+
+
+# ---------------------------------------------------------------------------
+# Otras partes de las bases que se analizan con la sección (20/11/2026)
+# ---------------------------------------------------------------------------
+# La sección de requisitos no dice todo lo que decide si una empresa puede postular: la cuantía (o que la
+# entidad la reserva) está en el Capítulo I, las reglas del consorcio en la sección general, y el personal
+# clave y el equipamiento a veces solo en los términos de referencia. Se toman los párrafos que los
+# mencionan, en orden de importancia, hasta CONTEXT_CHARS.
+CONTEXT_TERMS = (
+    r"cuant[ií]a\s+de\s+la\s+contrataci[oó]n|valor\s+(?:estimado|referencial)|monto\s+(?:estimado|referencial)",
+    r"consorci",
+    r"personal\s+clave|plantel\s+(?:profesional|t[eé]cnico)",
+    r"equipamiento\s+(?:estrat[eé]gico|m[ií]nimo)",
+    r"prestaci[oó]n(?:es)?\s+accesorias?",
+    r"plazo\s+de\s+(?:ejecuci[oó]n|entrega|prestaci[oó]n)",
+)
+CONTEXT_CHARS = 8000
+CONTEXT_BEFORE, CONTEXT_AFTER = 250, 900
+CONTEXT_PER_TERM = 3          # párrafos por tema: «consorcio» aparece decenas de veces
+
+
+def context_text(doc, skip=None):
+    """Párrafos de `doc` (DocumentText) sobre los temas de CONTEXT_TERMS, con su página: «[página 5] …».
+
+    skip: (inicio, fin) de la sección de requisitos, que ya se envía entera.
+    """
+    text, taken, parts, used = doc.text, [], [], 0
+    for term in CONTEXT_TERMS:
+        found = 0
+        for match in re.finditer(term, text, flags=re.IGNORECASE):
+            if found >= CONTEXT_PER_TERM or used >= CONTEXT_CHARS:
+                break
+            start, end = max(0, match.start() - CONTEXT_BEFORE), min(len(text), match.end() + CONTEXT_AFTER)
+            if skip and skip[0] <= match.start() < skip[1]:
+                continue
+            if any(a <= match.start() < b for a, b in taken):
+                continue
+            taken.append((start, end))
+            piece = re.sub(r"[ \t]+", " ", text[start:end]).strip()
+            piece = piece[:CONTEXT_CHARS - used]
+            page = doc.page_of(match.start()) if doc.starts else None
+            parts.append((f"[página {page}] " if page else "") + piece)
+            used += len(piece)
+            found += 1
+    return "\n---\n".join(parts)
+
+
+def _context_for(doc, section):
+    start = doc.text.find(section.text[:300]) if section else -1
+    skip = (start, start + len(section.text)) if start >= 0 else None
+    try:
+        return context_text(doc, skip)
+    except Exception:            # el análisis es un extra: nunca impide guardar la sección
+        return ""
 
 
 def read_bases(content, use_ocr=None):
     """Lee lo descargado y devuelve ReadResult con la sección de requisitos, si la hay."""
-    use_ocr = ocr_available() if use_ocr is None else use_ocr
+    use_ocr = (ocr_available() or gemini_ocr_enabled()) if use_ocr is None else use_ocr
     documents = documents_in(content)
     if not documents:
         kind = bases_download.detect_kind(content[:8192])
@@ -591,10 +777,13 @@ def read_bases(content, use_ocr=None):
     readable = False
     unread_scans = []
     found_schedule = None        # HU-018: el cronograma se busca en cada documento que se abre
+    gemini_docs, flags = [], {"used_gemini": False, "gemini_failed": False}
     for name, data in documents:
         doc = document_text(name, data, use_ocr)
         if doc is None:
             continue
+        flags["used_gemini"] |= doc.ocr_engine == "gemini"
+        flags["gemini_failed"] |= doc.gemini_failed
         if doc.unread_scan:
             unread_scans.append(len(doc.image_pages))
             continue
@@ -602,7 +791,19 @@ def read_bases(content, use_ocr=None):
         found_schedule = schedule.better(found_schedule, schedule.schedule_of_document(doc))
         section = _section_of(doc)
         if section:
-            return ReadResult("extraido", section, schedule=found_schedule)
+            return ReadResult("extraido", section, schedule=found_schedule, context=_context_for(doc, section),
+                              **flags)
+        if doc.ocr_engine == "gemini":
+            gemini_docs.append((name, data))
+    if use_ocr and ocr_available():
+        # 20/11/2026: si con lo que leyó Gemini no aparece la sección, otra oportunidad con tesseract. Así una
+        # relectura con Gemini nunca encuentra menos que la lectura anterior con tesseract.
+        for name, data in gemini_docs:
+            doc = document_text(name, data, use_ocr, engine="tesseract")
+            section = _section_of(doc) if doc and not doc.unread_scan else None
+            if section:
+                return ReadResult("extraido", section, schedule=found_schedule, context=_context_for(doc, section),
+                                  **flags)
     if use_ocr:
         # Segunda pasada, solo si ningún documento trae la sección: OCR de las imágenes de los Word
         # (en 1248982 el Word trae fotos de otra cosa y el PDF sí tenía la sección)
@@ -611,17 +812,36 @@ def read_bases(content, use_ocr=None):
                 with_images = document_text(name, data, use_ocr, word_images=True)
                 section = _section_of(with_images) if with_images else None
                 if section:
-                    return ReadResult("extraido", section, schedule=found_schedule)
+                    return ReadResult("extraido", section, schedule=found_schedule,
+                                      context=_context_for(with_images, section), **flags)
     if readable:
         return ReadResult("seccion_no_encontrada", detail=f"se leyeron {len(documents)} documento(s) sin la sección",
-                          schedule=found_schedule)
+                          schedule=found_schedule, **flags)
     if unread_scans and use_ocr:
-        detail = f"PDF escaneado de {max(unread_scans)} páginas: supera el límite de OCR ({OCR_MAX_PAGES})"
+        limit = GEMINI_MAX_PAGES if gemini_ocr_enabled() else OCR_MAX_PAGES
+        detail = (f"PDF escaneado de {max(unread_scans)} páginas: supera el límite de OCR ({limit}) "
+                  "o no se pudo leer")
     elif unread_scans:
         detail = "PDF escaneado y no hay OCR instalado (tesseract con español y pdftoppm)"
     else:
         detail = "sin texto legible"
-    return ReadResult("no_legible", detail=detail, schedule=found_schedule)
+    return ReadResult("no_legible", detail=detail, schedule=found_schedule, **flags)
+
+
+def context_of(content):
+    """Las otras partes de las bases (context_text) de lo descargado, sin OCR: para analizar los requisitos de
+    bases leídas antes del 20/11/2026, cuya sección ya está guardada. "" si no hay texto."""
+    best = ""
+    for name, data in documents_in(content):
+        doc = document_text(name, data, False)
+        if doc is None or doc.unread_scan or not doc.text.strip():
+            continue
+        section = _section_of(doc)
+        context = _context_for(doc, section)
+        if section:
+            return context
+        best = best or context
+    return best
 
 
 def read_schedule(content):
@@ -664,7 +884,7 @@ def explain(content, use_ocr=None, max_lines=12):
 
     Devuelve [{"document", "pages", "image_pages", "ocr_pages", "unread_scan", "lines": [(página, línea, veredicto)]}].
     """
-    use_ocr = ocr_available() if use_ocr is None else use_ocr
+    use_ocr = (ocr_available() or gemini_ocr_enabled()) if use_ocr is None else use_ocr
     report = []
     for name, data in documents_in(content):
         doc = document_text(name, data, use_ocr, word_images=True)

@@ -121,6 +121,12 @@ class Tender(Base):
     schedule_due: Mapped[bool | None] = mapped_column(Boolean)          # True: leerlo en la siguiente ingesta
     enquiry_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # plazo de consultas y
     enquiry_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))     # observaciones (enquiryPeriod)
+    # Requisitos analizados con Gemini (services/bases_facts.py, 20/11/2026): datos para comparar con la empresa
+    bases_facts: Mapped[dict | None] = mapped_column(JSON, deferred=True)
+    bases_facts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bases_facts_model: Mapped[str | None] = mapped_column(String(80))
+    # Última vez que se releyó con Gemini sin que fallara (20/11/2026): --releer-escaneadas no la vuelve a tomar
+    gemini_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_run_id: Mapped[int | None] = mapped_column(ForeignKey("actualizaciones.id"))
     last_run_id: Mapped[int | None] = mapped_column(ForeignKey("actualizaciones.id"))
 
@@ -175,8 +181,11 @@ class RequirementChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     page: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(10), default="texto")       # "texto" u "ocr"
+    ocr_engine: Mapped[str | None] = mapped_column(String(10))            # "gemini" o "tesseract" (20/11/2026)
     file_name: Mapped[str | None] = mapped_column(String(300))            # archivo dentro de lo descargado
-    embedding = mapped_column(Vector(config.EMBEDDING_DIM).with_variant(JSON(), "sqlite"))
+    # Vacío si se guardó cuando Gemini no tenía cuota de vectores (20/11/2026); se completa con --completar-vectores.
+    # none_as_null: en SQLite (pruebas) un vector vacío queda como NULL, igual que en PostgreSQL.
+    embedding = mapped_column(Vector(config.EMBEDDING_DIM).with_variant(JSON(none_as_null=True), "sqlite"))
     model: Mapped[str | None] = mapped_column(String(80))
     tokens_est: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -235,8 +244,11 @@ ADDED_COLUMNS = {
                       "category",                                   # bienes, servicios y obras
                       "stage", "stage_changed_at", "schedule_status", "schedule", "schedule_page",   # HU-018
                       "schedule_file", "schedule_document_id", "schedule_read_at", "schedule_stage", "schedule_due",
-                      "enquiry_start", "enquiry_end"),
+                      "enquiry_start", "enquiry_end",
+                      "bases_facts", "bases_facts_at", "bases_facts_model",      # análisis de requisitos (20/11/2026)
+                      "gemini_read_at"),
     "documentos": ("published_at",),                                 # HU-018
+    "fragmentos": ("ocr_engine",),                                  # OCR con Gemini (20/11/2026)
 }
 
 

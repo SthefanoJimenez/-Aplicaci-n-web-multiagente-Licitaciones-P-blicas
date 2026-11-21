@@ -191,13 +191,16 @@ def test_missing_or_incompatible_estimate_input_does_not_invent_amount(price_sam
     assert eligibility.historical_estimate([item])[0] is None
 
 
-def test_missing_amount_is_yellow_with_literal_reason(account_factory,business,public_db):
+def test_missing_amount_is_information_not_a_failure(account_factory,business,public_db):
+    """20/11/2026: si la entidad no publica el monto, no se le pide al cliente ni cambia el color."""
     with public_db.begin() as session:
         row=session.scalar(select(db.Tender));row.estimated_value=None;row.items=[]
     context=eligibility.load_tenders(["9001"])["9001"]
     result=evaluate_for(account_factory,business,prepared(context))
-    assert result["color"]=="amarillo" and result["amount"] is None
-    assert "Falta el monto" in result["reason"]
+    checks={c["key"]:c for c in result["checks"]}
+    assert result["amount"] is None and checks["monto"]["status"]=="info" and checks["garantia"]["status"]=="info"
+    assert "10 % del monto del contrato" in checks["garantia"]["reason"]
+    assert "monto" not in result["reason"].lower()
 
 
 def test_ingested_items_allow_automatic_estimation(account_factory,business,public_db,price_sample):
@@ -210,34 +213,34 @@ def test_ingested_items_allow_automatic_estimation(account_factory,business,publ
 
 
 def test_guarantees_exemption_boundary_and_mype_retention():
-    base={"regime":"32069","whole_contract":True,"guarantee_method":"retention"}
+    base={}
     exempt=guarantees.calculate(Decimal("275000"),base,TODAY)
     assert exempt["exempt"] and exempt["amount"]==0
     normal=guarantees.calculate(Decimal("275000.01"),base,TODAY)
-    assert not normal["exempt"] and normal["amount"]==Decimal("27500.00")
+    assert not normal["exempt"] and normal["amount"]==Decimal("27500.00") and normal["retention_allowed"]
     high=guarantees.calculate(Decimal("500000"),base,TODAY)
-    assert high["status"]=="pending" and not high["retention_allowed"]
+    assert high["status"]=="pass" and not high["retention_allowed"] and "carta fianza o póliza" in high["reason"]
     mype=guarantees.calculate(Decimal("500000"),base|{"mype":True},TODAY)
-    assert mype["status"]=="pass" and mype["amount"]==Decimal("50000.00")
-    assert "no elimina ni reduce" in mype["reason"]
+    assert mype["status"]=="pass" and mype["amount"]==Decimal("50000.00") and mype["retention_allowed"]
+    assert "no elimina ni reduce" in mype["reason"] and "por ser MYPE" in mype["reason"]
 
 
 def test_accessory_and_advance_guarantees_are_separate_and_configurable():
-    values={"regime":"32069","whole_contract":True,"guarantee_method":"coverage", "guarantee_capacity":"100000",
-            "accessory_amount":"10000","advance_amount":"20000"}
+    values={"accessory_amount":"10000","advance_amount":"20000"}
     result=guarantees.calculate(Decimal("500000"),values,TODAY)
     assert result["amount"]==50000 and result["accessory"]==1000 and result["advance"]==20000
     custom=guarantees.calculate(Decimal("500000"),values,TODAY,guarantees.Policy(rate=Decimal("0.08")))
     assert custom["amount"]==40000
-    retention=guarantees.calculate(Decimal("500000"),values|{"mype":True,"guarantee_method":"retention","guarantee_capacity":"0"},TODAY)
-    assert retention["status"]=="pending"  # El adelanto sigue necesitando cobertura.
+    # Sin montos de accesorias ni adelanto (las bases no los traen) se explican como porcentaje, sin pedirlos
+    unknown=guarantees.calculate(Decimal("500000"),{"accessory_required":True},TODAY)
+    assert unknown["status"]=="pass" and unknown["accessory"] is None and "prestaciones accesorias" in unknown["reason"]
 
 
-@pytest.mark.parametrize("changes",[{"regime":"30225"},{"regime":""},{"whole_contract":False},{"guarantee_method":""}])
-def test_guarantees_wait_for_regime_and_aggregate_scope(changes):
-    values={"regime":"32069","whole_contract":True}|changes
-    assert guarantees.calculate(Decimal("500000"),values,TODAY)["status"]=="pending"
-    assert guarantees.calculate(Decimal("500000"),values,date(2027,1,1))["status"]=="pending"
+def test_guarantees_wait_only_for_another_regime_or_another_year():
+    """20/11/2026: el régimen lo deduce la evaluación; la modalidad y el alcance ya no se le piden al cliente."""
+    assert guarantees.calculate(Decimal("500000"),{},TODAY,regime="30225")["status"]=="pending"
+    assert guarantees.calculate(Decimal("500000"),{},date(2027,1,1))["status"]=="pending"
+    assert guarantees.calculate(Decimal("500000"),{},TODAY)["status"]=="pass"
 
 
 def test_new_columns_are_added_without_losing_existing_records(tmp_path):

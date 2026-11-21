@@ -15,6 +15,20 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
     python ingest_job.py --diagnosticar-bases [--codigo 1262871]
                                           por qué no se encontró la sección de requisitos
                                           (vuelve a descargar las bases; no guarda nada)
+    python ingest_job.py --releer-escaneadas
+                                          vuelve a leer con Gemini solo las bases ya leídas que estaban
+                                          escaneadas (con tesseract), "sin la sección" o "no legibles";
+                                          no lee las pendientes nuevas (20/11/2026)
+    python ingest_job.py --analizar-requisitos [N] [--codigo 1265987]
+                                          analiza con Gemini los requisitos de las bases ya leídas (monto
+                                          mínimo, personal, RNP…) para compararlos con cada empresa; sin N,
+                                          todas las que faltan. Las nuevas se analizan al leerlas (20/11/2026)
+    python ingest_job.py --completar-vectores
+                                          vectores de las bases guardadas sin ellos porque Gemini se quedó sin
+                                          cuota (la ingesta normal también los completa al empezar)
+    INGESTA_TRAZAS=si python ingest_job.py …
+                                          envía a LangSmith las trazas de Gemini de la ingesta (por defecto no:
+                                          llenaban el límite mensual del plan gratuito; 21/11/2026)
     python ingest_job.py --releer-sin-seccion
                                           vuelve a leer las bases "sin la sección" y las "no legibles"
                                           (tras mejorar el lector; desde el 20/11/2026 lee Word 97-2003)
@@ -128,7 +142,10 @@ def run_rag(factory, codes=None):
         print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
 
     from services import bases_reader
-    if not bases_reader.ocr_available():
+    if bases_reader.gemini_ocr_enabled():
+        print(f"Bases escaneadas: se leen con Gemini ({config.GEMINI_OCR_MODEL})"
+              + ("; si no responde, con tesseract." if bases_reader.ocr_available() else "."), flush=True)
+    elif not bases_reader.ocr_available():
         print("Aviso: esta computadora no tiene OCR (tesseract con español y pdftoppm). Las bases escaneadas "
               "quedan para leerse en una computadora con OCR; las que ya se leyeron no se borran.", flush=True)
     if codes:
@@ -146,6 +163,7 @@ def run_rag(factory, codes=None):
     if result["extraido"]:
         lines.append(f"Tokens estimados por base con requisitos: {result['tokens'] // result['extraido']:,}")
     lines.append(category_line(factory))
+    lines += quota_lines()
     global RAG_STOPPED
     RAG_STOPPED = bool(result["stopped"])
     if result["stopped"]:
@@ -160,6 +178,67 @@ def run_rag(factory, codes=None):
 
 
 RAG_STOPPED = False      # la última lectura de bases se detuvo porque Gemini no respondió
+
+
+def run_vectors(factory):
+    """Completa los vectores de las bases guardadas sin ellos (Gemini sin cuota de vectores; 20/11/2026)."""
+    from services import llm, rag
+    if not config.GEMINI_API_KEY:
+        return ["Vectores pendientes: falta GEMINI_API_KEY."]
+    with factory() as session:
+        pending = rag.missing_vectors(session)
+    if not pending:
+        return []
+    if llm.exhausted("vectores"):
+        return [f"Vectores pendientes: {pending:,} fragmentos; Gemini sigue sin cuota, se completan en la próxima ejecución."]
+    print(f"Completando los vectores de {pending:,} fragmentos guardados sin ellos…", flush=True)
+    result = rag.fill_missing_vectors(factory)
+    line = f"Vectores completados: {result['filled']:,} · faltan: {result['remaining']:,}"
+    return [line + (f" ({result['stopped']})" if result["stopped"] else "")]
+
+
+def quota_lines():
+    """Qué pasó si Gemini se quedó sin cuota en esta ejecución."""
+    from services import llm
+    lines = []
+    if llm.exhausted("texto"):
+        lines.append("Gemini se quedó sin cuota de texto: las escaneadas siguientes se leyeron con tesseract (se "
+                     "releen con --releer-escaneadas) y su análisis queda para --analizar-requisitos.")
+    if llm.exhausted("vectores"):
+        lines.append("Gemini se quedó sin cuota de vectores: las bases siguientes se guardaron sin vectores "
+                     "(se completan con --completar-vectores o en la próxima ingesta).")
+    return lines
+
+
+def run_analysis(factory, limit=None, codes=None):
+    """Analiza con Gemini los requisitos de bases ya leídas que aún no tienen análisis (20/11/2026).
+
+    Las bases que se leen desde ahora se analizan al leerlas; esto es para las leídas antes y para las que
+    Gemini no alcanzó a analizar. Devuelve las líneas del resumen; no hace fallar la ingesta.
+    """
+    from services import bases_facts, rag
+    if not bases_facts.enabled():
+        return ["Análisis de requisitos omitido: falta GEMINI_API_KEY (o ANALISIS_BASES=no)."]
+    if RAG_STOPPED and not codes:
+        return ["Análisis de requisitos: no se hizo porque Gemini no respondió en la lectura de bases; "
+                "queda para la próxima ejecución."]
+    limit = limit if limit is not None else (config.RAG_MAX_BASES_PER_RUN or None)
+
+    def show(number, total, code, status, seconds):
+        print(f"  {number}/{total} · {code} · {status} · {seconds:.0f} s", flush=True)
+
+    print(f"Analizando los requisitos de las bases ya leídas{reading_mode()}…", flush=True)
+    result = rag.analyze_saved(factory, limit=limit, codes=codes, progress=show)
+    lines = [f"Análisis de requisitos: {result['processed']} bases · analizadas: {result['analizado']} · "
+             f"requisitos identificados: {result['requisitos']:,} · con error: {result['error']} · "
+             f"quedan por analizar: {result['remaining']}"]
+    if result["stopped"]:
+        lines.append(f"Se detuvo el análisis porque Gemini no respondió ({scrub(result['stopped'])}). "
+                     "Las demás se analizarán en la próxima ejecución.")
+    for code, status, detail in result["details"]:
+        if status == "error":
+            lines.append(f"- {code}: error ({scrub(detail)})")
+    return lines
 
 
 def run_schedules(factory, limit=None):
@@ -313,8 +392,9 @@ def run_bases_diagnosis(factory, codes):
     if not tenders:
         print("No hay convocatorias vigentes sin la sección de requisitos.")
         return 0
-    use_ocr = bases_reader.ocr_available()
-    print(f"Diagnóstico de {len(tenders)} bases · OCR {'disponible' if use_ocr else 'NO disponible'} · no se guarda nada\n",
+    use_ocr = bases_reader.ocr_available() or bases_reader.gemini_ocr_enabled()
+    engine = "Gemini" if bases_reader.gemini_ocr_enabled() else "tesseract"
+    print(f"Diagnóstico de {len(tenders)} bases · OCR {'con ' + engine if use_ocr else 'NO disponible'} · no se guarda nada\n",
           flush=True)
     limit = config.RAG_MAX_BASES_MB * 1024 * 1024
     for code, title, url, bases_title, others in tenders:
@@ -466,6 +546,24 @@ def show_ocr():
     return 0 if ok else 1
 
 
+def scanned_codes(factory):
+    """Códigos de las bases vigentes ya leídas que conviene volver a leer con Gemini: las escaneadas que se
+    leyeron con tesseract (o antes de que se anotara con qué: ocr_engine vacío) y las que quedaron sin la
+    sección o no legibles. No incluye las pendientes que nunca se leyeron ni las que ya leyó Gemini, así que
+    el comando se puede repetir sin gastar de nuevo."""
+    from sqlalchemy import or_, select
+    with factory() as session:
+        with_tesseract = (select(db.RequirementChunk.tender_id).where(db.RequirementChunk.source == "ocr")
+                          .where(or_(db.RequirementChunk.ocr_engine.is_(None),
+                                     db.RequirementChunk.ocr_engine == "tesseract")))
+        return list(session.scalars(
+            select(db.Tender.code).where(db.Tender.state == "vigente")
+            .where(db.Tender.gemini_read_at.is_(None))       # 20/11/2026: las ya releídas con Gemini no se repiten
+            .where(or_(db.Tender.requirements_status.in_(("seccion_no_encontrada", "no_legible")),
+                       (db.Tender.requirements_status == "extraido") & db.Tender.id.in_(with_tesseract)))
+            .order_by(db.Tender.published_at.desc())))
+
+
 def show_requirements(factory, codes):
     """Requisitos de calificación de cada convocatoria, tal como los arma la ficha (HU de requisitos)."""
     from sqlalchemy import func, select
@@ -588,6 +686,7 @@ def parse(args):
     parser.add_argument("--buscar")
     parser.add_argument("--diagnosticar-bases", action="store_true")
     parser.add_argument("--releer-sin-seccion", action="store_true")
+    parser.add_argument("--releer-escaneadas", action="store_true")
     parser.add_argument("--codigo", action="append")
     parser.add_argument("--solicitar-rubro", action="append")
     parser.add_argument("--quitar-rubro", action="append")
@@ -605,6 +704,8 @@ def parse(args):
     parser.add_argument("--etapas", nargs="?", type=int, const=10)
     parser.add_argument("--hilos", type=int)
     parser.add_argument("--sin-limite", action="store_true")
+    parser.add_argument("--analizar-requisitos", nargs="?", type=int, const=0)
+    parser.add_argument("--completar-vectores", action="store_true")
     # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
     return parser.parse_args(args)
 
@@ -628,6 +729,21 @@ def reading_mode():
 
 
 def main(args=None):
+    """Sin trazas de LangSmith (21/11/2026): leer y analizar miles de bases llenaba el límite mensual de trazas
+    del plan gratuito, y la consola se llenaba de «Monthly unique traces usage limit exceeded». Las trazas
+    quedan para el asistente (la app web). INGESTA_TRAZAS=si las vuelve a enviar desde la ingesta."""
+    import langsmith
+    traces = os.environ.get("INGESTA_TRAZAS", "").strip().lower() in ("si", "sí", "1", "true")
+    if not traces:
+        langsmith.configure(enabled=False)
+    try:
+        return _main(args)
+    finally:
+        if not traces:
+            langsmith.configure(enabled=None)       # vuelve a lo que diga LANGSMITH_TRACING
+
+
+def _main(args=None):
     options = parse(sys.argv[1:] if args is None else args)
     problem = apply_reading_options(options)
     if problem:
@@ -687,6 +803,27 @@ def main(args=None):
         code = run_search(factory, options.buscar, options.codigo)
         engine.dispose()
         return code
+    if options.releer_escaneadas:
+        from services import bases_reader
+        if not bases_reader.gemini_ocr_enabled():
+            print("--releer-escaneadas vuelve a leer con Gemini: configure GEMINI_API_KEY y OCR_MOTOR=auto o gemini.")
+            engine.dispose()
+            return 2
+        codes = scanned_codes(factory)
+        print(f"{len(codes)} bases se vuelven a leer con Gemini: escaneadas leídas con tesseract, sin la sección "
+              "o no legibles. Las demás pendientes no se tocan.", flush=True)
+        if codes:
+            print("\n".join(run_rag(factory, codes)), flush=True)
+        engine.dispose()
+        return 0
+    if options.completar_vectores:
+        print("\n".join(run_vectors(factory) or ["No hay fragmentos sin vectores."]), flush=True)
+        engine.dispose()
+        return 0
+    if options.analizar_requisitos is not None:
+        print("\n".join(run_analysis(factory, options.analizar_requisitos or None, options.codigo)), flush=True)
+        engine.dispose()
+        return 0
     if options.releer_sin_seccion:
         from sqlalchemy import update
         with factory.begin() as session:
@@ -696,8 +833,10 @@ def main(args=None):
         print(f"{reset} bases sin la sección o no legibles vuelven a quedar pendientes.", flush=True)
         options.solo_rag = True
     if options.solo_rag:
+        print("\n".join(run_vectors(factory)), flush=True)
         lines = run_rag(factory)
         print("\n".join(lines), flush=True)
+        print("\n".join(run_analysis(factory)), flush=True)
         print("\n".join(run_schedules(factory)))
         engine.dispose()
         return 0
@@ -735,8 +874,12 @@ def main(args=None):
         printed = len(lines)
         if not options.sin_rag:
             started = time.perf_counter()
+            lines += run_vectors(factory)
             lines += run_rag(factory)
             lines.append(f"Lectura de bases en {time.perf_counter() - started:.0f} s.")
+            started = time.perf_counter()
+            lines += run_analysis(factory)
+            lines.append(f"Análisis de requisitos en {time.perf_counter() - started:.0f} s.")
             started = time.perf_counter()
             lines += run_schedules(factory)
             lines.append(f"Lectura de cronogramas en {time.perf_counter() - started:.0f} s.")

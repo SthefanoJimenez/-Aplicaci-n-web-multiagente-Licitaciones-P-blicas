@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% from "auth/_fields.html" import input, summary %}
 {% set active_nav = "profile" %}
-{% block title %}Personal clave de mi empresa{% endblock %}
+{% block title %}Personal clave y fichas técnicas{% endblock %}
 {% block page_class %}page-documents{% endblock %}
 {% block content %}
 <section class="panel" aria-labelledby="staff-title">
   <p class="eyebrow">Mi empresa · Personal clave</p>
-  <h1 class="page-title" id="staff-title">Personal clave y especialistas</h1>
-  <p class="page-lead">Registre a sus profesionales una sola vez. En cada convocatoria de servicios u obras se comparan con el personal clave que piden las bases: profesión, colegiatura y experiencia mínima.</p>
-  <p class="hint">Solo su cuenta ve este personal. Son datos declarados: suba los certificados como documentos de tipo «Personal» en <a href="{{ url_for('company_documents.index') }}">Documentos de mi empresa</a>.</p>
+  <h1 class="page-title" id="staff-title">Personal clave y fichas técnicas</h1>
+  <p class="page-lead">Registre a sus profesionales y suba sus fichas técnicas y sustentos: currículum, título, constancia de habilidad y constancias de experiencia. En cada convocatoria de servicios u obras se comparan con el personal clave que piden las bases.</p>
+  <p class="hint">Solo su cuenta ve este personal y sus documentos.</p>
   <p><a href="{{ url_for('auth.profile') }}">Volver al perfil de mi empresa</a></p>
 </section>
 
@@ -58,14 +58,58 @@
   {% if members %}
   <ul class="document-list" data-staff-list>
     {% for m in members %}
-    <li class="document-card">
+    <li class="document-card" id="persona-{{ m.id }}">
       <div class="document-heading"><h3>{{ m.name }}</h3>{% if m.licensed %}<span class="document-state document-state-current">Colegiado y habilitado</span>{% endif %}</div>
       <p class="hint">{{ m.profession }}{% if m.specialty %} · {{ m.specialty }}{% endif %} · {{ months_text(m.experience_months) }} de experiencia</p>
       {% if m.certifications %}<p class="hint">Certificaciones: {{ m.certifications }}</p>{% endif %}
       {% if not m.profession_key %}<p class="hint">Esta profesión no está en la lista que se busca en las bases; el semáforo no podrá contrastarla automáticamente.</p>{% endif %}
+      {% set kinds = m.evidence.kinds %}
+      <p class="hint" data-support="{{ kinds|join(' ') }}">Sustento:
+        {% for key, label in doc_kinds.items() if key != 'capacitacion' %}{{ label }} {{ '✓' if key in kinds else '—' }}{{ ' · ' if not loop.last }}{% endfor %}
+      </p>
+      {% if m.documents %}
+      <ul class="staff-docs">
+        {% for d in m.documents %}
+        <li>
+          <a href="{{ url_for('company_documents.file', document_id=d.id) }}" target="_blank" rel="noopener">{{ d.staff_kind_label or d.filename }}</a>
+          <span class="hint">· {{ d.filename }}{% if d.expires_on %} · vigente hasta {{ d.expires_on|date_pe }}{% endif %}{% if d.state == 'expired' %} · <strong>vencido</strong>{% endif %}</span>
+          {% if d.read_detail %}<p class="note-quiet{% if d.read_status == 'no_coincide' %} note-check{% endif %}">{{ d.read_detail }}</p>{% endif %}
+          <form method="post" action="{{ url_for('staff.delete_document', document_id=d.id) }}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="link-button" type="submit" aria-label="Eliminar {{ d.filename }}">Eliminar</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <details class="staff-upload">
+        <summary>Subir ficha técnica o sustento</summary>
+        <form method="post" action="{{ url_for('staff.add_document', member_id=m.id) }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="profile-grid">
+            <div class="field">
+              <label class="label" for="kind-{{ m.id }}">Documento</label>
+              <select id="kind-{{ m.id }}" name="kind" required>
+                {% for key, label in doc_kinds.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="expires-{{ m.id }}">Vigente hasta (opcional)</label>
+              <input id="expires-{{ m.id }}" name="expires_on" type="date">
+              <p class="hint">Para la constancia de habilidad. Si la deja en blanco, se toma la fecha que diga la constancia.</p>
+            </div>
+            <div class="field">
+              <label class="label" for="file-{{ m.id }}">Archivo PDF</label>
+              <input id="file-{{ m.id }}" name="file" type="file" accept=".pdf,application/pdf" required>
+              <p class="hint">Hasta 5 MB.</p>
+            </div>
+          </div>
+          <div class="actions"><button class="button button-primary" type="submit">Subir</button></div>
+        </form>
+      </details>
       <form method="post" action="{{ url_for('staff.delete', member_id=m.id) }}" class="actions document-actions">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="button button-secondary document-delete" type="submit" aria-label="Quitar a {{ m.name }}">Quitar</button>
+        <button class="button button-secondary document-delete" type="submit" aria-label="Quitar a {{ m.name }}">Quitar persona</button>
       </form>
     </li>
     {% endfor %}

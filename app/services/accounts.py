@@ -8,7 +8,7 @@ import hashlib
 import secrets
 import re
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, update
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, delete, func, inspect, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -52,6 +52,8 @@ class CompanyProfile(AccountBase):
     supplier_type: Mapped[str | None] = mapped_column(String(20), nullable=True)   # SUPPLIER_TYPES
     categories: Mapped[str | None] = mapped_column(String(40), nullable=True)      # "bienes servicios obras"
     rnp_registers: Mapped[str | None] = mapped_column(String(80), nullable=True)   # RNP_REGISTERS, separados por espacio
+    # 20/11/2026: dato de la empresa, no de cada convocatoria (antes se pedía en cada ficha)
+    is_mype: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
@@ -63,7 +65,8 @@ CATEGORY_LABELS = {"bienes": "Bienes", "servicios": "Servicios", "obras": "Obras
 # proveedor de bienes, proveedor de servicios, ejecutor de obras y consultor de obras.
 RNP_REGISTERS = {"bienes": "Proveedor de bienes", "servicios": "Proveedor de servicios",
                  "ejecutor_obras": "Ejecutor de obras", "consultor_obras": "Consultor de obras"}
-PROFILE_EXTRA_COLUMNS = {"supplier_type": "VARCHAR(20)", "categories": "VARCHAR(40)", "rnp_registers": "VARCHAR(80)"}
+PROFILE_EXTRA_COLUMNS = {"supplier_type": "VARCHAR(20)", "categories": "VARCHAR(40)", "rnp_registers": "VARCHAR(80)",
+                         "is_mype": "BOOLEAN"}
 
 
 def split_choices(text, allowed):
@@ -124,7 +127,7 @@ def valid_ruc(value):
 
 def initialize_schema(engine, *, password_management=False):
     """Migración aditiva e idempotente de cuentas existentes en SQLite o PostgreSQL."""
-    from services import staff  # noqa: F401  (registra la tabla personal_empresa en AccountBase)
+    from services import company_documents, staff  # noqa: F401  (registra sus tablas en AccountBase)
     optional = {PasswordReset.__table__, RecoveryThrottle.__table__}
     tables = None if password_management else [table for table in AccountBase.metadata.sorted_tables
                                                 if table not in optional]
@@ -135,6 +138,11 @@ def initialize_schema(engine, *, password_management=False):
         for name, kind in PROFILE_EXTRA_COLUMNS.items():
             if name not in profile_columns:
                 connection.exec_driver_sql(f"ALTER TABLE perfiles_empresa ADD COLUMN {name} {kind}")
+        # Documentos del personal clave (20/11/2026): a quién pertenecen y qué se leyó de ellos.
+        document_columns = {column["name"] for column in inspect(connection).get_columns("documentos_empresa")}
+        for name, kind in company_documents.STAFF_COLUMNS.items():
+            if name not in document_columns:
+                connection.exec_driver_sql(f"ALTER TABLE documentos_empresa ADD COLUMN {name} {kind}")
         columns = {column["name"] for column in inspect(connection).get_columns("empresas")}
         if "ruc" not in columns:
             optional = " IF NOT EXISTS" if engine.dialect.name == "postgresql" else ""
@@ -319,6 +327,7 @@ def get_profile(factory, user_id):
             values["supplier_type"] = profile.supplier_type or ""
             values["categories"] = split_choices(profile.categories, CATEGORY_LABELS)
             values["rnp_registers"] = split_choices(profile.rnp_registers, RNP_REGISTERS)
+            values["is_mype"] = bool(profile.is_mype)
         return values
 
 
@@ -394,6 +403,8 @@ def save_profile(factory, user_id, values):
                 profile.categories = " ".join(split_choices(" ".join(values["categories"]), CATEGORY_LABELS)) or None
             if "rnp_registers" in values:
                 profile.rnp_registers = " ".join(split_choices(" ".join(values["rnp_registers"]), RNP_REGISTERS)) or None
+            if "is_mype" in values:
+                profile.is_mype = bool(values["is_mype"])
     except IntegrityError as error:
         if "ruc" in str(error.orig).lower():
             raise RucTaken("Este RUC ya está asociado a otra cuenta.") from error

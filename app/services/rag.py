@@ -8,7 +8,7 @@ from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import selectinload
 
 import config
-from services import bases_download, bases_reader, db, llm, schedule
+from services import bases_download, bases_facts, bases_reader, db, llm, schedule
 
 CHUNK_CHARS = 1200        # unos 300 tokens por fragmento
 CHUNK_OVERLAP = 200       # para no cortar un requisito entre dos fragmentos
@@ -134,14 +134,32 @@ class _GeminiPace:
 _PACE = _GeminiPace()
 
 
+def _no_vectors(error):
+    """Se acabó la cuota de vectores: las bases se siguen leyendo y se guardan sin vectores (20/11/2026)."""
+    if llm.mark_exhausted("vectores"):
+        print(f"  Gemini se quedó sin cuota para los vectores ({error}): las bases se siguen leyendo y se guardan "
+              "sin vectores; se completan con --completar-vectores cuando haya cuota.", flush=True)
+    return None
+
+
 def _embed_patiently(embed, texts):
+    """Vectores de los textos, o None si Gemini se quedó sin cuota (la lectura sigue sin vectores).
+
+    Lanza IndexingStopped solo si la clave no sirve (400, 401, 403): ahí no tiene sentido seguir.
+    """
+    if llm.exhausted("vectores"):
+        return None
     for wait in EMBED_WAITS + (None,):
         _PACE.wait_turn(len(texts))
         try:
             vectors = embed(texts, "RETRIEVAL_DOCUMENT")
         except llm.ModelError as e:
-            if wait is None or (e.code in STOP_NOW_CODES and "embeddings" not in str(e)):
+            if e.code in STOP_NOW_CODES and "embeddings" not in str(e):
                 raise IndexingStopped(str(e)) from e
+            if wait is None or llm.out_of_quota(e):
+                return _no_vectors(e)
+            if llm.exhausted("vectores"):          # otro hilo ya lo supo
+                return None
             new, limit = _PACE.slow_down(wait)
             if new:
                 print(f"  Gemini pidió bajar el ritmo ({e}): las lecturas esperan {wait} s y luego envían como "
@@ -151,20 +169,40 @@ def _embed_patiently(embed, texts):
         return vectors
 
 
-def prepare_bases(url, fetch=None, embed=None, use_ocr=None):
+def prepare_bases(url, fetch=None, embed=None, use_ocr=None, analyze=None, category=None):
     """Lo lento de leer unas bases, sin tocar la base de datos: descarga, lectura (con OCR) y vectores.
 
-    Devuelve (resultado de la lectura, fragmentos, vectores). Lanza BasesUnavailable si no se pudo
-    descargar e IndexingStopped si Gemini no da los vectores. Separado el 20/11/2026: con las esperas por el
-    límite de Gemini, una conexión a Neon abierta durante minutos se cortaba y la base quedaba en «error».
+    Devuelve (resultado de la lectura, fragmentos, vectores, requisitos analizados o None). Lanza
+    BasesUnavailable si no se pudo descargar e IndexingStopped si Gemini no da los vectores. Separado el
+    20/11/2026: con las esperas por el límite de Gemini, una conexión a Neon abierta durante minutos se
+    cortaba y la base quedaba en «error».
+
+    analyze: función (sección, contexto, categoría, páginas) → dict; por defecto bases_facts.analyze si está
+    activo. Si falla, la lectura se guarda igual y el análisis queda para --analizar-requisitos.
     """
     fetch = fetch or (lambda u: bases_download.open_bases(u, max_bytes=config.RAG_MAX_BASES_MB * 1024 * 1024))
     embed = embed or llm.embed_texts
     result = bases_reader.read_bases(_download(url, fetch), use_ocr=use_ocr)
     if result.status != "extraido":
-        return result, [], []
+        return result, [], [], None
     pieces = chunk_section(result.section)
-    return result, pieces, _embed_patiently(embed, [p for p, _ in pieces])
+    vectors = _embed_patiently(embed, [p for p, _ in pieces])
+    return result, pieces, vectors, _analyze_section(result, analyze, category)
+
+
+def _analyze_section(result, analyze=None, category=None):
+    """Requisitos analizados (bases_facts) de una lectura, o None si no se analiza o Gemini falla."""
+    if analyze is None and (not bases_facts.enabled() or llm.exhausted("texto")):
+        return None
+    analyze = analyze or bases_facts.analyze
+    pages = sorted({page for _pos, page in result.section.page_marks}) or None
+    try:
+        return analyze(bases_facts.marked_section(result.section), result.context, category, pages)
+    except llm.ModelError as e:
+        if llm.out_of_quota(e) and llm.mark_exhausted("texto"):
+            print(f"  Gemini se quedó sin cuota ({e}): el análisis de requisitos queda para "
+                  "--analizar-requisitos.", flush=True)
+        return None
 
 
 def index_tender(session, tender, fetch=None, embed=None, use_ocr=None, prepared=None):
@@ -183,7 +221,10 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None, prepared
         except bases_download.BasesUnavailable as e:
             tender.requirements_status = "error"
             return {"status": "error", "chunks": 0, "tokens": 0, "detail": e.reason}
-    result, pieces, vectors = prepared
+    result, pieces, vectors, facts = prepared if len(prepared) == 4 else (*prepared, None)
+    if bases_reader.gemini_ocr_enabled() and not getattr(result, "gemini_failed", False):
+        # Leída con Gemini disponible (o sin páginas escaneadas): no hace falta volver a releerla con Gemini
+        tender.gemini_read_at = db.utcnow()
     if result.schedule is not None:          # HU-018: el cronograma sale de la misma lectura
         schedule.save(tender, result.schedule, document, db.utcnow())
     if result.status != "extraido":
@@ -204,15 +245,23 @@ def index_tender(session, tender, fetch=None, embed=None, use_ocr=None, prepared
     tender.chunks.clear()                                   # si las bases cambiaron, se reemplaza todo
     session.flush()                                         # borra los anteriores antes de insertar (clave única)
     tokens = 0
+    vectors = vectors if vectors is not None else [None] * len(pieces)     # sin cuota: se completan después
     for i, ((piece, page), vector) in enumerate(zip(pieces, vectors)):
         estimate = round(len(piece) / bases_reader.CHARS_PER_TOKEN)
         tokens += estimate
         tender.chunks.append(db.RequirementChunk(
             document_id=document.id, chunk_index=i, text=piece, page=page, source=result.section.source,
-            file_name=result.section.document[:300], embedding=vector, model=config.EMBEDDING_MODEL,
+            ocr_engine=getattr(result.section, "ocr_engine", None),
+            file_name=result.section.document[:300], embedding=vector,
+            model=config.EMBEDDING_MODEL if vector is not None else None,
             tokens_est=estimate))
     tender.requirements_status = "extraido"
-    return {"status": "extraido", "chunks": len(pieces), "tokens": tokens, "detail": result.section.source}
+    # Los requisitos analizados son de estas bases: si no se pudieron analizar, se borra el análisis anterior
+    bases_facts.stamp(tender, facts)
+    return {"status": "extraido", "chunks": len(pieces), "tokens": tokens,
+            "detail": result.section.source + ("" if any(v is not None for v in vectors) or not pieces
+                                               else "; sin vectores"),
+            "analyzed": facts is not None}
 
 
 def _each(ids, one, workers):
@@ -281,10 +330,11 @@ def _index_ids(session_factory, ids, fetch, embed, use_ocr, progress, workers):
                 tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents)])
                 document = _bases_of(tender)
                 url = document.url if document else None
+                category = tender.category
             prepared, unavailable = None, None
             if url:
                 try:
-                    prepared = prepare_bases(url, fetch=fetch, embed=embed, use_ocr=use_ocr)
+                    prepared = prepare_bases(url, fetch=fetch, embed=embed, use_ocr=use_ocr, category=category)
                 except bases_download.BasesUnavailable as e:
                     unavailable = e.reason
             with session_factory.begin() as session:
@@ -455,6 +505,140 @@ def read_due_schedules(session_factory, limit=None, fetch=None, progress=None, w
 # ---------------------------------------------------------------------------
 # Búsqueda
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Análisis de los requisitos ya leídos (20/11/2026)
+# ---------------------------------------------------------------------------
+def unanalyzed_ids(session, limit=None, codes=None):
+    """Convocatorias vigentes con requisitos leídos y sin analizar (o las de `codes`, aunque ya lo estén)."""
+    query = select(db.Tender.id).where(db.Tender.requirements_status == "extraido")
+    if codes:
+        query = query.where(db.Tender.code.in_([str(c) for c in codes]))
+    else:
+        query = query.where(db.Tender.state == "vigente").where(db.Tender.bases_facts_at.is_(None))
+    query = query.order_by(db.Tender.deadline_at.is_(None), db.Tender.deadline_at, db.Tender.id)
+    if limit:
+        query = query.limit(limit)
+    return list(session.scalars(query))
+
+
+ANALYSIS_WAITS = (30, 60, 60)
+_TEXT_PACE = _GeminiPace(per_minute=0)
+
+
+def quota_reason(error):
+    """« (límite: GenerateRequestsPerMinute…)» con el nombre del límite que dio Gemini, si lo dice."""
+    detail = getattr(error, "detail", "") or ""
+    found = re.search(r"quota_?(?:id|metric)['\"]?\s*[:=]\s*['\"]?([\w./-]+)", detail, re.I) or \
+        re.search(r"(?:quota exceeded for(?: metric)?|for metric)[:\s]+([\w./-]+)", detail, re.I)
+    return f" (límite: {found.group(1)})" if found else ""
+
+
+def analyze_saved(session_factory, limit=None, codes=None, fetch=None, analyze=None, progress=None, workers=None,
+                  download=True):
+    """Analiza con Gemini los requisitos de bases ya leídas (sin volver a hacer OCR ni vectores).
+
+    La sección sale de los fragmentos guardados; las otras partes (cuantía, consorcio…) se toman de las bases
+    descargadas de nuevo, sin OCR (download=False: solo la sección). Si Gemini deja de responder (límite
+    diario), se detiene y las demás quedan para la próxima vez.
+    """
+    from services import requirements
+    analyze = analyze or bases_facts.analyze
+    fetch = fetch or (lambda u: bases_download.open_bases(u, max_bytes=config.RAG_MAX_BASES_MB * 1024 * 1024))
+    with session_factory() as session:
+        ids = unanalyzed_ids(session, limit, codes)
+        remaining = len(unanalyzed_ids(session)) if not codes else 0
+    summary = {"processed": 0, "analizado": 0, "error": 0, "requisitos": 0, "stopped": None, "details": [],
+               "remaining": remaining}
+    if llm.exhausted("texto"):
+        summary["stopped"] = "Gemini ya se había quedado sin cuota en esta ejecución"
+        return summary
+
+    def one(tender_id):
+        with session_factory() as session:
+            tender = session.get(db.Tender, tender_id, options=[selectinload(db.Tender.documents),
+                                                                selectinload(db.Tender.chunks)])
+            code, category = tender.code, tender.category
+            blocks = requirements.merge_chunks([(c.page, c.text) for c in sorted(tender.chunks, key=lambda c: c.chunk_index)])
+            document = _bases_of(tender)
+            url = document.url if document else None
+        context = ""
+        if download and url:
+            try:
+                context = bases_reader.context_of(_download(url, fetch))
+            except Exception:          # sin las otras partes se analiza igual la sección
+                context = ""
+        pages = sorted({b.page for b in blocks if b.page}) or None
+        for wait in ANALYSIS_WAITS + (None,):
+            _TEXT_PACE.wait_turn(1)
+            try:
+                facts = analyze(bases_facts.section_with_pages(blocks), context, category, pages)
+                _TEXT_PACE.went_well()
+                break
+            except llm.ModelError as e:
+                if e.code in STOP_NOW_CODES or e.code == 402 or llm.out_of_quota(e):
+                    if llm.out_of_quota(e):
+                        llm.mark_exhausted("texto")
+                    raise IndexingStopped(f"{e}{quota_reason(e)}") from e
+                if e.code != 429 or wait is None:
+                    if e.code == 429:
+                        raise IndexingStopped(f"{e}{quota_reason(e)}") from e
+                    return code, {"status": "error", "detail": str(e)[:200], "requisitos": 0}
+                # 21/11/2026: un límite por minuto (6 a la vez) no detiene el análisis: se espera y se sigue
+                new, limit = _TEXT_PACE.slow_down(wait)
+                if new:
+                    print(f"  Gemini pidió bajar el ritmo{quota_reason(e)}: el análisis espera {wait} s y luego "
+                          f"envía como máximo {limit} bases por minuto…", flush=True)
+        with session_factory.begin() as session:
+            bases_facts.stamp(session.get(db.Tender, tender_id), facts)
+        return code, {"status": "analizado", "detail": "", "requisitos": len(facts["requisitos"])}
+
+    try:
+        for number, ((code, result), seconds) in enumerate(_each(ids, one, _workers(workers)), 1):
+            summary["processed"] += 1
+            summary[result["status"]] += 1
+            summary["requisitos"] += result["requisitos"]
+            summary["details"].append((code, result["status"], result["detail"]))
+            if progress:
+                progress(number, len(ids), code, result["status"], seconds)
+    except IndexingStopped as e:
+        summary["stopped"] = str(e)
+    summary["remaining"] = max(0, summary["remaining"] - summary["analizado"])
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Vectores que faltan (20/11/2026): bases guardadas cuando Gemini se quedó sin cuota de vectores
+# ---------------------------------------------------------------------------
+def missing_vectors(session):
+    return session.scalar(select(func.count()).select_from(db.RequirementChunk)
+                          .where(db.RequirementChunk.embedding.is_(None))) or 0
+
+
+def fill_missing_vectors(session_factory, embed=None, batch=llm.EMBED_BATCH, progress=None):
+    """Pide a Gemini los vectores de los fragmentos guardados sin ellos. Se detiene si sigue sin cuota."""
+    embed = embed or llm.embed_texts
+    done = 0
+    while True:
+        with session_factory() as session:
+            rows = session.execute(select(db.RequirementChunk.id, db.RequirementChunk.text)
+                                   .where(db.RequirementChunk.embedding.is_(None))
+                                   .order_by(db.RequirementChunk.id).limit(batch)).all()
+        if not rows:
+            return {"filled": done, "remaining": 0, "stopped": None}
+        vectors = _embed_patiently(embed, [text for _id, text in rows])
+        if vectors is None:
+            with session_factory() as session:
+                remaining = missing_vectors(session)
+            return {"filled": done, "remaining": remaining, "stopped": "Gemini sigue sin cuota para los vectores"}
+        with session_factory.begin() as session:
+            for (chunk_id, _text), vector in zip(rows, vectors):
+                chunk = session.get(db.RequirementChunk, chunk_id)
+                chunk.embedding, chunk.model = vector, config.EMBEDDING_MODEL
+        done += len(rows)
+        if progress:
+            progress(done)
+
+
 def _cosine(a, b):
     dot = sum(x * y for x, y in zip(a, b))
     na = sum(x * x for x in a) ** 0.5
@@ -471,7 +655,7 @@ def search(session, query, k=5, tender_ids=None, codes=None, embed=None):
     embed = embed or llm.embed_texts
     vector = embed([query], "RETRIEVAL_QUERY")[0]
     chunk, tender = db.RequirementChunk, db.Tender
-    filters = [tender.state == "vigente"]
+    filters = [tender.state == "vigente", chunk.embedding.isnot(None)]      # sin vectores aún: no se buscan
     if tender_ids:
         filters.append(tender.id.in_(list(tender_ids)))
     if codes:

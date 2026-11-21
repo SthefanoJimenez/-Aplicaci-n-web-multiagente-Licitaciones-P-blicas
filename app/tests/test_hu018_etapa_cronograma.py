@@ -247,7 +247,10 @@ def test_de_bases_administrativas_a_integradas(factory, source):
     row = tender_row(factory)
     assert row.schedule_file == "Bases Integradas · bases.pdf" and row.schedule_stage == "integradas"
     html = sheet()
-    assert 'aria-current="step">Bases integradas' in html and "28 nov 2026" in html and "21 nov 2026" not in html
+    assert 'aria-current="step">Bases integradas' in html and "28 nov 2026" in html
+    # La fecha anterior (21 nov) ya no está en el cronograma; «actualizado al …» es la fecha real de hoy y
+    # el 21/11/2026 coincidía con ella (la prueba fallaba solo ese día).
+    assert "21 nov 2026" not in html.split("Cronograma actualizado al", 1)[-1].split("</strong>", 1)[-1]
     assert "con las bases en la etapa «Bases integradas»" in html
     assert "se volverá a leer" not in html
 

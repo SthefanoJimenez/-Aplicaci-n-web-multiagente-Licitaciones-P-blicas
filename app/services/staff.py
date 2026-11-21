@@ -6,8 +6,14 @@ de experiencia como residente»). La empresa registra aquí a sus profesionales 
 (services/eligibility.py) los contrasta con lo que dicen las bases.
 
 Son datos declarados por la empresa: no se verifica la colegiatura en el colegio profesional ni la
-experiencia en los certificados. Los certificados se suben como documentos de tipo «Personal».
-No se guarda el DNI ni otros datos personales que el semáforo no necesita.
+experiencia en los certificados. No se guarda el DNI ni otros datos personales que el semáforo no necesita.
+
+Fichas técnicas y sustentos (20/11/2026, pedido del asesor: «comparar si realmente tiene la gente»): a cada
+persona se le suben su currículum o ficha técnica, título, constancia de colegiatura y habilidad, constancias
+de experiencia y certificados de capacitación. Se guardan como documentos de la empresa (tipo «Personal»,
+services/company_documents.py) enlazados a la persona. Al subirlos se lee su texto en la computadora del
+servidor, sin modelos de lenguaje: si mencionan la profesión declarada y, en la constancia de habilidad, la
+colegiatura y su vigencia. El semáforo pide el sustento de quien cubre cada cargo.
 """
 import re
 import unicodedata
@@ -17,6 +23,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 
+from services import company_documents
 from services.accounts import AccountBase, Company, now
 
 MAX_STAFF = 60
@@ -147,12 +154,123 @@ def as_dict(member):
             "certifications": member.certifications or "", "profession_key": profession_key(member.profession)}
 
 
-def list_staff(factory, user_id):
+def list_staff(factory, user_id, on_date=None):
+    """Personal de la empresa con sus documentos y el resumen de su sustento («evidence»).
+
+    on_date: fecha en la que se mira la vigencia de los documentos (por defecto, hoy).
+    """
     with factory() as db:
         company_id = _company_id(db, user_id)
         rows = db.scalars(select(StaffMember).where(StaffMember.company_id == company_id)
                           .order_by(StaffMember.profession, StaffMember.name)).all()
-        return [as_dict(r) for r in rows]
+        members = [as_dict(r) for r in rows]
+    documents = [d for d in company_documents.list_documents(factory, user_id, on_date) if d["staff_id"]]
+    for member in members:
+        member["documents"] = [d for d in documents if d["staff_id"] == member["id"]]
+        member["evidence"] = evidence(member["documents"])
+    return members
+
+
+def evidence(documents):
+    """Qué sustentos vigentes tiene una persona y qué documentos no coinciden con lo declarado."""
+    current = [d for d in documents if d["state"] == "current"]
+    return {"kinds": sorted({d["staff_kind"] for d in current if d["staff_kind"]}),
+            "mismatch": [d["read_detail"] for d in current if d["read_status"] == "no_coincide" and d["read_detail"]],
+            "expired": sorted({d["staff_kind"] for d in documents if d["state"] == "expired" and d["staff_kind"]})}
+
+
+def missing_support(need, member):
+    """Sustentos que faltan para que `member` acredite el cargo `need`. [] si no se lleva el control
+    (miembro sin «evidence», por ejemplo en consorcios) o si está completo."""
+    support = member.get("evidence")
+    if support is None:
+        return []
+    kinds, missing = set(support["kinds"]), []
+    if not kinds & {"cv", "titulo"}:
+        missing.append("título o currículum")
+    if need.get("licensed") and "colegiatura" not in kinds:
+        missing.append("constancia de habilidad vigente" if "colegiatura" in support.get("expired", [])
+                       else "constancia de colegiatura y habilidad")
+    if need.get("months") and not kinds & {"experiencia", "cv"}:
+        missing.append("constancias de experiencia")
+    return missing
+
+
+# ---------------------------------------------------------------------------
+# Lectura de los documentos de una persona
+# ---------------------------------------------------------------------------
+LICENSE_NUMBER = re.compile(r"\b(?:c\.?\s?i\.?\s?p|c\.?\s?a\.?\s?p|colegiatura|registro\s+(?:del\s+)?colegio)\b"
+                            r"[^0-9\n]{0,20}(\d{3,7})")
+ENABLED = re.compile(r"\bhabilitad[oa]|\bhabil\b|constancia\s+de\s+habilidad|certificado\s+de\s+habilidad")
+VALID_UNTIL = re.compile(r"(?:hasta|vigencia|vigente|vence|vencimiento)[^0-9\n]{0,40}(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})")
+
+
+def professions_in(text):
+    """Claves de PROFESSIONS que aparecen en el texto (sin la genérica «técnico»)."""
+    normalized = plain(text)
+    return {key for key, forms in ALIASES.items() if any(form in normalized for form in forms)}
+
+
+def read_document(text, kind, declared_profession):
+    """{"status", "detail", "until"} de lo que dice un documento de una persona.
+
+    status: «leido» (sin observaciones), «no_coincide» (menciona otra profesión, no la declarada),
+    «sin_profesion» (no se encontró ninguna) o «sin_texto» (imagen escaneada: no se pudo leer).
+    """
+    if len(re.sub(r"\s+", "", text or "")) < 40:
+        return {"status": "sin_texto", "until": None,
+                "detail": "No se pudo leer el texto del documento; se guardó igual."}
+    normalized, notes, status, until = plain(text), [], "leido", None
+    declared = profession_key(declared_profession)
+    label = PROFESSIONS.get(declared, declared_profession).lower() if declared else ""
+    if kind in ("cv", "titulo", "colegiatura") and declared and declared != "tecnico":
+        found = professions_in(text)
+        if declared in found:
+            notes.append(f"Menciona {label}.")
+        elif found:
+            status = "no_coincide"
+            others = ", ".join(sorted(PROFESSIONS.get(k, k).lower() for k in found))
+            notes.append(f"No menciona {label}; menciona {others}.")
+        else:
+            status = "sin_profesion"
+            notes.append(f"No se encontró «{label}» en el documento.")
+    if kind == "colegiatura":
+        number = LICENSE_NUMBER.search(normalized)
+        if number:
+            notes.append(f"Colegiatura N.° {number.group(1)}.")
+        if ENABLED.search(normalized):
+            notes.append("Indica que está habilitado.")
+        date_match = VALID_UNTIL.search(normalized)
+        if date_match:
+            try:
+                until = datetime(int(date_match.group(3)), int(date_match.group(2)), int(date_match.group(1))).date()
+                notes.append(f"Vigente hasta el {until.strftime('%d/%m/%Y')}.")
+            except ValueError:
+                until = None
+    return {"status": status, "detail": " ".join(notes)[:300] or "Documento guardado.", "until": until}
+
+
+def add_member_document(factory, user_id, member_id, kind, expires_on, pdf):
+    """Guarda un documento de una persona de la propia empresa. Devuelve lo leído del documento.
+
+    pdf: lo que devolvió company_documents.read_pdf (ya validado). Lanza StaffError o DocumentError.
+    """
+    if kind not in company_documents.STAFF_DOC_KINDS:
+        raise StaffError("Elija qué documento es.")
+    with factory() as db:
+        company_id = _company_id(db, user_id)
+        member = db.get(StaffMember, member_id)
+        if member is None or member.company_id != company_id:
+            raise StaffError("La persona no es de su empresa.")
+        profession = member.profession
+    reading = read_document(company_documents.read_text(pdf["content"]), kind, profession)
+    if kind == "colegiatura" and expires_on is None:
+        expires_on = reading["until"]            # la vigencia escrita en la constancia, si no se indicó
+    metadata = {"document_type": "personal", "valid_from": None, "expires_on": expires_on}
+    staff_fields = {"staff_id": member_id, "staff_kind": kind, "read_status": reading["status"],
+                    "read_detail": reading["detail"]}
+    company_documents.add_document(factory, user_id, metadata, pdf, staff=staff_fields)
+    return reading
 
 
 def add_member(factory, user_id, values):
@@ -176,6 +294,11 @@ def delete_member(factory, user_id, member_id):
         member = db.get(StaffMember, member_id)
         if member is None or member.company_id != company_id:
             return False
+        # Sus documentos se borran con la persona (20/11/2026)
+        for document in db.scalars(select(company_documents.CompanyDocument).where(
+                company_documents.CompanyDocument.company_id == company_id,
+                company_documents.CompanyDocument.staff_id == member_id)):
+            db.delete(document)
         db.delete(member)
         return True
 
@@ -246,9 +369,12 @@ def match_requirements(required, members):
                    if (need["months"] is None or m["experience_months"] >= need["months"])
                    and (not need["licensed"] or m["licensed"])]
         if fitting:
-            best = max(fitting, key=lambda m: m["experience_months"])
+            # Entre las que cumplen, primero la que tiene su sustento completo (20/11/2026)
+            best = max(fitting, key=lambda m: (not missing_support(need, m), m["experience_months"]))
             used.add(best["id"])
-            result.append({"required": need, "member": best, "problem": None})
+            result.append({"required": need, "member": best, "problem": None,
+                           "missing": missing_support(need, best),
+                           "mismatch": (best.get("evidence") or {}).get("mismatch", [])})
             continue
         if not candidates:
             problem = f"No registró a un {need['label'].lower()} en su personal."

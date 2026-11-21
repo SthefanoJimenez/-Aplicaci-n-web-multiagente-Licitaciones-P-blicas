@@ -348,6 +348,7 @@ def validate_profile(form):
     values["supplier_type"] = supplier_type if supplier_type in accounts.SUPPLIER_TYPES else ""
     values["categories"] = [c for c in accounts.CATEGORY_LABELS if c in form.getlist("categories")]
     values["rnp_registers"] = [r for r in accounts.RNP_REGISTERS if r in form.getlist("rnp_registers")]
+    values["is_mype"] = form.get("is_mype") == "1"
     years = form.get("experience_years", "").strip()
     if not re.fullmatch(r"\d{1,3}", years) or int(years) > 200:
         values["experience_years"] = years

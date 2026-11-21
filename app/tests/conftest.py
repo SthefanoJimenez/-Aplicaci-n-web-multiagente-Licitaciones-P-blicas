@@ -38,11 +38,23 @@ def _configuracion_de_pruebas(monkeypatch):
     monkeypatch.setattr(config, "RAG_MAX_BASES_PER_RUN", 25)
     monkeypatch.setattr(config, "SCHEDULE_MAX_PER_RUN", 60)
     monkeypatch.setattr(config, "RAG_WORKERS", 1)
+    # 20/11/2026: las pruebas nunca leen con Gemini (el .env de cada equipo puede tener la clave)
+    monkeypatch.setattr(config, "OCR_ENGINE", "tesseract")
+    # Ni el análisis de requisitos con Gemini (las pruebas que lo usan pasan su propia función)
+    monkeypatch.setattr(config, "BASES_ANALYSIS", False)
     # Sin las esperas de Gemini (hasta 3,5 min): las pruebas que las necesitan las fijan en 0 s.
     from services import rag
     monkeypatch.setattr(rag, "EMBED_WAITS", ())
     monkeypatch.setattr(rag, "_PACE", rag._GeminiPace())
+    monkeypatch.setattr(rag, "_TEXT_PACE", rag._GeminiPace(per_minute=0))
+    monkeypatch.setattr(rag, "ANALYSIS_WAITS", ())
     monkeypatch.setattr("ingest_job.RAG_STOPPED", False)
+    # Cuota de Gemini «agotada» en una prueba no pasa a la siguiente
+    from services import bases_reader, llm
+    llm.reset_exhausted()
+    bases_reader._ocr_failures["seguidos"] = 0
+    yield
+    llm.reset_exhausted()
 
 
 @pytest.fixture
