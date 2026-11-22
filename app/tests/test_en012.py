@@ -244,17 +244,24 @@ def test_search_returns_the_right_tender_and_page(factory):
         assert {r["code"] for r in only} == {"1001"}
 
 
-def test_gemini_failure_stops_the_run_and_keeps_the_tender_pending(factory):
+def test_sin_cuota_de_vectores_se_guarda_sin_ellos_y_se_completan_despues(factory):
+    """20/11/2026: antes la lectura se detenía; ahora sigue y los vectores se completan cuando haya cuota."""
     seed(factory, codes=("1001", "1002"))
 
     def broken(texts, task_type):
         raise llm.ModelError("El modelo respondió con el error 429", code=429)
 
     summary = rag.index_pending(factory, fetch=fake_fetch, embed=broken, use_ocr=False)
-    assert summary["stopped"] and summary["processed"] == 0
-    assert statuses(factory) == {"1001": "pendiente", "1002": "pendiente"}
+    assert not summary["stopped"] and summary["processed"] == 2
+    assert statuses(factory) == {"1001": "extraido", "1002": "extraido"}
     with factory() as session:
-        assert session.query(db.RequirementChunk).count() == 0
+        assert session.query(db.RequirementChunk).count() == rag.missing_vectors(session) > 0
+        assert rag.search(session, "carta fianza", k=5, embed=fake_embed) == []     # sin vectores no se busca
+    llm.reset_exhausted()
+    result = rag.fill_missing_vectors(factory, embed=fake_embed)
+    with factory() as session:
+        assert result["remaining"] == 0 and rag.missing_vectors(session) == 0
+        assert rag.search(session, "carta fianza", k=1, embed=fake_embed)
 
 
 def test_new_bases_replace_the_old_fragments(factory):

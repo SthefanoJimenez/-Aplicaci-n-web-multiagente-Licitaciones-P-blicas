@@ -366,6 +366,7 @@ def validate_profile(form):
     ):
         selected = set(form.getlist(key))
         values[key] = [option for option in allowed if option in selected]
+    values["is_mype"] = form.get("is_mype") == "1"
     years = form.get("experience_years", "").strip()
     if message := profile_fields.experience_error(years):
         values["experience_years"] = years

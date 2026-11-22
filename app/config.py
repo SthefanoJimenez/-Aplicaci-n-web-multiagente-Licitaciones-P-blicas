@@ -72,6 +72,18 @@ SCHEDULE_MAX_PER_RUN = int(os.environ.get("CRONOGRAMA_MAX_POR_EJECUCION", "").st
 # Bases que se leen a la vez (20/11/2026). Casi todo el tiempo es la descarga desde el SEACE, así que varias
 # a la vez acortan la lectura. 1 = una por una, como antes. Más de 8 no se permite, para no saturar al SEACE.
 RAG_WORKERS = min(8, max(1, int(os.environ.get("RAG_HILOS", "").strip() or "1")))
+# Lectura de las bases escaneadas (20/11/2026). «gemini»: las páginas escaneadas se leen con Gemini, que
+# entiende la imagen de la página (mejor que tesseract en sellos, tablas y fotos torcidas); si Gemini falla,
+# se usa tesseract. «tesseract»: solo tesseract, como antes. «auto» (por defecto): gemini si hay clave.
+# Solo se envían bases de licitación, que son públicas; nunca los documentos privados de las empresas.
+OCR_ENGINE = (os.environ.get("OCR_MOTOR", "").strip().lower() or "auto")
+GEMINI_OCR_MODEL = os.environ.get("GEMINI_OCR_MODEL", "").strip() or MODEL
+# Análisis de los requisitos con Gemini (20/11/2026): cada requisito de las bases se convierte en datos (monto
+# mínimo, profesión y meses, registro del RNP…) para compararlos con los de la empresa. ANALISIS_BASES=no lo apaga.
+BASES_ANALYSIS = os.environ.get("ANALISIS_BASES", "").strip().lower() not in ("no", "0", "false")
+# Tipo de cambio de referencia para comparar requisitos en dólares con montos en soles. 3,40: cierre del BCRP
+# del 13/11/2026 (S/ 3,4050). Las bases suelen indicar cuál usar; la ficha lo dice al comparar.
+USD_RATE = float(os.environ.get("TIPO_CAMBIO_USD", "").strip() or "3.40")
 # Tope de fragmentos por minuto que se envían a Gemini para los vectores (0 = sin tope: se aprende con el
 # primer 429). El límite es por proyecto de Google y se ve en https://aistudio.google.com/rate-limit.
 GEMINI_VECTORS_PER_MINUTE = max(0, int(os.environ.get("GEMINI_VECTORES_POR_MINUTO", "").strip() or "0"))

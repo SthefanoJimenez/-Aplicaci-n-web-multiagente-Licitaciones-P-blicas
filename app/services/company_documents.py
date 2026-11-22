@@ -15,9 +15,21 @@ from services.accounts import AccountBase, Company, now
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_COMPANY_BYTES = 50 * 1024 * 1024
-MAX_DOCUMENTS = 30
+MAX_DOCUMENTS = 80              # 20/11/2026: de 30 a 80 por los documentos del personal clave
 MAX_PAGES = 200
 DOCUMENT_TYPES = {"rnp": "RNP", "experiencia": "Experiencia", "personal": "Personal", "otro": "Otro"}
+# Documentos de una persona del personal clave (20/11/2026, pedido del asesor): fichas técnicas y
+# sustentos de sus habilidades. Se guardan como tipo «personal» y enlazados a esa persona (staff_id).
+STAFF_DOC_KINDS = {
+    "cv": "Currículum o ficha técnica",
+    "titulo": "Título profesional",
+    "colegiatura": "Constancia de colegiatura y habilidad",
+    "experiencia": "Constancias o certificados de experiencia",
+    "capacitacion": "Certificados de capacitación",
+}
+# Columnas que se agregan a bases existentes (accounts.initialize_schema), todas admiten vacío.
+STAFF_COLUMNS = {"staff_id": "INTEGER", "staff_kind": "VARCHAR(20)", "read_status": "VARCHAR(20)",
+                 "read_detail": "VARCHAR(300)"}
 
 
 class DocumentError(ValueError):
@@ -38,6 +50,11 @@ class CompanyDocument(AccountBase):
     sha256: Mapped[str] = mapped_column(String(64))
     content: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # Personal clave (20/11/2026): a quién pertenece, qué es y qué se leyó del documento
+    staff_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    staff_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    read_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    read_detail: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 def today():
@@ -122,12 +139,16 @@ def list_documents(factory, user_id, on_date=None):
         result = []
         for doc in rows:
             state, label = document_status(doc, on_date)
-            result.append({key: getattr(doc, key) for key in ("id", "filename", "document_type", "valid_from", "expires_on", "size_bytes", "page_count", "uploaded_at")} |
-                          {"state": state, "state_label": label, "type_label": DOCUMENT_TYPES[doc.document_type]})
+            result.append({key: getattr(doc, key) for key in ("id", "filename", "document_type", "valid_from", "expires_on", "size_bytes", "page_count", "uploaded_at",
+                                                               "staff_id", "staff_kind", "read_status", "read_detail")} |
+                          {"state": state, "state_label": label, "type_label": DOCUMENT_TYPES[doc.document_type],
+                           "staff_kind_label": STAFF_DOC_KINDS.get(doc.staff_kind or "", "")})
         return result
 
 
-def add_document(factory, user_id, metadata, pdf):
+def add_document(factory, user_id, metadata, pdf, staff=None):
+    """staff: {staff_id, staff_kind, read_status, read_detail} si es de una persona del personal clave
+    (services/staff.py ya comprobó que la persona es de la empresa)."""
     with factory.begin() as db:
         # Escritura inocua: serializa cuotas incluso en SQLite; en PostgreSQL bloquea solo la empresa.
         db.execute(update(Company).where(Company.user_id == user_id).values(name=Company.name))
@@ -135,10 +156,10 @@ def add_document(factory, user_id, metadata, pdf):
         count, used = db.execute(select(func.count(), func.coalesce(func.sum(CompanyDocument.size_bytes), 0))
                                 .where(CompanyDocument.company_id == company.id)).one()
         if count >= MAX_DOCUMENTS or used + pdf["size_bytes"] > MAX_COMPANY_BYTES:
-            raise DocumentError("Su empresa alcanzó el límite de 30 documentos o 50 MB. Borre uno que ya no necesite.")
+            raise DocumentError(f"Su empresa alcanzó el límite de {MAX_DOCUMENTS} documentos o 50 MB. Borre uno que ya no necesite.")
         if db.scalar(select(CompanyDocument.id).where(CompanyDocument.company_id == company.id, CompanyDocument.sha256 == pdf["sha256"])):
             raise DocumentError("Este PDF ya está guardado en su empresa. Puede actualizar su tipo y vigencia desde el listado.")
-        doc = CompanyDocument(company_id=company.id, **metadata, **pdf)
+        doc = CompanyDocument(company_id=company.id, **metadata, **pdf, **(staff or {}))
         db.add(doc)
         db.flush()
         return doc.id
@@ -172,6 +193,16 @@ def delete_document(factory, user_id, document_id):
             return False
         db.delete(doc)
         return True
+
+
+def read_text(content):
+    """Texto de las primeras páginas de un PDF ya validado, leído en un proceso aislado. "" si no se pudo."""
+    try:
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name("pdf_text.py"))], input=content,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15, check=False)
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+    return result.stdout.decode("utf-8", errors="replace") if result.returncode == 0 else ""
 
 
 def evaluation_inventory(factory, user_id, on_date=None):

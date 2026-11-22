@@ -4543,3 +4543,44 @@ body.lf-chat-open .lf-chat-launcher {
 .note-quiet strong {
     color: var(--ink-2);
 }
+
+/* Personal clave: documentos de cada persona (20/11/2026) */
+.staff-docs {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+
+.staff-docs li {
+    padding: 6px 0;
+    border-top: 1px solid var(--rule);
+}
+
+.staff-docs .note-quiet {
+    margin-top: 2px;
+}
+
+.note-quiet.note-check {
+    color: var(--caution);
+}
+
+.staff-upload {
+    margin-top: 10px;
+}
+
+.staff-upload summary {
+    cursor: pointer;
+    color: var(--seal);
+    font-weight: 600;
+}
+
+.link-button {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--bad);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: underline;
+}

@@ -64,18 +64,23 @@ def test_el_avance_se_informa_una_vez_por_base(factory):
     assert sorted(c for _n, _t, c in seen) == ["1001", "1002", "1003", "1004", "1005", "1006"]
 
 
-def test_sin_cuota_de_gemini_se_detiene_sin_perder_lo_pendiente(factory):
+def test_sin_cuota_de_gemini_la_lectura_sigue_y_deja_los_vectores_pendientes(factory):
+    """20/11/2026: «usar Gemini y, ni bien se acaba, seguir sin él». Antes se detenía."""
     seed(factory, codes=("1001", "1002", "1003"))
+    calls = []
 
     def broken(texts, task_type):
-        raise llm.ModelError("El modelo respondió con el error 429", code=429)
+        calls.append(1)
+        raise llm.ModelError("El modelo respondió con el error 429",
+                             code=429, detail="Quota exceeded: EmbedContentRequestsPerDayPerProject")
 
     summary = rag.index_pending(factory, limit=0, fetch=Concurrency(0.05), embed=broken, use_ocr=False, workers=4)
-    assert summary["stopped"]
     states = statuses(factory)
-    assert states["1001"] == states["1002"] == "pendiente"      # quedan para la próxima ejecución
+    assert not summary["stopped"] and states["1001"] == states["1002"] == "extraido"
+    assert "pendiente" not in states.values()
+    assert len(calls) <= 4                     # tras saber que no hay cuota del día, no se le vuelve a pedir
     with factory() as session:
-        assert session.query(db.RequirementChunk).count() == 0
+        assert rag.missing_vectors(session) == session.query(db.RequirementChunk).count() > 0
 
 
 def test_cronogramas_en_paralelo(factory):
@@ -137,7 +142,7 @@ def test_un_limite_por_minuto_de_gemini_se_espera_y_no_detiene_la_lectura(factor
     assert "fragmentos por minuto" in capsys.readouterr().out
 
 
-def test_si_gemini_sigue_sin_responder_se_detiene_tras_las_esperas(factory, monkeypatch):
+def test_si_gemini_sigue_sin_responder_tras_las_esperas_se_guarda_sin_vectores(factory, monkeypatch):
     seed(factory, codes=("1001",))
     monkeypatch.setattr(rag, "EMBED_WAITS", (0, 0))
     calls = []
@@ -147,7 +152,8 @@ def test_si_gemini_sigue_sin_responder_se_detiene_tras_las_esperas(factory, monk
         raise llm.ModelError("El modelo respondió con el error 429", code=429)
 
     summary = rag.index_pending(factory, limit=0, fetch=fake_fetch, embed=quota, use_ocr=False)
-    assert summary["stopped"] and len(calls) == 3 and statuses(factory)["1001"] == "pendiente"
+    assert not summary["stopped"] and len(calls) == 3 and statuses(factory)["1001"] == "extraido"
+    assert "sin vectores" in summary["details"][0][2]
 
 
 def test_una_clave_invalida_se_detiene_sin_esperar(factory, monkeypatch):

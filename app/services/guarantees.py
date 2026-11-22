@@ -43,54 +43,62 @@ class Policy:
         return cls(**fields)
 
 
-def calculate(amount, values, on_date=None, policy=None, kind="bienes"):
-    """No decide solvencia a partir de ventas ni aplica normativa a un régimen desconocido.
+def calculate(amount, values, on_date=None, policy=None, kind="bienes", regime="32069"):
+    """Garantías orientativas con lo que se sabe, sin pedir al cliente datos que traen las bases (20/11/2026).
 
     kind: "bienes", "servicios", "obras" o "consultoria_obras" (services.eligibility.contract_kind).
+    regime: "32069" (lo deduce services.eligibility de la fecha y las bases) u otro, que queda por revisar.
+    values: mype (de Mi empresa), accessory_required (leído de las bases) y, si la empresa los indicó,
+    accessory_amount y advance_amount. No decide solvencia ni capacidad de fianza: muestra cuánto sería.
+
+    status: «pass» si se pudo calcular; «info» si falta el monto (no se publicó: la garantía será el 10 % del
+    contrato, no es un incumplimiento); «pending» si el régimen o el año no corresponden a estas reglas.
     """
     policy = policy or Policy.configured()
     day = on_date or date.today()
     result = {"status": "pending", "amount": None, "accessory": None, "advance": None,
               "rate": policy.rate * 100, "source": SOURCE, "exemption_source": EXEMPTION_SOURCE,
-              "uit_source": UIT_SOURCE, "retention_allowed": False, "exempt": False}
-    if values.get("regime") != "32069" or day.year != policy.year or day < policy.effective_from:
-        return result | {"reason": "Confirme en las bases el régimen y los parámetros de garantía aplicables a este año."}
+              "uit_source": UIT_SOURCE, "retention_allowed": False, "exempt": False,
+              "accessory_required": bool(values.get("accessory_required"))}
+    if regime != "32069":
+        return result | {"reason": "Las bases mencionan otro régimen (Ley 30225); confirme en ellas las garantías aplicables."}
+    if day.year != policy.year or day < policy.effective_from:
+        return result | {"reason": f"Los parámetros de garantía (UIT y límites) son los de {policy.year}; confírmelos en las bases."}
+    percent = f"{policy.rate * 100:.0f} %"
     if amount is None:
-        return result | {"reason": "Falta el monto para calcular la garantía."}
+        return result | {"status": "info",
+                         "reason": f"El monto no está publicado: la garantía de fiel cumplimiento será el {percent} del monto "
+                                   "del contrato, mediante carta fianza o póliza de caución"
+                                   + (", o retención del pago por ser MYPE." if values.get("mype") else ".")}
     amount = Decimal(str(amount))
-    if not values.get("whole_contract"):
-        return result | {"reason": "Confirme que el monto comprende todos los ítems o contratos que se le adjudicarían en este proceso."}
     # Art. 139.a: la excepción de 50 UIT es solo para contratos de bienes y servicios.
     exempt = kind in ("bienes", "servicios") and amount <= policy.exempt_uit * policy.uit
     principal = Decimal("0") if exempt else (amount * policy.rate).quantize(Decimal("0.01"))
-    accessory_base = Decimal(str(values.get("accessory_amount") or "0"))
-    advance_base = Decimal(str(values.get("advance_amount") or "0"))
-    accessory = Decimal("0") if exempt else (accessory_base * policy.accessory_rate).quantize(Decimal("0.01"))
-    advance = (advance_base * policy.advance_rate).quantize(Decimal("0.01"))
+    accessory_base = values.get("accessory_amount")
+    accessory = (Decimal("0") if exempt else (Decimal(str(accessory_base)) * policy.accessory_rate).quantize(Decimal("0.01"))
+                 if accessory_base else None)
+    advance_base = values.get("advance_amount")
+    advance = (Decimal(str(advance_base)) * policy.advance_rate).quantize(Decimal("0.01")) if advance_base else None
     limit = policy.works_retention_limit if kind == "obras" else policy.retention_limit
     retention = bool(values.get("mype") or amount <= limit)
-    result |= {"amount": principal, "accessory": accessory, "advance": advance,
+    result |= {"status": "pass", "amount": principal, "accessory": accessory, "advance": advance,
                "retention_allowed": retention, "exempt": exempt}
-    note = "Cálculo orientativo sobre el monto evaluado; debe recalcularse con el monto contractual. "
     if exempt:
-        note += "El monto no supera 50 UIT: excepción del art. 139, sujeta a la suma de ítems adjudicados al mismo postor. "
-    elif kind in ("obras", "consultoria_obras") and amount <= policy.exempt_uit * policy.uit:
-        note += ("La excepción de 50 UIT del art. 139 es para bienes y servicios; no se aplica a "
-                 + ("obras. " if kind == "obras" else "la consultoría de obras sin confirmarlo en las bases. "))
-    if kind == "obras":
-        note += "En obras la retención procede hasta S/ 5 000 000 o, para una MYPE, con independencia del monto (art. 114.1). "
-    if values.get("guarantee_method") == "retention" and retention:
-        needed = advance  # Los adelantos no se garantizan mediante retención.
-        note += "Retención disponible según art. 114; ser MYPE no elimina ni reduce la garantía. "
+        note = ("El monto no supera 50 UIT: no se exige garantía de fiel cumplimiento (art. 139), salvo que se le "
+                "adjudiquen otros ítems del mismo proceso y la suma lo supere. ")
     else:
-        needed = principal + accessory + advance
-        if values.get("guarantee_method") == "retention":
-            return result | {"reason": note + "La retención no resulta aplicable con los datos declarados; revise otra modalidad."}
-    if needed > 0 and not values.get("guarantee_method"):
-        return result | {"reason": note + "Falta confirmar la modalidad prevista de garantía."}
-    capacity = values.get("guarantee_capacity")
-    if needed > 0 and (capacity is None or Decimal(str(capacity)) < needed):
-        return result | {"reason": note + "Falta acreditar cobertura suficiente de la garantía; las ventas no prueban esa capacidad."}
-    if values.get("accessory_required") and not values.get("accessory_amount"):
-        return result | {"reason": note + "Falta el monto de las prestaciones accesorias exigidas en las bases."}
-    return result | {"status": "pass", "reason": note + "Cobertura declarada suficiente para el cálculo mostrado."}
+        note = f"Garantía de fiel cumplimiento: {percent} del monto del contrato. "
+        if retention:
+            note += ("Puede ser carta fianza, póliza de caución o retención del pago"
+                     + (" por ser MYPE" if values.get("mype") and amount > limit else "") + " (art. 114). ")
+        else:
+            note += "Debe ser carta fianza o póliza de caución: el monto supera el límite para la retención del pago (art. 114). "
+        if kind in ("obras", "consultoria_obras") and amount <= policy.exempt_uit * policy.uit:
+            note += ("La excepción de 50 UIT del art. 139 es para bienes y servicios; no se aplica a "
+                     + ("obras. " if kind == "obras" else "la consultoría de obras sin confirmarlo en las bases. "))
+    if values.get("mype"):
+        note += "Ser MYPE no elimina ni reduce la garantía: permite pedir la retención del pago. "
+    if values.get("accessory_required") and not exempt:
+        note += f"Las bases piden además garantía por prestaciones accesorias: {percent} de su monto. "
+    note += "Si solicita adelantos, se garantizan por el mismo monto. Es un cálculo orientativo sobre el monto evaluado."
+    return result | {"reason": note.strip()}

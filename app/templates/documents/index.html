@@ -12,7 +12,7 @@
 </section>
 <section class="panel" aria-labelledby="upload-title">
   <h2 class="section-title" id="upload-title">Adjuntar un documento</h2>
-  <p class="hint" id="upload-limits">PDF de hasta 5 MB y 200 páginas, sin contraseña ni archivos adjuntos. Máximo 30 documentos y 50 MB por empresa.</p>
+  <p class="hint" id="upload-limits">PDF de hasta 5 MB y 200 páginas, sin contraseña ni archivos adjuntos. Máximo {{ max_documents }} documentos y 50 MB por empresa.</p>
   <form method="post" action="{{ url_for('company_documents.index') }}" enctype="multipart/form-data" data-document-form>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% include "documents/_metadata.html" %}
@@ -34,7 +34,7 @@
     {% for doc in documents %}
     <li class="document-card">
       <div class="document-heading"><h3>{{ doc.filename }}</h3><span class="document-state document-state-{{ doc.state }}">{{ doc.state_label }}</span></div>
-      <p class="hint">{{ doc.type_label }} · {{ '%.0f'|format(doc.size_bytes / 1024) }} KB · {{ doc.page_count }} página{% if doc.page_count != 1 %}s{% endif %}</p>
+      <p class="hint">{{ doc.type_label }}{% if doc.staff_kind_label %} · {{ doc.staff_kind_label }} (<a href="{{ url_for('staff.index') }}#persona-{{ doc.staff_id }}">personal clave</a>){% endif %} · {{ '%.0f'|format(doc.size_bytes / 1024) }} KB · {{ doc.page_count }} página{% if doc.page_count != 1 %}s{% endif %}</p>
       <p class="hint">Desde: {{ doc.valid_from|date_pe if doc.valid_from else 'No declarado' }} · Vencimiento: {{ doc.expires_on|date_pe if doc.expires_on else 'Sin vencimiento declarado' }}</p>
       <div class="actions document-actions">
         <a class="button button-secondary" href="{{ url_for('company_documents.file', document_id=doc.id) }}" target="_blank" rel="noopener" aria-label="Ver PDF {{ doc.filename }} (abre otra pestaña)">Ver PDF</a>
