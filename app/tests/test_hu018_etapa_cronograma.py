@@ -5,6 +5,7 @@ internet, Neon ni Gemini. El texto de remisión al SEACE es el de las bases real
 13/11/2026 (1258549 y otras cinco).
 """
 from datetime import date, datetime, timedelta
+import re
 
 import pytest
 from sqlalchemy import inspect, text
@@ -191,6 +192,11 @@ def sheet():
     return response.get_data(as_text=True)
 
 
+def offer_dates_in_schedule(html):
+    table = html.partition("Cronograma leído de las bases</caption>")[2].partition("</table>")[0]
+    return re.findall(r"<td[^>]*>Presentación de ofertas</td>\s*<td[^>]*>([^<]+)</td>", table)
+
+
 def tender_row(factory):
     with factory() as session:
         return session.query(db.Tender).filter_by(code=CODE).one()
@@ -217,7 +223,8 @@ def test_de_bases_administrativas_a_integradas(factory, source):
     assert row.schedule_status == "leido" and row.schedule_due is False and row.schedule_page == 2
     assert row.schedule_file == "Bases Administrativas · bases.pdf"
     html = sheet()
-    assert "Cronograma actualizado al" in html and "21 nov 2026" in html and "3 nov 2026 al 9 nov 2026" in html
+    assert "Cronograma actualizado al" in html and "3 nov 2026 al 9 nov 2026" in html
+    assert offer_dates_in_schedule(html) == ["21 nov 2026"]
     assert "«Bases Administrativas · bases.pdf»" in html
 
     # 2. Se publica el pliego de absolución: cambia la etapa y el cronograma vuelve a quedar por leer
@@ -231,7 +238,7 @@ def test_de_bases_administrativas_a_integradas(factory, source):
     html = sheet()
     assert 'aria-current="step">Absolución de consultas y observaciones' in html
     assert "el cronograma se volverá a leer en la próxima actualización." in html
-    assert "21 nov 2026" in html                                       # se conserva la lectura anterior
+    assert offer_dates_in_schedule(html) == ["21 nov 2026"]             # se conserva la lectura anterior
     assert 'Publicación de «Pliego de absolución de consultas y observaciones»</td><td style="white-space:nowrap;">12 nov 2026, 08:30' in html
     assert "Del 4 nov 2026, 00:01 al 6 nov 2026, 23:59" in html            # plazo de consultas de la API
     rag.read_due_schedules(factory, fetch=fetch)
@@ -247,7 +254,8 @@ def test_de_bases_administrativas_a_integradas(factory, source):
     row = tender_row(factory)
     assert row.schedule_file == "Bases Integradas · bases.pdf" and row.schedule_stage == "integradas"
     html = sheet()
-    assert 'aria-current="step">Bases integradas' in html and "28 nov 2026" in html and "21 nov 2026" not in html
+    assert 'aria-current="step">Bases integradas' in html
+    assert offer_dates_in_schedule(html) == ["28 nov 2026"]
     assert "con las bases en la etapa «Bases integradas»" in html
     assert "se volverá a leer" not in html
 
