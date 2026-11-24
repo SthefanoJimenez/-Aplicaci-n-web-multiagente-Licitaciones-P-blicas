@@ -105,10 +105,13 @@
   {% if tender %}
   <div class="notice notice-info" role="note">
     <p>Convocatoria <a href="{{ url_for('tender_sheet', code=tender.code) }}">{{ tender.code }}</a>: {{ tender.title or tender.description }}.</p>
-    {% if from_bases %}
+    {% if from_bases and from_bases.amount %}
     <p>Las bases piden un monto facturado de <strong>S/ {{ "{:,.2f}".format(from_bases.amount) }}</strong>{% if from_bases.page %} (página {{ from_bases.page }}){% endif %}: «{{ from_bases.excerpt }}». Se cargó abajo; verifíquelo en las bases.</p>
     {% else %}
     <p>No se encontró el monto facturado en los requisitos leídos de sus bases. Escríbalo a mano.</p>
+    {% endif %}
+    {% if from_bases and (from_bases.years or from_bases.staff) %}
+    <p>{% if from_bases.years %}También piden <strong>{{ from_bases.years }} años</strong> de experiencia. {% endif %}{% if from_bases.staff %}Piden <strong>{{ from_bases.staff }} {{ 'persona' if from_bases.staff == 1 else 'personas' }}</strong> de personal clave. {% endif %}Se cargó abajo.</p>
     {% endif %}
   </div>
   {% endif %}

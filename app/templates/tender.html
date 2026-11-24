@@ -36,15 +36,29 @@
     </dl>
   </figure>
   <div class="panel">
-    <p class="panel-title" style="margin-top:0;"><strong>Bases del proceso</strong></p>
+    <p class="panel-title" style="margin-top:0;"><strong>Documentos del proceso</strong></p>
     {% if seace_url %}
     <p class="muted small" style="margin:0 0 12px;">Las bases oficiales son el documento que vale para postular.</p>
     <div style="display:flex; flex-wrap:wrap; gap:8px;">
       <a class="button button-primary" href="{{ url_for('tender_bases', code=tender.code) }}">Descargar bases{% if bases_label %} ({{ bases_label }}){% endif %}</a>
-      <a class="button button-secondary" href="{{ seace_url }}" target="_blank" rel="noopener">Enlace original del SEACE</a>
     </div>
     {% else %}
     <p class="muted" style="margin:0;">La convocatoria no publica bases en el portal del OECE.</p>
+    {% endif %}
+    {# 23/11/2026: todos los documentos que publica el SEACE (bases, pliego, bases integradas, actas), con su
+       enlace directo. Reemplaza al botón que copiaba datos para buscar en el SEACE (su buscador no admite pegarlos)
+       y al de «Enlace original del SEACE», que solo descargaba otra vez las bases. #}
+    {# Sin el archivo de las bases: ya se descarga con el botón de arriba #}
+    {% set docs = tender.documents|selectattr("url")|rejectattr("url", "equalto", seace_url)|list %}
+    {% if docs %}
+    <ul class="process-documents" style="margin:12px 0 0; padding-left:18px;" data-process-documents>
+      {% for d in docs|selectattr("published_at")|sort(attribute="published_at", reverse=true) %}
+      <li><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title or "Documento" }}</a> <span class="muted small">· {{ d.published_at|date_pe }}{% if d.doc_format %} · {{ d.doc_format|upper }}{% endif %}</span></li>
+      {% endfor %}
+      {% for d in docs|rejectattr("published_at") %}
+      <li><a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title or "Documento" }}</a>{% if d.doc_format %} <span class="muted small">· {{ d.doc_format|upper }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
     {% endif %}
     <p style="margin:16px 0 0;"><a href="{{ url_for('consortium.index', convocatoria=tender.code) }}">¿No llega sola? Evalúe esta convocatoria con un consorcio</a></p>
     {% if catalog_code %}
@@ -153,7 +167,6 @@
     {% if seace_url %}
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
       <a class="button button-primary" href="{{ url_for('tender_bases', code=tender.code) }}">Descargar bases{% if bases_label %} ({{ bases_label }}){% endif %}</a>
-      <a class="button button-secondary" href="{{ seace_url }}" target="_blank" rel="noopener">Enlace original del SEACE</a>
     </div>
     {% else %}
     <p style="margin-top:8px;">La convocatoria no publica bases en el portal del OECE; búsquela en el <a href="https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorConvocatorias/buscadorConvocatorias.xhtml" target="_blank" rel="noopener">buscador del SEACE</a>.</p>

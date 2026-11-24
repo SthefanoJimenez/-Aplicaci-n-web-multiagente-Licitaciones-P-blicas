@@ -16,7 +16,7 @@ import unicodedata
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, delete, func, select
 from sqlalchemy.orm import Mapped, mapped_column
 
-from services.accounts import AccountBase, Company, CompanyProfile, User, now
+from services.accounts import AccountBase, Company, CompanyProfile, User, now, similar_for_category
 
 MAX_PARTNERS = 9            # integrantes además de la líder (10 en total)
 MAX_CONSORTIA = 20          # consorcios que una empresa puede liderar
@@ -68,6 +68,8 @@ class Member:
     staff: str = ""
     member_id: int | None = None             # fila de consorcio_integrantes (la líder no tiene)
     staff_lines: list = field(default_factory=list)
+    categories: list = field(default_factory=list)          # lo que ofrece (Mi empresa), 23/11/2026
+    similar_by_category: dict = field(default_factory=dict)  # monto facturado de cada objeto, si lo indicó
 
     def __post_init__(self):
         self.staff_lines = staff_lines(self.staff)
@@ -210,6 +212,27 @@ def parse_pen(raw):
         return None
 
 
+def needs_from_facts(facts):
+    """Lo que piden las bases analizadas, en las capacidades que suma el consorcio (23/11/2026).
+
+    {"amount", "page", "excerpt", "years", "staff"} o None. El monto es el general (en consorcio, el de
+    MYPE solo vale si todas lo son) y en soles; si está en dólares no se carga.
+    """
+    items = [i for i in (facts or {}).get("requisitos") or [] if isinstance(i, dict)]
+    found = {}
+    for item in items:
+        if item.get("tipo") == "experiencia" and item.get("monto_minimo") and item.get("moneda") in (None, "PEN") \
+                and "amount" not in found:
+            found.update(amount=Decimal(str(item["monto_minimo"])), page=item.get("pagina"),
+                         excerpt=item.get("cita") or item.get("descripcion") or "")
+        if item.get("tipo") == "experiencia_anios" and item.get("anios"):
+            found["years"] = max(found.get("years", 0), int(item["anios"]))
+    people = sum(int(i.get("cantidad") or 1) for i in items if i.get("tipo") == "personal")
+    if people:
+        found["staff"] = people
+    return found or None
+
+
 def amount_from_requirements(reqs):
     """Monto facturado que exigen las bases, con su página, si los requisitos lo dicen de forma
     reconocible («monto facturado acumulado equivalente a S/ 150,000.00»). None si no lo encuentra."""
@@ -241,10 +264,30 @@ def _member_from_company(db, company, role):
     profile = db.get(CompanyProfile, company.id)
     if profile is None:
         return Member(company_id=company.id, name=company.name, role=role, has_profile=False)
+    from services.accounts import CATEGORY_LABELS, SIMILAR_BY_CATEGORY, split_choices
     return Member(company_id=company.id, name=company.name, role=role, has_profile=True,
                   monthly_sales=Decimal(profile.monthly_sales), experience_years=int(profile.experience_years),
                   similar_contracts_amount=Decimal(profile.similar_contracts_amount),
-                  staff=profile.specialized_staff or "")
+                  staff=profile.specialized_staff or "",
+                  categories=split_choices(profile.categories, CATEGORY_LABELS),
+                  similar_by_category={category: Decimal(getattr(profile, column))
+                                       for category, column in SIMILAR_BY_CATEGORY.items()
+                                       if getattr(profile, column, None) is not None})
+
+
+def similar_amount(member, category):
+    """(monto facturado en contratos similares que aporta esta integrante para un objeto, ¿es solo su total?).
+
+    23/11/2026: el monto de ese objeto si lo indicó; si no ofrece ese objeto, 0; si ofrece solo ese o no dijo
+    qué ofrece, su total; si ofrece varios y no lo separó, su total, marcado como no confirmado.
+    """
+    if not member.has_profile:
+        return Decimal("0"), False
+    if category not in member.similar_by_category and member.categories and category not in member.categories:
+        return Decimal("0"), False
+    amount, how = similar_for_category(member.similar_contracts_amount, member.similar_by_category,
+                                                member.categories, category)
+    return amount if amount is not None else Decimal("0"), how == "sin separar"
 
 
 def _role(db, consortium, company_id):
@@ -327,6 +370,40 @@ def detail(factory, user_id, consortium_id):
         return {"id": consortium.id, "name": consortium.name, "role": role, "company_id": company.id,
                 "members": members, "invitations": invitations,
                 "slots_left": MAX_PARTNERS - len([r for r in rows if r.status != REJECTED])}
+
+
+def with_staff(factory, user_id, on_date=None):
+    """Consorcios de la empresa (lidera o aceptó) con al menos una socia, para el semáforo (23/11/2026).
+
+    [{"id", "name", "company_id" (la propia), "members": [Member], "staff": [personal clave de las socias]}].
+    El personal de las socias se usa tal como lo registraron (sus documentos no se revisan desde aquí).
+    """
+    from services import staff as staff_service
+    with factory() as db:
+        company = _company(db, user_id)
+        if company is None:
+            return []
+        ids = list(db.scalars(select(Consortium.id).where(Consortium.leader_company_id == company.id)))
+        ids += list(db.scalars(select(ConsortiumMember.consortium_id).where(
+            ConsortiumMember.company_id == company.id, ConsortiumMember.status == ACCEPTED)))
+    groups = []
+    for consortium_id in dict.fromkeys(ids):
+        data = detail(factory, user_id, consortium_id)
+        if not data or len(data["members"]) < 2:
+            continue
+        partner_ids = {m.company_id: m.name for m in data["members"] if m.company_id != data["company_id"]}
+        with factory() as db:
+            rows = db.scalars(select(staff_service.StaffMember)
+                              .where(staff_service.StaffMember.company_id.in_(partner_ids))).all()
+            people = [staff_service.as_dict(r) | {"company_id": r.company_id, "company_name": partner_ids[r.company_id]}
+                      for r in rows]
+            # Rubros que declara cada socia en Mi empresa (23/11/2026)
+            profiles = {pid: db.get(CompanyProfile, pid) for pid in partner_ids}
+            rubros = {pid: {"rubros": prof.rubros, "business_activity": prof.business_activity}
+                      for pid, prof in profiles.items() if prof is not None}
+        groups.append({"id": data["id"], "name": data["name"], "company_id": data["company_id"],
+                       "members": data["members"], "staff": people, "rubros": rubros})
+    return groups
 
 
 def invite(factory, user_id, consortium_id, email):

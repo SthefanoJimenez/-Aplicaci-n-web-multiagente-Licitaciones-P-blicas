@@ -38,7 +38,12 @@ def tender_context(code):
         return None, None
     if tender is None:
         return None, None
-    return tender, consortia.amount_from_requirements(reqs)
+    # 23/11/2026: primero lo que dicen las bases analizadas (monto, años, personal); si no, el texto leído
+    analyzed = consortia.needs_from_facts(tenders.facts_of(code))
+    if analyzed and "amount" in analyzed:
+        return tender, analyzed
+    from_text = consortia.amount_from_requirements(reqs)
+    return tender, ({**(analyzed or {}), **from_text} if from_text else analyzed)
 
 
 @bp.route("/consorcio", methods=["GET", "POST"])
@@ -72,8 +77,12 @@ def render_detail(consortium_id, invite_email="", invite_error=None):
     code = tender_code()
     tender, from_bases = tender_context(code)
     args = request.args.to_dict()
-    if from_bases and not args.get("facturado"):
+    if from_bases and from_bases.get("amount") and not args.get("facturado"):
         args["facturado"] = f"{from_bases['amount']:.2f}"     # se propone el monto de las bases; se puede cambiar
+    if from_bases and from_bases.get("years") and not args.get("anios"):
+        args["anios"] = str(from_bases["years"])
+    if from_bases and from_bases.get("staff") and not args.get("personal"):
+        args["personal"] = str(from_bases["staff"])
     form_values, required, form_errors = consortia.parse_required(args)
     result = consortia.evaluate(data["members"], required, data["company_id"]) if not form_errors else None
     totals = consortia.combine(data["members"])["totals"]

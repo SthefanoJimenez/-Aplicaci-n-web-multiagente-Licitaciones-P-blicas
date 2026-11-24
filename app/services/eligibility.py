@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 import config
-from services import accounts, company_documents, data, db, eligibility_store, guarantees, requirements, schedule, staff, tenders
+from services import accounts, bases_facts, company_documents, data, db, eligibility_store, guarantees, requirements, schedule, staff, tenders
 
 LABELS = {"verde": "Cumple por sí sola", "amarillo": "Requiere atención", "rojo": "No cumple ni en consorcio"}
 REVIEW_OPTIONS = {"pending": "Sin responder", "own": "Cumplo por mí misma",
@@ -116,6 +116,7 @@ def load_tenders(codes):
             for entry in entries:
                 entry["key"] = hashlib.sha256(f"{row.ocid}|{entry['page']}|{entry['file_name']}|{entry['text']}".encode()).hexdigest()[:24]
             result[str(row.code)] = {"id": row.id, "ocid": row.ocid, "code": str(row.code), "title": row.title or row.description,
+                "rubros": row.rubros.split() if row.rubros else [],
                 "category": tenders.category_of(row), "method": row.method,
                 "state": row.state, "stage": row.stage, "deadline_at": row.deadline_at, "published_at": row.published_at,
                 "offer_day": _offer_day(row.schedule) if not row.deadline_at else None,
@@ -150,6 +151,11 @@ def use_facts(tender, facts):
     """
     tender["facts"] = facts
     items = [item for item in facts.get("requisitos") or [] if isinstance(item, dict)]
+    section = " ".join(r.get("text") or "" for r in tender.get("requirements") or [])
+    for item in items:
+        # Análisis anteriores al 23/11/2026 no guardaban el monto para MYPE: se busca en el texto leído
+        if item.get("tipo") == "experiencia" and item.get("monto_minimo") and "monto_minimo_mype" not in item:
+            item["monto_minimo_mype"] = bases_facts.mype_amount(section, item["monto_minimo"])
     if not items or tender.get("requirements_status") != "extraido":
         return tender
     entries, seen = [], set()
@@ -263,33 +269,89 @@ def _fact_status(fact, ctx):
         return "pending", (f"Se pide inscripción como {name} y su perfil no la declara. Si ya la tiene, márquela en "
                            "Mi empresa; un socio no sustituye su propia inscripción.")
     if kind == "experiencia":
-        actual = decimal(profile.get("similar_contracts_amount"))
-        window = f" en los últimos {fact['anios']} años" if fact.get("anios") else ""
-        minimum, note = None, ""
-        if fact.get("monto_minimo"):
-            minimum, note = _in_soles(decimal(fact["monto_minimo"]), fact.get("moneda"))
-        elif fact.get("veces_valor_estimado"):
-            times = decimal(fact["veces_valor_estimado"])
-            if ctx["amount"] is None:
-                return "info", (f"Las bases piden facturar {format(times.normalize(), 'f')} veces el valor estimado{window}, y ese monto no se "
-                                "conoce. Compárelo con su facturación cuando la entidad lo dé a conocer.")
-            minimum = (times * ctx["amount"]).quantize(Decimal(".01"))
-            note = f" ({format(times.normalize(), 'f')} veces el valor estimado)"
-        if actual is None:
-            return "pending", "Indique en Mi empresa cuánto ha facturado en contratos similares."
-        if minimum is None:
-            if actual > 0:
-                return "assumed", (f"Las bases no fijan un monto mínimo{window}; se considera su facturación declarada "
-                                   f"en contratos similares ({_money(actual)}).")
-            return "pending", "Las bases piden experiencia en contratos similares y su perfil no declara facturación."
-        if actual >= minimum:
-            return "pass", (f"Su facturación en contratos similares ({_money(actual)}) alcanza el mínimo de "
-                            f"{_money(minimum)}{note}{window}.")
-        if ctx["consortium_forbidden"]:
-            return "fail", (f"Su facturación en contratos similares ({_money(actual)}) no alcanza el mínimo de "
-                            f"{_money(minimum)}{note}, y las bases no admiten consorcio.")
-        return "short", (f"Su facturación en contratos similares ({_money(actual)}) no alcanza el mínimo de "
-                         f"{_money(minimum)}{note}{window}. En consorcio, se suma la de un socio.")
+        status, reason = _experience_status(fact, ctx)
+        if status in ("pass", "assumed") and ctx.get("out_of_rubro"):
+            # 23/11/2026: el monto alcanza, pero la facturación declarada es de otros rubros
+            return "pending", (reason + " Pero la convocatoria no es de sus rubros: confirme que esa facturación es "
+                               "de contratos similares a lo que piden las bases.")
+        return status, reason
+    return _other_fact_status(fact, ctx)
+
+
+def _company_amount(ctx):
+    """(monto facturado en contratos similares que corresponde a esta convocatoria, de qué es, ¿es solo el total?).
+
+    23/11/2026: si Mi empresa dice cuánto es de cada objeto (bienes, servicios, obras), se usa ese; si la empresa
+    ofrece un solo objeto, el total; si ofrece varios y no lo separó, el total, pero no basta para dar verde.
+    """
+    profile, category = ctx["profile"], ctx["category"]
+    by_category = {name: decimal(profile.get(field)) for name, field in accounts.SIMILAR_BY_CATEGORY.items()}
+    total = decimal(profile.get("similar_contracts_amount"))
+    label = accounts.CATEGORY_LABELS.get(category, category).lower()
+    amount, how = accounts.similar_for_category(total, by_category, profile.get("categories") or [], category)
+    if how == "declarado":
+        return amount, f"en {label}", False
+    if how == "resto":
+        # Ofrece varios objetos y declaró todos menos este: lo de este es lo que queda del total.
+        return amount, f"en {label}", "resto"
+    return amount, "", bool(amount and how == "sin separar")
+
+
+def _experience_status(fact, ctx):
+    status, reason = _experience_check(fact, ctx)
+    if _company_amount(ctx)[2] == "resto":
+        label = accounts.CATEGORY_LABELS.get(ctx["category"], ctx["category"]).lower()
+        reason += (f" Lo de {label} es lo que queda de su total al restar lo que declaró en los otros objetos "
+                   "en Mi empresa.")
+    return status, reason
+
+
+def _experience_check(fact, ctx):
+    profile = ctx["profile"]
+    actual, where, only_total = _company_amount(ctx)
+    only_total = only_total is True
+    window = f" en los últimos {fact['anios']} años" if fact.get("anios") else ""
+    minimum, note, general = None, "", None
+    if fact.get("monto_minimo"):
+        minimum, note = _in_soles(decimal(fact["monto_minimo"]), fact.get("moneda"))
+        if fact.get("monto_minimo_mype") and profile.get("is_mype"):
+            # Las bases fijan un monto menor para MYPE y la empresa lo es (Mi empresa). En consorcio
+            # todas deben ser MYPE: ahí se usa el general.
+            general = minimum
+            minimum, note = _in_soles(decimal(fact["monto_minimo_mype"]), fact.get("moneda"))
+            note += " (monto para MYPE)"
+    elif fact.get("veces_valor_estimado"):
+        times = decimal(fact["veces_valor_estimado"])
+        if ctx["amount"] is None:
+            return "info", (f"Las bases piden facturar {_times(times)} el valor estimado{window}, y ese monto no se "
+                            "conoce. Compárelo con su facturación cuando la entidad lo dé a conocer.")
+        minimum = (times * ctx["amount"]).quantize(Decimal(".01"))
+        note = f" ({_times(times)} el valor estimado)"
+    if actual is None:
+        return "pending", "Indique en Mi empresa cuánto ha facturado en contratos similares."
+    if minimum is None:
+        if actual > 0:
+            return "assumed", (f"Las bases no fijan un monto mínimo{window}; se considera su facturación declarada "
+                               f"en contratos similares{' ' + where if where else ''} ({_money(actual)}).")
+        return "pending", "Las bases piden experiencia en contratos similares y su perfil no declara facturación."
+    if actual >= minimum:
+        if only_total:
+            label = accounts.CATEGORY_LABELS.get(ctx["category"], ctx["category"]).lower()
+            return "pending", (f"Su facturación total en contratos similares ({_money(actual)}) alcanza el mínimo "
+                               f"de {_money(minimum)}{note}{window}, pero suma todos sus objetos. Indique en Mi "
+                               f"empresa cuánto es de {label} para confirmarlo.")
+        return "pass", (f"Su facturación en contratos similares{' ' + where if where else ''} ({_money(actual)}) "
+                        f"alcanza el mínimo de {_money(minimum)}{note}{window}.")
+    shortfall = (f"Su facturación en contratos similares{' ' + where if where else ''} ({_money(actual)}) no alcanza "
+                 f"el mínimo de {_money(minimum)}{note}{window}.")
+    if ctx["consortium_forbidden"]:
+        return "fail", shortfall[:-1] + ", y las bases no admiten consorcio."
+    return _with_consortium(ctx, "similar_contracts_amount", general or minimum, shortfall,
+                            lambda total: f"con su consorcio «{{name}}» suman {_money(total)}")
+
+
+def _other_fact_status(fact, ctx):
+    profile, kind = ctx["profile"], fact.get("tipo")
     if kind == "experiencia_anios":
         years, actual = fact.get("anios"), profile.get("experience_years")
         if not years:
@@ -298,8 +360,11 @@ def _fact_status(fact, ctx):
             return "pending", "Indique en Mi empresa sus años de experiencia."
         if int(actual) >= int(years):
             return "pass", f"Su empresa declara {actual} años de experiencia; las bases piden {years}."
-        return ("fail" if ctx["consortium_forbidden"] else "short"), (
-            f"Su empresa declara {actual} años de experiencia; las bases piden {years}.")
+        shortfall = f"Su empresa declara {actual} años de experiencia; las bases piden {years}."
+        if ctx["consortium_forbidden"]:
+            return "fail", shortfall + " Las bases no admiten consorcio."
+        return _with_consortium(ctx, "experience_years", int(years), shortfall,
+                                lambda total: f"en su consorcio «{{name}}» la integrante con más experiencia tiene {total} años")
     if kind == "personal":
         return _staff_status(fact, ctx)
     if kind == "equipamiento":
@@ -328,6 +393,78 @@ def _fact_status(fact, ctx):
     return "pending", "Confirme si su empresa cumple este requisito."
 
 
+def _rubro_label(codes, names):
+    """«5019» o «3011 y 7212». Solo códigos: los nombres del catálogo son listas de ejemplos («Ej.: papas fritas,
+    mix de bocaditos…») que alargan el aviso sin aclarar (pantalla del 23/11/2026)."""
+    codes = list(codes)
+    return codes[0] if len(codes) == 1 else ", ".join(codes[:-1]) + " y " + codes[-1]
+
+
+def _rubro_check(tender_rubros, scope, groups):
+    """La convocatoria no es de los rubros de Mi empresa: amarillo, nunca rojo (23/11/2026).
+
+    El rubro declarado no es un requisito para postular; lo que pesa es la experiencia en contratos similares y
+    las habilitaciones del rubro. Si una socia de sus consorcios es de ese rubro, se dice cuál.
+    """
+    names = scope.get("names") or {}
+    wanted, own = _rubro_label(tender_rubros, names), _rubro_label(sorted(scope["codes"]), names)
+    for group in groups:
+        for company_id, codes in (scope.get("partners") or {}).get(group["id"], {}).items():
+            if company_id != group["company_id"] and set(codes) & set(tender_rubros):
+                partner = next((m.name for m in group["members"] if m.company_id == company_id), "una socia")
+                return _check("rubro", "Rubro de la convocatoria", "consortium",
+                              f"Es del rubro {wanted} y en Mi empresa declara {own}. {partner}, de su consorcio "
+                              f"«{group['name']}», sí es de ese rubro y puede aportar su experiencia.")
+    return _check("rubro", "Rubro de la convocatoria", "pending",
+                  f"Es del rubro {wanted} y en Mi empresa declara {own}. Puede postular si tiene experiencia en "
+                  "contratos similares; si no, en consorcio con una empresa de ese rubro.")
+
+
+def _times(times):
+    """«1 vez», «2 veces», «1.5 veces»."""
+    text = format(times.normalize(), "f")
+    return f"{text} vez" if times == 1 else f"{text} veces"
+
+
+def _with_consortium(ctx, key, need, shortfall, how):
+    """La empresa sola no alcanza: ¿alcanza con alguno de sus consorcios (Consorcios, HU-012)? 23/11/2026.
+
+    Devuelve («consortium», motivo con el consorcio y quiénes lo integran) o («short», motivo con la sugerencia).
+    """
+    from services import consortia
+    for group in ctx.get("consortia") or []:
+        unconfirmed = False
+        if key == "similar_contracts_amount":
+            # Solo cuenta lo facturado en el objeto de la convocatoria (23/11/2026)
+            parts = [consortia.similar_amount(m, ctx["category"]) for m in group["members"]]
+            total = sum((amount for amount, _ in parts), Decimal("0"))
+            unconfirmed = any(only_total and amount for amount, only_total in parts)
+        else:
+            total = consortia.combine(group["members"])["totals"][key]
+        if total >= need:
+            others = ", ".join(m.name for m in group["members"] if m.company_id != group["company_id"])
+            text = how(total).replace("{name}", group["name"])
+            label = accounts.CATEGORY_LABELS.get(ctx["category"], ctx["category"]).lower()
+            check = (f" Confirme cuánto de eso es de {label} en cada empresa (Mi empresa de cada una)."
+                     if unconfirmed else "")
+            return "consortium", (f"{shortfall} Sí alcanza en consorcio: {text}"
+                                  f"{f' (con {others})' if others else ''}.{check}")
+    hint = (" Ninguno de sus consorcios alcanza el mínimo." if ctx.get("consortia")
+            else " En consorcio se suma la de un socio: puede formarlo en Consorcios.")
+    return "short", shortfall + hint
+
+
+def _partner_staff(ctx, need, count):
+    """Una integrante de alguno de sus consorcios tiene a quien cubre el cargo. Texto o None."""
+    for group in ctx.get("consortia") or []:
+        partners = [m for m in group.get("staff") or [] if m.get("company_id") != group["company_id"]]
+        found = staff.match_requirements([dict(need) for _ in range(count)], partners) if partners else []
+        if found and not any(f["problem"] for f in found):
+            who = ", ".join(f"{f['member']['name']} ({f['member'].get('company_name', 'socio')})" for f in found)
+            return f"Lo cubre {who}, de su consorcio «{group['name']}»."
+    return None
+
+
 def _staff_status(fact, ctx):
     key = staff.profession_key(" ".join(filter(None, (fact.get("profesion"), fact.get("cargo")))))
     role = fact.get("cargo") or fact.get("profesion") or "personal clave"
@@ -346,8 +483,13 @@ def _staff_status(fact, ctx):
     found = staff.match_requirements([dict(need) for _ in range(count)], ctx["members"])
     problems = [f["problem"] for f in found if f["problem"]]
     if problems:
-        return ("assumed" if later else "short"), " ".join(problems) + (later or " Puede incorporarlo antes de la oferta o "
-                                                                         "aportarlo en consorcio.")
+        if later:
+            return "assumed", " ".join(problems) + later
+        partner = _partner_staff(ctx, need, count)
+        if partner:
+            return "consortium", " ".join(problems) + " " + partner
+        return "short", " ".join(problems) + (" Puede incorporarlo antes de la oferta o aportarlo en consorcio."
+                                              if not ctx["consortium_forbidden"] else "")
     missing = [f"{f['member']['name']}: {', '.join(f['missing'])}" for f in found if f.get("missing")]
     names = ", ".join(f["member"]["name"] for f in found)
     if missing:
@@ -387,7 +529,8 @@ def _check(key, label, status, reason, **extra):
     return {"key": key, "label": label, "status": status, "reason": reason, **extra}
 
 
-def evaluate(tender, profile, documents, values=None, today=None, policy=None, members=None):
+def evaluate(tender, profile, documents, values=None, today=None, policy=None, members=None, consortia=None,
+             scope=None):
     """Función pura: mismo semáforo en listado, ficha y asistente. Recalcula vigencia y fuentes.
 
     members: personal clave registrado (services/staff.py), para contrastarlo con lo que piden las bases.
@@ -412,9 +555,17 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None, m
         checks.append(_check("perfil", "Perfil de la empresa", "pending", "Complete el giro y los rubros en Mi empresa."))
     category, kind = tender.get("category") or "bienes", contract_kind(tender)
     category_label = accounts.CATEGORY_LABELS.get(category, category).lower()
-    if profile.get("categories") and category not in profile["categories"]:
+    off_category = bool(profile.get("categories") and category not in profile["categories"])
+    if off_category:
         checks.append(_check("categoria", "Objeto de la convocatoria", "pending",
                              f"Es una convocatoria de {category_label} y su perfil no declara que ofrezca {category_label}."))
+    # Rubro (23/11/2026): no impide postular, pero la experiencia debe ser en contratos similares
+    out_of_rubro = False
+    if scope and scope.get("codes") and tender.get("rubros") and not off_category:
+        tender_rubros = [str(r) for r in tender["rubros"]]
+        if not set(tender_rubros) & set(scope["codes"]):
+            out_of_rubro = True
+            checks.append(_rubro_check(tender_rubros, scope, consortia or []))
     register = REGISTER_FOR_KIND[kind]
     analyzed_rnp = any(isinstance(i, dict) and i.get("tipo") == "rnp"
                        for i in (tender.get("facts") or {}).get("requisitos") or [])
@@ -510,7 +661,8 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None, m
                          values.get("partner_document") in owned_current)
     context = {"profile": profile, "inventory": inventory, "documents": documents, "members": members or [],
                "amount": amount, "consortium_forbidden": consortium_forbidden, "kind": kind, "on_date": on_date,
-               "category": category}
+               "category": category, "consortia": [] if consortium_forbidden else (consortia or []),
+               "out_of_rubro": out_of_rubro}
     for req in tender.get("requirements", []):
         text, key = req["text"], req["key"]
         normalized = plain(text)
@@ -648,9 +800,37 @@ def evaluate_many(account_factory, user_id, codes, today=None):
     documents = company_documents.list_documents(account_factory, user_id)
     saved = eligibility_store.load_inputs(account_factory, user_id, [str(c) for c in codes])
     members = staff.list_staff(account_factory, user_id, on_date=today)
+    groups = company_consortia(account_factory, user_id, today)
     contexts = load_tenders(codes)
-    return {code: evaluate(tender, profile, documents, saved.get(code), today, members=members)
+    scope = rubro_scope(profile, groups)
+    return {code: evaluate(tender, profile, documents, saved.get(code), today, members=members, consortia=groups,
+                           scope=scope)
             for code, tender in contexts.items()}
+
+
+def rubro_scope(profile, groups=()):
+    """Rubros (familias de 4 dígitos) de Mi empresa y de las socias de sus consorcios, con sus nombres.
+    Los mismos que usa «Solo a las que puedo postular» (services/matching.company_scope)."""
+    from services import matching
+    try:
+        names = tenders.rubro_names()
+    except tenders.TendersUnavailable:
+        names = {}
+    codes = {item["code"] for item in matching.company_scope(profile, names)["rubros"]}
+    partners = {group["id"]: {company_id: {item["code"] for item in matching.company_scope(text, names)["rubros"]}
+                              for company_id, text in (group.get("rubros") or {}).items()}
+                for group in groups}
+    return {"codes": codes, "names": names, "partners": partners}
+
+
+def company_consortia(account_factory, user_id, today=None):
+    """Consorcios de la empresa (los que lidera y a los que se unió), con sus integrantes que aceptaron y el
+    personal clave de cada una (23/11/2026). Si la base de cuentas no tiene esas tablas, lista vacía."""
+    from services import consortia
+    try:
+        return consortia.with_staff(account_factory, user_id, today)
+    except SQLAlchemyError:
+        return []
 
 
 def parse_form(form, requirement_keys, owned_documents):

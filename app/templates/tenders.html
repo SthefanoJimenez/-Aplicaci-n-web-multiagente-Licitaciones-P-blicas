@@ -221,17 +221,11 @@
               <a class="button button-primary tender-icon" href="{{ url_for('tender_bases', code=t.code) }}" aria-label="Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}" title="Descargar bases{% if t.bases_label %} ({{ t.bases_label }}){% endif %}" data-action-tooltip>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>
               </a>
-              <a class="button button-secondary tender-icon" href="{{ t.seace_url }}" target="_blank" rel="noopener" aria-label="Enlace original del SEACE (nueva pestaña)" title="Enlace original del SEACE (nueva pestaña)" data-action-tooltip>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 3h7v7M21 3l-11 11M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg>
-              </a>
               {% elif t.seace_url %}
               <a class="button button-primary tender-icon" href="{{ t.seace_url }}" target="_blank" rel="noopener" aria-label="Descargar bases (nueva pestaña)" title="Descargar bases (nueva pestaña)" data-action-tooltip>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/></svg>
               </a>
               {% endif %}
-              <button type="button" class="button button-secondary tender-icon" data-copy-search="{{ t.code or t.title }}" data-code="{{ t.code }}" data-title="{{ t.title }}" aria-label="Copiar datos para buscar en SEACE" title="Copiar datos para buscar en SEACE" data-action-tooltip>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
-              </button>
             </div>
           </td>
         </tr>
@@ -256,19 +250,6 @@
 
 <div id="tender-action-tooltip" class="tender-action-tooltip" role="tooltip" hidden></div>
 
-<!-- Modal / Toast de ayuda para buscar en SEACE -->
-<div id="seace-toast" class="notice notice-good" style="display:none; position:fixed; bottom:24px; right:24px; z-index:1000; box-shadow:0 8px 24px rgba(0,0,0,0.18); max-width:420px; animation:fadeIn 0.2s ease;">
-  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-    <div>
-      <strong id="seace-toast-title">¡Código copiado al portapapeles!</strong>
-      <p id="seace-toast-msg" style="margin:4px 0 8px; font-size:14px;">Pegue el texto copiado en el campo "Descripción del objeto" o "Nombre" del buscador del SEACE.</p>
-      <a id="seace-toast-link" class="button button-sm button-secondary" href="https://prodapp2.seace.gob.pe/seacebus-uiwd-pub/buscadorConvocatorias/buscadorConvocatorias.xhtml" target="_blank" rel="noopener">
-        Abrir buscador del SEACE
-      </a>
-    </div>
-    <button type="button" onclick="document.getElementById('seace-toast').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:18px; line-height:1; color:inherit;">&times;</button>
-  </div>
-</div>
 
 <script>
 // Al cambiar el objeto, el filtro de rubros se recarga con los rubros de ese objeto (20/11/2026)
@@ -279,23 +260,7 @@ document.querySelectorAll('[data-category-filter]').forEach(select => {
     if (form) form.submit();
   });
 });
-document.querySelectorAll('[data-copy-search]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const code = btn.dataset.code || '';
-    const title = btn.dataset.title || '';
-    const textToCopy = title ? (title.split(' - ')[0] || title) : code;
-    
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      const toast = document.getElementById('seace-toast');
-      const titleEl = document.getElementById('seace-toast-title');
-      const msgEl = document.getElementById('seace-toast-msg');
-      titleEl.textContent = '¡Copiado: ' + textToCopy + '!';
-      msgEl.innerHTML = 'Se copió la nomenclatura. Péguela directamente en el <strong>Buscador de Procedimientos de Selección</strong> del SEACE para ver el expediente completo.';
-      toast.style.display = 'block';
-      setTimeout(() => { toast.style.display = 'none'; }, 8000);
-    });
-  });
-});
+
 
 // Las etiquetas también se muestran con Tab y se pueden cerrar con Escape.
 (() => {

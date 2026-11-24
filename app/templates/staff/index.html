@@ -14,6 +14,7 @@
 
 <section class="panel" aria-labelledby="add-title">
   <h2 class="section-title" id="add-title">Agregar a una persona</h2>
+  <p class="hint">Primero registre sus datos. Luego, en «Personal registrado», use «Subir ficha técnica o sustento» para adjuntar su currículum, título, colegiatura, constancias de experiencia o certificados de capacitación.</p>
   {{ summary(errors) }}
   <form method="post" action="{{ url_for('staff.index') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -21,7 +22,7 @@
       {{ input('name', 'Nombre', values, errors, maximum=120, minimum=2, hint='Como figura en sus certificados.') }}
       <div class="field">
         <label class="label" for="profession">Profesión u oficio</label>
-        <input id="profession" name="profession" list="profession-options" required maxlength="120" minlength="2"
+        <input id="profession" name="profession" type="text" autocomplete="off" list="profession-options" data-combobox required maxlength="120" minlength="2"
                value="{{ values.get('profession', '') }}" aria-describedby="profession-hint"
                {% if errors.get('profession') %}aria-invalid="true"{% endif %}>
         <datalist id="profession-options">{% for key, label in professions.items() %}<option value="{{ label }}">{% endfor %}</datalist>
@@ -33,9 +34,9 @@
         <span class="label" id="experience-label">Experiencia en el cargo o la especialidad</span>
         <div style="display:flex; gap:8px;">
           <label class="sr-only" for="years">Años</label>
-          <input id="years" name="years" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" value="{{ values.get('years', '0') }}" aria-describedby="experience-hint" style="max-width:6em;"> <span>años</span>
+          <input id="years" name="years" type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" value="{{ values.get('years', '0') }}" aria-describedby="experience-hint" style="max-width:6em;"> <span>años</span>
           <label class="sr-only" for="months">Meses</label>
-          <input id="months" name="months" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" value="{{ values.get('months', '0') }}" aria-describedby="experience-hint" style="max-width:6em;"> <span>meses</span>
+          <input id="months" name="months" type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" value="{{ values.get('months', '0') }}" aria-describedby="experience-hint" style="max-width:6em;"> <span>meses</span>
         </div>
         <p class="hint" id="experience-hint">Las bases suelen pedirla en meses (por ejemplo, 24 meses como residente).</p>
         {% if errors.get('experience') %}<p class="error">{{ errors.experience }}</p>{% endif %}
@@ -82,7 +83,7 @@
         {% endfor %}
       </ul>
       {% endif %}
-      <details class="staff-upload">
+      <details class="staff-upload"{% if m.id == new_member %} open{% endif %}>
         <summary>Subir ficha técnica o sustento</summary>
         <form method="post" action="{{ url_for('staff.add_document', member_id=m.id) }}" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -119,3 +120,4 @@
   {% endif %}
 </section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/profession-combobox.js') }}" defer></script>{% endblock %}

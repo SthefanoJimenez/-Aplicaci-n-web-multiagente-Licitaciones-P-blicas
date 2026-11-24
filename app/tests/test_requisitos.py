@@ -167,7 +167,7 @@ def test_unreadable_bases_are_explained_and_offered_for_download(indexed, client
     _status, page = sheet(client, code)
     assert f'data-requirements-status="{status}"' in page and message in page
     assert f'href="/convocatorias/{code}/bases"' in page and "Descargar bases" in page
-    assert "Enlace original del SEACE" in page and "Página " not in page.split("Requisitos de calificación")[1]
+    assert "Enlace original del SEACE" not in page and "Página " not in page.split("Requisitos de calificación")[1]
 
 
 def test_bases_not_read_yet_say_they_will_be_read_tomorrow(factory, client):

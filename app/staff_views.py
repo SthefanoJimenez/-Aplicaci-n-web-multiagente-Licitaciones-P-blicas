@@ -37,15 +37,16 @@ def index():
             values, errors = staff.validate(request.form)
             if not errors:
                 try:
-                    staff.add_member(factory, g.current_user["id"], values)
-                    flash("Persona agregada a su personal clave.", "success")
-                    return redirect(url_for("staff.index"))
+                    member_id = staff.add_member(factory, g.current_user["id"], values)
+                    flash("Persona agregada. Ahora puede subir su currículum, título o certificados.", "success")
+                    return redirect(url_for("staff.index", nueva=member_id, _anchor=f"persona-{member_id}"))
                 except staff.StaffError as error:
                     errors["name"] = str(error)
         members = staff.list_staff(factory, g.current_user["id"])
     except SQLAlchemyError:
         return unavailable()
-    return render_template("staff/index.html", members=members, values=values, errors=errors,
+    new_member = request.args.get("nueva", type=int)
+    return render_template("staff/index.html", members=members, values=values, errors=errors, new_member=new_member,
                            professions=staff.PROFESSIONS, max_staff=staff.MAX_STAFF,
                            months_text=staff.months_text, doc_kinds=company_documents.STAFF_DOC_KINDS), \
         (400 if errors else 200)

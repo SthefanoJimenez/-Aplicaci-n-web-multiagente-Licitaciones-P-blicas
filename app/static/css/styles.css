@@ -4368,6 +4368,14 @@ body.lf-chat-open .lf-chat-launcher {
     cursor: pointer;
     color: var(--seal);
     font-weight: 600;
+    display: inline-block;
+    padding: 8px 14px;
+    border: 1.5px solid var(--seal);
+    border-radius: 8px;
+}
+
+.staff-upload[open] summary {
+    margin-bottom: 10px;
 }
 
 .link-button {
@@ -4379,4 +4387,59 @@ body.lf-chat-open .lf-chat-launcher {
     font-size: 13px;
     cursor: pointer;
     text-decoration: underline;
+}
+/* Lista de profesiones de Personal clave: nombres completos, en varias líneas si hace falta (24/11/2026) */
+.combo {
+    position: relative;
+}
+
+.combo input[role="combobox"] {
+    padding-right: 44px;
+}
+
+.combo-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+}
+
+.combo-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+}
+
+.combo-option {
+    padding: 10px 14px;
+    color: var(--ink);
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.combo-option:hover,
+.combo-option[aria-selected="true"] {
+    background: var(--seal-tint);
+    color: var(--seal-strong);
 }

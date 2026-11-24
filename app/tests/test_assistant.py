@@ -436,3 +436,19 @@ def test_los_enlaces_del_chat_no_permiten_inyectar_atributos():
     hostil = markdown('[x](http://a/" onmouseover="alert(1))')
     assert "<a" not in hostil and 'href="http://a/"' not in hostil
     assert 'href="javascript:' not in markdown("[x](javascript:alert(1))")
+
+def test_una_pregunta_por_el_listado_no_queda_atada_a_la_convocatoria_anterior(signed_in_client, monkeypatch):
+    """Regresión (23/11/2026): tras «¿Puedo postular a la 2002?», «¿A cuáles convocatorias puedo postular?»
+    solo mostraba la 2002. El seguimiento («¿Qué me falta?») sí conserva la convocatoria."""
+    from services import assistant
+
+    seen = []
+    monkeypatch.setattr(assistant, "ask_assistant", lambda query, *args, **kwargs: seen.append(query) or {
+        "response": "ok", "status": "answered", "rubros": [], "missing": [], "profile": {}, "detail_count": 0})
+    signed_in_client.post("/asistente/mensaje", data={"query": "¿Puedo postular a la 2002?"})
+    signed_in_client.post("/asistente/mensaje", data={"query": "¿Qué me falta?"})
+    signed_in_client.post("/asistente/mensaje", data={"query": "¿A cuáles convocatorias puedo postular?"})
+    signed_in_client.post("/asistente/mensaje", data={"query": "¿Y qué me falta?"})
+    assert seen[1].endswith("Convocatoria 2002")
+    assert "2002" not in seen[2]
+    assert "2002" not in seen[3]
