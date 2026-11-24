@@ -13,6 +13,26 @@
     if (validFrom.value) expiry.min = validFrom.value;
     else expiry.removeAttribute('min');
   };
+  // Habilitaciones (24/11/2026): la pregunta «¿Qué habilitación es?» solo aparece para ese tipo
+  const type = form.querySelector('#document_type');
+  const licenseField = form.querySelector('[data-license-field]');
+  const licenseKind = form.querySelector('#license_kind');
+  const licenseNameField = form.querySelector('[data-license-name]');
+  const licenseName = form.querySelector('#license_name');
+  const syncLicense = () => {
+    if (!type || !licenseField) return;
+    const isLicense = type.value === 'habilitacion';
+    licenseField.hidden = !isLicense;
+    licenseKind.required = isLicense;
+    const other = isLicense && licenseKind.value === 'otra';
+    licenseNameField.hidden = !other;
+    licenseName.required = other;
+  };
+  if (type && licenseField) {
+    type.addEventListener('change', syncLicense);
+    licenseKind.addEventListener('change', syncLicense);
+    syncLicense();
+  }
   noExpiry.addEventListener('change', syncDates);
   validFrom.addEventListener('input', syncDates);
   syncDates();

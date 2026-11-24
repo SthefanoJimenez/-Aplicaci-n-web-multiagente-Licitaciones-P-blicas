@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 import auth
 from services import company_documents as documents
+from services import licenses
 
 bp = Blueprint("company_documents", __name__)
 
@@ -51,6 +52,7 @@ def index():
     except SQLAlchemyError:
         return unavailable()
     return render_template("documents/index.html", documents=rows, types=documents.DOCUMENT_TYPES,
+                           licenses=licenses.CHOICES,
                            values=values, errors=errors, max_documents=documents.MAX_DOCUMENTS,
                            used_mb=sum(d["size_bytes"] for d in rows) / (1024 * 1024)), (400 if errors else 200)
 
@@ -80,18 +82,19 @@ def edit(document_id):
         if doc is None:
             abort(404)
         values = {"document_type": doc["document_type"], "valid_from": str(doc["valid_from"] or ""),
-                  "expires_on": str(doc["expires_on"] or ""), "no_expiry": doc["expires_on"] is None}
+                  "expires_on": str(doc["expires_on"] or ""), "no_expiry": doc["expires_on"] is None,
+                  "license_kind": doc.get("license_kind") or "", "license_name": doc.get("license_name") or ""}
         if request.method == "POST":
             values, errors, metadata = documents.validate_metadata(request.form)
             if not errors:
                 if not documents.edit_document(factory, g.current_user["id"], document_id, metadata):
                     abort(404)
-                flash("Tipo y vigencia del documento actualizados.", "success")
+                flash("Datos del documento actualizados.", "success")
                 return redirect(url_for("company_documents.index"))
     except SQLAlchemyError:
         return unavailable()
     return render_template("documents/edit.html", document=doc, values=values, errors=errors,
-                           types=documents.DOCUMENT_TYPES), (400 if errors else 200)
+                           types=documents.DOCUMENT_TYPES, licenses=licenses.CHOICES), (400 if errors else 200)
 
 
 @bp.route("/documentos/<int:document_id>/eliminar", methods=["GET", "POST"])

@@ -508,6 +508,24 @@ def read_due_schedules(session_factory, limit=None, fetch=None, progress=None, w
 # ---------------------------------------------------------------------------
 # Análisis de los requisitos ya leídos (20/11/2026)
 # ---------------------------------------------------------------------------
+def training_codes(session, limit=None):
+    """Convocatorias vigentes de servicios ya analizadas antes de que el análisis trajera la capacitación del
+    personal clave (24/11/2026) y cuyas bases leídas la mencionan. Solo esas se vuelven a analizar: medición del
+    24/11/2026, 25 de 58 bases de servicios la mencionan; en bienes y obras casi nunca."""
+    from sqlalchemy import exists
+    from sqlalchemy.orm import undefer
+    from services import bases_facts
+    mentions = exists().where(db.RequirementChunk.tender_id == db.Tender.id,
+                              db.RequirementChunk.text.ilike("%capacitaci%"))
+    query = (select(db.Tender).options(undefer(db.Tender.bases_facts))
+             .where(db.Tender.state == "vigente", db.Tender.category == "servicios",
+                    db.Tender.requirements_status == "extraido", db.Tender.bases_facts_at.is_not(None), mentions)
+             .order_by(db.Tender.deadline_at.is_(None), db.Tender.deadline_at, db.Tender.id))
+    codes = [t.code for t in session.scalars(query)
+             if t.code and int((t.bases_facts or {}).get("version") or 1) < bases_facts.TRAINING_VERSION]
+    return codes[:limit] if limit else codes
+
+
 def unanalyzed_ids(session, limit=None, codes=None):
     """Convocatorias vigentes con requisitos leídos y sin analizar (o las de `codes`, aunque ya lo estén)."""
     query = select(db.Tender.id).where(db.Tender.requirements_status == "extraido")

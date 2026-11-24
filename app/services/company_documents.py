@@ -11,13 +11,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, LargeBinary, String, UniqueConstraint, func, select, update
 from sqlalchemy.orm import Mapped, mapped_column
 
+from services import licenses
 from services.accounts import AccountBase, Company, now
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_COMPANY_BYTES = 50 * 1024 * 1024
 MAX_DOCUMENTS = 80              # 20/11/2026: de 30 a 80 por los documentos del personal clave
 MAX_PAGES = 200
-DOCUMENT_TYPES = {"rnp": "RNP", "experiencia": "Experiencia", "personal": "Personal", "otro": "Otro"}
+DOCUMENT_TYPES = {"rnp": "RNP", "experiencia": "Experiencia", "personal": "Personal",
+                  "habilitacion": "Habilitación, licencia o registro", "otro": "Otro"}
 # Documentos de una persona del personal clave (20/11/2026, pedido del asesor): fichas técnicas y
 # sustentos de sus habilidades. Se guardan como tipo «personal» y enlazados a esa persona (staff_id).
 STAFF_DOC_KINDS = {
@@ -29,7 +31,11 @@ STAFF_DOC_KINDS = {
 }
 # Columnas que se agregan a bases existentes (accounts.initialize_schema), todas admiten vacío.
 STAFF_COLUMNS = {"staff_id": "INTEGER", "staff_kind": "VARCHAR(20)", "read_status": "VARCHAR(20)",
-                 "read_detail": "VARCHAR(300)"}
+                 "read_detail": "VARCHAR(300)",
+                 # Habilitaciones (24/11/2026): cuál es (services/licenses.py) y, si es «otra», su nombre
+                 "license_kind": "VARCHAR(40)", "license_name": "VARCHAR(160)",
+                 # Certificados de capacitación del personal clave (24/11/2026): tema y horas declarados
+                 "training_topic": "VARCHAR(160)", "training_hours": "INTEGER"}
 
 
 class DocumentError(ValueError):
@@ -55,6 +61,11 @@ class CompanyDocument(AccountBase):
     staff_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     read_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     read_detail: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # Habilitaciones y capacitaciones (24/11/2026)
+    license_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    license_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    training_topic: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    training_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 def today():
@@ -67,6 +78,9 @@ def validate_metadata(form):
     errors = {}
     if values["document_type"] not in DOCUMENT_TYPES:
         errors["document_type"] = "Seleccione el tipo de documento."
+    license_kind, license_name, license_errors = licenses.validate(form, values["document_type"])
+    values.update(license_kind=form.get("license_kind", "").strip(), license_name=form.get("license_name", "").strip())
+    errors.update(license_errors)
     dates = {}
     for key in ("valid_from", "expires_on"):
         raw = values[key]
@@ -83,7 +97,8 @@ def validate_metadata(form):
         errors["expires_on"] = "Indique el vencimiento o marque «Sin vencimiento declarado»."
     if dates["valid_from"] and dates["expires_on"] and dates["expires_on"] < dates["valid_from"]:
         errors["expires_on"] = "El vencimiento no puede ser anterior al inicio de vigencia."
-    return values, errors, {"document_type": values["document_type"], **dates}
+    return values, errors, {"document_type": values["document_type"], **dates,
+                            "license_kind": license_kind, "license_name": license_name}
 
 
 def read_pdf(upload):
@@ -140,9 +155,11 @@ def list_documents(factory, user_id, on_date=None):
         for doc in rows:
             state, label = document_status(doc, on_date)
             result.append({key: getattr(doc, key) for key in ("id", "filename", "document_type", "valid_from", "expires_on", "size_bytes", "page_count", "uploaded_at",
-                                                               "staff_id", "staff_kind", "read_status", "read_detail")} |
-                          {"state": state, "state_label": label, "type_label": DOCUMENT_TYPES[doc.document_type],
-                           "staff_kind_label": STAFF_DOC_KINDS.get(doc.staff_kind or "", "")})
+                                                               "staff_id", "staff_kind", "read_status", "read_detail",
+                                                               "license_kind", "license_name", "training_topic", "training_hours")} |
+                          {"state": state, "state_label": label, "type_label": DOCUMENT_TYPES.get(doc.document_type, "Otro"),
+                           "staff_kind_label": STAFF_DOC_KINDS.get(doc.staff_kind or "", ""),
+                           "license_label": licenses.label(doc.license_kind, doc.license_name) if doc.license_kind else ""})
         return result
 
 
@@ -170,7 +187,8 @@ def get_document(factory, user_id, document_id, include_content=False):
         doc = db.scalar(_owned_query(user_id).where(CompanyDocument.id == document_id))
         if doc is None:
             return None
-        result = {key: getattr(doc, key) for key in ("id", "filename", "document_type", "valid_from", "expires_on", "size_bytes", "page_count", "uploaded_at")}
+        result = {key: getattr(doc, key) for key in ("id", "filename", "document_type", "valid_from", "expires_on", "size_bytes", "page_count", "uploaded_at",
+                                                     "license_kind", "license_name")}
         if include_content:
             result["content"] = doc.content
         return result
@@ -181,8 +199,8 @@ def edit_document(factory, user_id, document_id, metadata):
         doc = db.scalar(_owned_query(user_id).where(CompanyDocument.id == document_id))
         if doc is None:
             return False
-        for key in ("document_type", "valid_from", "expires_on"):
-            setattr(doc, key, metadata[key])
+        for key in ("document_type", "valid_from", "expires_on", "license_kind", "license_name"):
+            setattr(doc, key, metadata.get(key))
         return True
 
 

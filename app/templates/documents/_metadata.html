@@ -9,6 +9,25 @@
     </select>
     {% if errors.get('document_type') %}<p class="error" id="type-error">{{ errors.document_type }}</p>{% endif %}
   </div>
+  {# Habilitaciones (24/11/2026): el semáforo compara por cuál es, no por el nombre del archivo #}
+  <div class="field" data-license-field {% if values.get('document_type') != 'habilitacion' %}hidden{% endif %}>
+    <label class="label" for="license_kind">¿Qué habilitación es?</label>
+    <select id="license_kind" name="license_kind" aria-describedby="license-hint{% if errors.get('license_kind') %} license-error{% endif %}"
+            {% if errors.get('license_kind') %}aria-invalid="true"{% endif %}>
+      <option value="">Elija una</option>
+      {% for value, label in licenses.items() %}<option value="{{ value }}" {% if values.get('license_kind') == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <p class="hint" id="license-hint">Con esto el sistema la reconoce cuando una convocatoria la pide, aunque las bases la escriban de otra forma.</p>
+    {% if errors.get('license_kind') %}<p class="error" id="license-error">{{ errors.license_kind }}</p>{% endif %}
+  </div>
+  <div class="field" data-license-name {% if values.get('license_kind') != 'otra' or values.get('document_type') != 'habilitacion' %}hidden{% endif %}>
+    <label class="label" for="license_name">Nombre de la habilitación</label>
+    <input id="license_name" name="license_name" type="text" maxlength="160" value="{{ values.get('license_name', '') }}"
+           aria-describedby="license-name-hint{% if errors.get('license_name') %} license-name-error{% endif %}"
+           {% if errors.get('license_name') %}aria-invalid="true"{% endif %}>
+    <p class="hint" id="license-name-hint">Como figura en el documento. Por ejemplo: Autorización del MTC para transporte de carga.</p>
+    {% if errors.get('license_name') %}<p class="error" id="license-name-error">{{ errors.license_name }}</p>{% endif %}
+  </div>
   <div class="field">
     <label class="label" for="valid_from">Vigente desde (opcional)</label>
     <input id="valid_from" name="valid_from" type="date" min="0001-01-01" max="9999-12-31" value="{{ values.get('valid_from', '') }}"

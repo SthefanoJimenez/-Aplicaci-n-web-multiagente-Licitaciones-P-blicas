@@ -18,7 +18,8 @@ import unicodedata
 import config
 
 ANALYSIS_MAX_TOKENS = 8000     # la respuesta JSON de unas bases ocupa unos 1 500 tokens
-VERSION = 1                      # si cambia el formato, --analizar-requisitos vuelve a analizar las anteriores
+VERSION = 2                      # 2 (24/11/2026): capacitación del personal clave (tema y horas por cargo)
+TRAINING_VERSION = 2             # desde esta versión el análisis trae la capacitación; --actualizar-capacitaciones
 SECTION_CHARS = 24000            # la sección de requisitos casi nunca pasa de 15 000 caracteres
 KINDS = ("rnp", "experiencia", "experiencia_anios", "personal", "equipamiento", "habilitacion", "ventas",
          "documento", "otro")
@@ -44,6 +45,7 @@ Devuelve un JSON con esta forma exacta:
     "anios": número o null,
     "cargo": texto o null, "profesion": texto o null, "experiencia_meses": número o null,
     "colegiado": true | false | null, "cantidad": número o null,
+    "capacitacion_tema": texto o null, "capacitacion_horas": número o null,
     "momento": "oferta" | "contrato" | null,
     "registro_rnp": "bienes" | "servicios" | "ejecutor_obras" | "consultor_obras" | null,
     "documento": texto o null,
@@ -65,6 +67,10 @@ Reglas:
   certificaciones (con "documento" = su nombre). "rnp": inscripción en el Registro Nacional de Proveedores, con
   registro_rnp. "documento": declaraciones juradas, anexos, cartas o formatos que se llenan al presentar la
   oferta. "otro": lo demás.
+- capacitacion_tema y capacitacion_horas (solo en "personal"): si las bases piden capacitación para ese cargo
+  (por ejemplo, en «Capacitación del personal clave»), el tema y las horas lectivas o académicas que pide. Si
+  pide varios temas, júntalos en el texto y usa el total de horas solo si lo dicen. No es la capacitación que el
+  postor debe dar al personal de la entidad (eso es un factor de evaluación: no lo pongas aquí).
 - monto_minimo_mype: si las bases fijan otro monto de experiencia para micro y pequeña empresa (MYPE), ese
   monto; monto_minimo es el general. Es un solo requisito, no dos.
 - Los números van sin separadores de miles: 320960.00, no "320,960.00". La moneda es la que dicen las bases.
@@ -204,6 +210,7 @@ def clean(raw, source, pages=None):
         years = _number(item.get("anios"))
         months = _number(item.get("experiencia_meses"))
         count = _number(item.get("cantidad"))
+        hours = _number(item.get("capacitacion_horas"))
         # Los meses pueden venir de «2 años» (24 meses): valen si están escritos los meses o los años
         months_ok = months is not None and (_written(months, written) or
                                             (months % 12 == 0 and _written(months / 12, written)))
@@ -220,6 +227,9 @@ def clean(raw, source, pages=None):
             "experiencia_meses": int(months) if months_ok and months == int(months) else None,
             "colegiado": _bool(item.get("colegiado")),
             "cantidad": int(count) if count and count == int(count) and _written(count, written) else None,
+            "capacitacion_tema": _text(item.get("capacitacion_tema"), 160) if item["tipo"] == "personal" else None,
+            "capacitacion_horas": (int(hours) if item["tipo"] == "personal" and hours and hours == int(hours)
+                                   and _written(hours, written) else None),
             "momento": item.get("momento") if item.get("momento") in ("oferta", "contrato") else None,
             "registro_rnp": item.get("registro_rnp") if item.get("registro_rnp") in RNP_REGISTERS else None,
             "documento": _text(item.get("documento"), 200),

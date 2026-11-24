@@ -34,7 +34,7 @@
     {% for doc in documents %}
     <li class="document-card">
       <div class="document-heading"><h3>{{ doc.filename }}</h3><span class="document-state document-state-{{ doc.state }}">{{ doc.state_label }}</span></div>
-      <p class="hint">{{ doc.type_label }}{% if doc.staff_kind_label %} · {{ doc.staff_kind_label }} (<a href="{{ url_for('staff.index') }}#persona-{{ doc.staff_id }}">personal clave</a>){% endif %} · {{ '%.0f'|format(doc.size_bytes / 1024) }} KB · {{ doc.page_count }} página{% if doc.page_count != 1 %}s{% endif %}</p>
+      <p class="hint">{{ doc.type_label }}{% if doc.license_label %}: {{ doc.license_label }}{% endif %}{% if doc.staff_kind_label %} · {{ doc.staff_kind_label }} (<a href="{{ url_for('staff.index') }}#persona-{{ doc.staff_id }}">personal clave</a>){% endif %} · {{ '%.0f'|format(doc.size_bytes / 1024) }} KB · {{ doc.page_count }} página{% if doc.page_count != 1 %}s{% endif %}</p>
       <p class="hint">Desde: {{ doc.valid_from|date_pe if doc.valid_from else 'No declarado' }} · Vencimiento: {{ doc.expires_on|date_pe if doc.expires_on else 'Sin vencimiento declarado' }}</p>
       <div class="actions document-actions">
         <a class="button button-secondary" href="{{ url_for('company_documents.file', document_id=doc.id) }}" target="_blank" rel="noopener" aria-label="Ver PDF {{ doc.filename }} (abre otra pestaña)">Ver PDF</a>

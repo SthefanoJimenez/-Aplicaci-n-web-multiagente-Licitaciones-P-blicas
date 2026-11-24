@@ -30,7 +30,7 @@
         {% set expired = counts.expired|length %}
         {% set future = counts.future|length %}
         <li class="eligibility-inventory-row">
-          <strong>{{ {'rnp':'RNP','experiencia':'Experiencia','personal':'Personal','otro':'Otro'}[kind] }}</strong>
+          <strong>{{ {'rnp':'RNP','experiencia':'Experiencia','personal':'Personal','habilitacion':'Habilitaciones','otro':'Otro'}.get(kind, kind) }}</strong>
           <div class="eligibility-inventory-states">
             {% if current %}<span class="eligibility-document-badge eligibility-document-current">{{ current }} {{ 'vigente' if current == 1 else 'vigentes' }}</span>{% endif %}
             {% if expired %}<span class="eligibility-document-badge eligibility-document-expired">{{ expired }} {{ 'vencido' if expired == 1 else 'vencidos' }}</span>{% endif %}

@@ -16,7 +16,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 import config
-from services import accounts, bases_facts, company_documents, data, db, eligibility_store, guarantees, requirements, schedule, staff, tenders
+from services import (accounts, bases_facts, company_documents, data, db, eligibility_store, guarantees, licenses,
+                      requirements, schedule, staff, tenders)
 
 LABELS = {"verde": "Cumple por sí sola", "amarillo": "Requiere atención", "rojo": "No cumple ni en consorcio"}
 REVIEW_OPTIONS = {"pending": "Sin responder", "own": "Cumplo por mí misma",
@@ -492,24 +493,143 @@ def _staff_status(fact, ctx):
                                               if not ctx["consortium_forbidden"] else "")
     missing = [f"{f['member']['name']}: {', '.join(f['missing'])}" for f in found if f.get("missing")]
     names = ", ".join(f["member"]["name"] for f in found)
+    training = _training_status(fact, found)
     if missing:
-        return "pending", f"{names} cubre el cargo de {role}; falta su sustento en Personal clave ({'; '.join(missing)})."
-    return "pass", f"{names} cubre el cargo de {role} según lo registrado en Personal clave."
+        extra = f" {training[1]}" if training and not training[0] else ""
+        return "pending", f"{names} cubre el cargo de {role}; falta su sustento en Personal clave ({'; '.join(missing)}).{extra}"
+    if training and not training[0]:
+        return ("assumed" if later else "pending"), f"{names} cubre el cargo de {role}. {training[1]}{later}"
+    reason = f"{names} cubre el cargo de {role} según lo registrado en Personal clave."
+    return "pass", reason + (f" {training[1]}" if training else "")
+
+
+# Capacitación del personal clave (24/11/2026). Las bases y los certificados escriben el tema de formas distintas:
+# se compara por palabras y siglas conocidas; si no coincide claramente, queda «por revisar» con ambos textos.
+TRAINING_STOP = {"de", "del", "la", "el", "los", "las", "y", "e", "en", "o", "u", "para", "por", "con", "a", "al",
+                 "curso", "cursos", "capacitacion", "capacitaciones", "diplomado", "programa", "especializacion",
+                 "taller", "seminario", "horas", "lectivas", "academicas", "certificado", "sobre", "materia", "temas",
+                 "tema", "gestion"}
+TRAINING_ACRONYMS = {"sst": "seguridad salud trabajo", "ssoma": "seguridad salud ocupacional medio ambiente",
+                     "ssomac": "seguridad salud ocupacional medio ambiente calidad",
+                     "bim": "modelado informacion construccion bim", "haccp": "haccp inocuidad alimentaria",
+                     "bpm": "buenas practicas manufactura", "bpa": "buenas practicas almacenamiento"}
+
+
+def _topic_words(text):
+    words = []
+    for word in re.findall(r"[a-z0-9]+", plain(text)):
+        words.extend(TRAINING_ACRONYMS.get(word, word).split())
+    return {w for w in words if len(w) >= 3 and w not in TRAINING_STOP}
+
+
+def _topic_options(text):
+    """Las bases suelen dar alternativas: «Gestión de proyectos y/o Residencia o Supervisión de obras» (24/11/2026,
+    25 bases de servicios analizadas). Cada alternativa es un conjunto de palabras; basta con cubrir una."""
+    parts = re.split(r"\s+y\s*/\s*o\s+|\s+(?:o|u)\s+|\s*/\s*", text or "")
+    options = [_topic_words(part) for part in parts]
+    return [option for option in options if option] or [_topic_words(text)]
+
+
+def _same_topic(wanted, topic):
+    """¿El tema del certificado cubre alguna de las alternativas que piden las bases? Al menos la mitad de las
+    palabras de esa alternativa."""
+    have = _topic_words(topic)
+    return any(len(option & have) >= max(1, (len(option) + 1) // 2) for option in wanted)
+
+
+def _training_status(fact, found):
+    """(¿cumple?, motivo) de la capacitación que piden las bases para un cargo, o None si no piden o no se
+    controla (personal de una socia del consorcio)."""
+    hours, topic = fact.get("capacitacion_horas"), fact.get("capacitacion_tema")
+    if not hours and not topic:
+        return None
+    short = topic if not topic or len(topic) <= 140 else topic[:137].rsplit(" ", 1)[0] + "…"
+    about = f" en «{short}»" if topic else ""
+    asked = f" de {hours} horas" if hours else ""
+    wanted = _topic_options(topic) if topic else []
+    notes, ok, checked = [], True, False
+    for item in found:
+        person = item["member"]
+        trainings = (person.get("evidence") or {}).get("trainings")
+        if trainings is None:
+            continue
+        checked = True
+        name = person["name"]
+        matching = [t for t in trainings if not wanted or _same_topic(wanted, t["topic"])]
+        total = sum(t["hours"] for t in matching)
+        if matching and (not hours or total >= hours):
+            notes.append(f"Su capacitación{about} suma {total} horas"
+                         f"{f' (piden {hours})' if hours else ''} en los certificados de {name}.")
+        elif matching:
+            ok = False
+            notes.append(f"{name} suma {total} de las {hours} horas de capacitación{about} que piden las bases.")
+        elif trainings:
+            ok = False
+            topics = "; ".join(f"«{t['topic']}» ({t['hours']} h)" for t in trainings[:3])
+            notes.append(f"Las bases piden capacitación{about}{asked}. Los certificados de {name} son de {topics}: "
+                         "revise si sirven.")
+        else:
+            ok = False
+            notes.append(f"Las bases piden capacitación{about}{asked}: suba en Personal clave el certificado de "
+                         f"capacitación de {name}, con su tema y horas.")
+    return (ok, " ".join(notes)) if checked else None
 
 
 def _license_status(fact, ctx):
+    """Habilitación que piden las bases frente a Mis documentos (24/11/2026).
+
+    Se compara por grupo (services/licenses.py): la empresa dice qué habilitación es cada documento al subirlo,
+    y las bases la nombran de muchas formas. Los documentos subidos antes como «Otro» se siguen reconociendo por
+    el nombre del archivo.
+    """
     name = fact.get("documento") or fact.get("descripcion") or "la habilitación"
-    words = [w for w in re.findall(r"[a-z]{5,}", plain(name))
-             if w not in {"registro", "constancia", "certificado", "vigente", "copia", "autorizacion", "licencia"}]
-    others = [d for d in ctx["documents"] if d.get("document_type") == "otro"]
-    matching = [d for d in others if words and any(w in plain(d.get("filename")) for w in words)]
-    current = [d for d in matching
-               if company_documents.document_status(SimpleNamespace(**d), ctx["on_date"])[0] == "current"]
-    if current:
-        return "pass", f"Entre sus documentos está «{current[0]['filename']}», vigente."
+    if licenses.is_personal(name):
+        return "pending", f"Las bases piden «{name}»: es un documento del personal clave; revíselo en Personal clave."
+    later = (" Las bases lo piden para firmar el contrato, no con la oferta."
+             if fact.get("momento") == "contrato" else "")
+    on_date = ctx["on_date"]
+
+    def current(doc):
+        return company_documents.document_status(SimpleNamespace(**doc), on_date)[0] == "current"
+
+    declared = [d for d in ctx["documents"] if d.get("document_type") in ("habilitacion", "otro")]
+    wanted = licenses.kinds_in(" ".join(filter(None, (fact.get("documento"), fact.get("descripcion")))))
+    if wanted:
+        ok, missing, expired = [], [], []
+        for key in wanted:
+            # Lo que la empresa dijo al subirlo; si no lo dijo (subidos antes del 24/11), el nombre del archivo
+            matching = [d for d in declared if d.get("license_kind") == key] or [
+                d for d in declared if not d.get("license_kind") and key in licenses.kinds_in(d.get("filename") or "")]
+            valid = [d for d in matching if current(d)]
+            label = licenses.label(key)
+            if valid:
+                ok.append(f"{label} («{valid[0]['filename']}»)")
+            elif matching:
+                expired.append(f"su {label} («{matching[0]['filename']}») no está vigente en la fecha evaluada")
+            else:
+                missing.append(label)
+        if not missing and not expired:
+            return "pass", "Entre sus documentos está vigente: " + "; ".join(ok) + "."
+        parts = []
+        if expired:
+            parts.append(" y ".join(expired).capitalize() + ".")
+        if missing:
+            parts.append("Suba en Mis documentos, como «Habilitación, licencia o registro»: " + ", ".join(missing) + ".")
+        if ok:
+            parts.append("Ya tiene: " + "; ".join(ok) + ".")
+        return "pending", " ".join(parts) + later
+    # Habilitación que no está en el catálogo: se compara con las palabras del nombre
+    wanted_words = licenses.words(name)
+    matching = [d for d in declared if wanted_words and
+                wanted_words & licenses.words(" ".join(filter(None, (d.get("license_name"), d.get("filename")))))]
+    valid = [d for d in matching if current(d)]
+    if valid:
+        return "pass", f"Entre sus documentos está «{valid[0].get('license_name') or valid[0]['filename']}», vigente."
     if matching:
-        return "pending", f"Su documento «{matching[0]['filename']}» no está vigente en la fecha evaluada."
-    return "pending", f"Suba en Mis documentos: {name}."
+        return "pending", (f"Su documento «{matching[0].get('license_name') or matching[0]['filename']}» no está vigente "
+                           f"en la fecha evaluada.{later}")
+    return "pending", (f"Suba en Mis documentos, como «Habilitación, licencia o registro» (opción «Otra»): {name}."
+                       f"{later}")
 
 
 def _with_review(status, reason, review):
@@ -750,9 +870,9 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None, m
             if count and (declared is None or int(declared) < int(count.group(1))):
                 problems.append("La cantidad de personal declarada no acredita el mínimo exigido; revise también su especialidad.")
         if re.search(r"osinergmin|hidrocarburos|licencia|autorizacion|certificad", normalized):
-            doc_types.add("otro")
+            doc_types.add("habilitacion")
         for kind in sorted(doc_types):
-            if not inventory[kind]["current"]:
+            if not inventory[kind]["current"] and not (kind == "habilitacion" and inventory["otro"]["current"]):
                 detail = "vencidos" if inventory[kind]["expired"] else "aún no vigentes" if inventory[kind]["future"] else "ausentes"
                 problems.append(f"Documentos de {company_documents.DOCUMENT_TYPES[kind]} {detail} en la fecha evaluada ({on_date}).")
         if review == "no":

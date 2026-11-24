@@ -73,6 +73,7 @@
         {% for d in m.documents %}
         <li>
           <a href="{{ url_for('company_documents.file', document_id=d.id) }}" target="_blank" rel="noopener">{{ d.staff_kind_label or d.filename }}</a>
+          {% if d.training_topic %}<span class="hint">· {{ d.training_topic }}{% if d.training_hours %} · {{ d.training_hours }} horas{% endif %}</span>{% endif %}
           <span class="hint">· {{ d.filename }}{% if d.expires_on %} · vigente hasta {{ d.expires_on|date_pe }}{% endif %}{% if d.state == 'expired' %} · <strong>vencido</strong>{% endif %}</span>
           {% if d.read_detail %}<p class="note-quiet{% if d.read_status == 'no_coincide' %} note-check{% endif %}">{{ d.read_detail }}</p>{% endif %}
           <form method="post" action="{{ url_for('staff.delete_document', document_id=d.id) }}" style="display:inline;">
@@ -90,9 +91,20 @@
           <div class="profile-grid">
             <div class="field">
               <label class="label" for="kind-{{ m.id }}">Documento</label>
-              <select id="kind-{{ m.id }}" name="kind" required>
+              <select id="kind-{{ m.id }}" name="kind" required data-staff-kind>
                 {% for key, label in doc_kinds.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
               </select>
+            </div>
+            {# Certificados de capacitación (24/11/2026): tema y horas, para compararlos con lo que piden las bases #}
+            <div class="field" data-training>
+              <label class="label" for="topic-{{ m.id }}">Tema de la capacitación</label>
+              <input id="topic-{{ m.id }}" name="training_topic" type="text" maxlength="160">
+              <p class="hint">Como figura en el certificado. Por ejemplo: Seguridad y salud en el trabajo.</p>
+            </div>
+            <div class="field" data-training>
+              <label class="label" for="hours-{{ m.id }}">Horas</label>
+              <input id="hours-{{ m.id }}" name="training_hours" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4">
+              <p class="hint">Las que dice el certificado. Si lo deja en blanco, se leen del certificado.</p>
             </div>
             <div class="field">
               <label class="label" for="expires-{{ m.id }}">Vigente hasta (opcional)</label>
@@ -120,4 +132,5 @@
   {% endif %}
 </section>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('static', filename='js/profession-combobox.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/profession-combobox.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/staff-upload.js') }}" defer></script>{% endblock %}

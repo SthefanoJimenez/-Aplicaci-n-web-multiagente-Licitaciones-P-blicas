@@ -67,9 +67,11 @@ def add_document(member_id):
             flash("Escriba una fecha de vigencia válida o déjela en blanco.", "error")
             return redirect(anchor)
     try:
+        kind = request.form.get("kind", "")
+        training = staff.validate_training(request.form) if kind == "capacitacion" else None
         pdf = company_documents.read_pdf(request.files.get("file"))
-        reading = staff.add_member_document(auth.store(), g.current_user["id"], member_id,
-                                            request.form.get("kind", ""), expires_on, pdf)
+        reading = staff.add_member_document(auth.store(), g.current_user["id"], member_id, kind, expires_on, pdf,
+                                            training=training)
     except (staff.StaffError, company_documents.DocumentError) as error:
         flash(str(error), "error")
         return redirect(anchor)
