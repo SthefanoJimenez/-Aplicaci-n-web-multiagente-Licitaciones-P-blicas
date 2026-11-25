@@ -81,6 +81,15 @@
       {{ input('experience_years', 'Años completos de experiencia', values, errors, hint='Declare sus años completos de experiencia (de 0 a 200). Este dato general no reemplaza la experiencia exigida en cada convocatoria.', maximum=3) }}
       {{ input('similar_contracts_amount', 'Monto facturado en contratos similares (S/)', values, errors, hint='Total acumulado: hasta 14 cifras enteras y 2 decimales. Si no tiene contratos similares, escriba 0.', maximum=17) }}
     </div>
+    <fieldset class="field">
+      <legend class="label">De ese total, ¿cuánto es de cada objeto? (opcional)</legend>
+      <p class="hint">Las bases piden experiencia en contratos iguales o similares al objeto. Si ofrece más de uno, indique cuánto facturó en cada uno para compararlo bien.</p>
+      <div class="profile-grid">
+        {{ input('similar_amount_bienes', 'En bienes (S/)', values, errors, required=false, maximum=17) }}
+        {{ input('similar_amount_servicios', 'En servicios (S/)', values, errors, required=false, maximum=17) }}
+        {{ input('similar_amount_obras', 'En obras (S/)', values, errors, required=false, maximum=17) }}
+      </div>
+    </fieldset>
     <div class="field">
       <label class="label" for="specialized_staff">Personal especializado</label>
       <textarea id="specialized_staff" name="specialized_staff" rows="4" maxlength="3000" required

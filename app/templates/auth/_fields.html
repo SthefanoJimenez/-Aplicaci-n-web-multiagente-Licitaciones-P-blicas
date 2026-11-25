@@ -11,7 +11,7 @@
 {% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none, required=true, ruc_endpoint='', readonly=false) %}
 <div class="field">
   <label class="label" for="{{ name }}">{{ label }}</label>
-  {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount'] %}
+  {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount', 'similar_amount_bienes', 'similar_amount_servicios', 'similar_amount_obras'] %}
   {% set digits_only = name in ['ruc', 'experience_years'] %}
   {% set live = digits_only or name in ['company_name', 'business_activity', 'rubros'] %}
   {% if is_amount %}<div class="amount-input" data-amount-input>{% endif %}
@@ -20,7 +20,7 @@
   <input id="{{ name }}" name="{{ name }}" type="{{ type }}" {% if required %}required{% endif %}
          autocomplete="{{ autocomplete }}" maxlength="{{ maximum }}"
          {% if minimum is not none %}minlength="{{ minimum }}"{% endif %}
-         {% if type != 'password' %}value="{{ values.get(name, '') }}"{% endif %}
+         {% if type != 'password' %}value="{{ values.get(name) if values.get(name) is not none else '' }}"{% endif %}
          {% if is_amount %}inputmode="decimal" placeholder="0.00" data-amount-field
          pattern="[0-9]{1,14}([.,][0-9]{1,2})?"
          title="Use hasta 14 cifras enteras y dos decimales, con un solo punto o coma y sin separadores de miles."{% endif %}

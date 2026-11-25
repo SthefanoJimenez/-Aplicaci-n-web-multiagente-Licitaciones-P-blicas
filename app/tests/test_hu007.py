@@ -184,8 +184,9 @@ def test_tenders_screen_displays_required_fields_and_disclaimers(client, seed_te
     # Aclaración del departamento de la entidad compradora
     assert "El departamento es el de la entidad que convoca" in html and 'class="note-quiet"' in html
 
-    # Enlace al SEACE
-    assert "https://seace.gob.pe/doc/1001_bases.pdf" in html
+    # Las bases se descargan por la app; el enlace directo al archivo solo se ofrece si la descarga falla
+    # (23/11/2026: el botón «Enlace original del SEACE» descargaba lo mismo que «Descargar bases»)
+    assert "/convocatorias/1001/bases" in html and "https://seace.gob.pe/doc/1001_bases.pdf" not in html
 
 
 def test_estimated_value_displayed_as_not_published_when_zero_or_none(client, seed_tenders):
@@ -340,10 +341,11 @@ def test_only_government_https_links_are_fetched():
     assert not bases_download.is_allowed("https://169.254.169.254/latest")
 
 
-def test_screen_links_to_the_app_route_and_keeps_the_original_link(client, seed_tenders):
+def test_screen_links_to_the_app_route_without_a_duplicate_download(client, seed_tenders):
     html = client.get("/convocatorias").get_data(as_text=True)
     assert "/convocatorias/1001/bases" in html
-    assert "https://seace.gob.pe/doc/1001_bases.pdf" in html       # enlace original como respaldo
+    assert "https://seace.gob.pe/doc/1001_bases.pdf" not in html   # el original queda como respaldo si falla
+    assert "Enlace original del SEACE" not in html
 
 
 @pytest.mark.parametrize("body, extension, mimetype", [

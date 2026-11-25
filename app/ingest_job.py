@@ -23,6 +23,10 @@ Uso, desde la carpeta app/ (con DATABASE_URL en el entorno o en app/.env):
                                           analiza con Gemini los requisitos de las bases ya leídas (monto
                                           mínimo, personal, RNP…) para compararlos con cada empresa; sin N,
                                           todas las que faltan. Las nuevas se analizan al leerlas (20/11/2026)
+    python ingest_job.py --actualizar-capacitaciones [N]
+                                          vuelve a analizar solo las bases de servicios vigentes que mencionan
+                                          capacitación y se analizaron antes del 24/11/2026, para leer el tema y
+                                          las horas que piden por cargo (unas pocas llamadas a Gemini)
     python ingest_job.py --completar-vectores
                                           vectores de las bases guardadas sin ellos porque Gemini se quedó sin
                                           cuota (la ingesta normal también los completa al empezar)
@@ -706,6 +710,7 @@ def parse(args):
     parser.add_argument("--sin-limite", action="store_true")
     parser.add_argument("--analizar-requisitos", nargs="?", type=int, const=0)
     parser.add_argument("--completar-vectores", action="store_true")
+    parser.add_argument("--actualizar-capacitaciones", nargs="?", type=int, const=0)
     # Una opción mal escrita debe dar error: antes se ignoraba y se corría la ingesta completa
     return parser.parse_args(args)
 
@@ -822,6 +827,16 @@ def _main(args=None):
         return 0
     if options.analizar_requisitos is not None:
         print("\n".join(run_analysis(factory, options.analizar_requisitos or None, options.codigo)), flush=True)
+        engine.dispose()
+        return 0
+    if options.actualizar_capacitaciones is not None:
+        from services import rag
+        with factory() as session:
+            codes = rag.training_codes(session, options.actualizar_capacitaciones or None)
+        print(f"{len(codes)} bases de servicios vigentes mencionan capacitación y se analizaron antes del 24/11/2026; "
+              "se vuelven a analizar para leer el tema y las horas por cargo.", flush=True)
+        if codes:
+            print("\n".join(run_analysis(factory, None, codes)), flush=True)
         engine.dispose()
         return 0
     if options.releer_sin_seccion:

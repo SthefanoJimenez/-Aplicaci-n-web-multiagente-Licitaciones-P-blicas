@@ -29,7 +29,7 @@ def test_referencia_a_reglamento_tecnico_no_inventa_documentos_de_personal(refer
     requirement = next(c for c in result["checks"] if c["key"] == "requisito-pagina-34")
     assert "Documentos de Personal" not in requirement["reason"]
     assert "cantidad de personal" not in requirement["reason"]
-    assert "Documentos de Otro ausentes" in requirement["reason"]
+    assert "Documentos de Habilitación, licencia o registro ausentes" in requirement["reason"]
     assert requirement["status"] == "pending" and result["color"] == "amarillo"
 
 

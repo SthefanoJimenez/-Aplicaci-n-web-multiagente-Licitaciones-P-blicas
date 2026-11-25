@@ -367,6 +367,20 @@ def validate_profile(form):
         selected = set(form.getlist(key))
         values[key] = [option for option in allowed if option in selected]
     values["is_mype"] = form.get("is_mype") == "1"
+    # 23/11/2026: monto facturado en contratos similares de cada objeto (opcional; vacío = no lo indica)
+    for field in accounts.SIMILAR_BY_CATEGORY.values():
+        raw = form.get(field, "").strip()
+        if not raw:
+            values[field] = None
+        elif re.fullmatch(r"[0-9]{1,14}([.,][0-9]{1,2})?", raw):
+            values[field] = Decimal(raw.replace(",", "."))
+        else:
+            values[field] = raw
+            errors[field] = "Escriba un monto mayor o igual a cero, sin separadores de miles y con hasta dos decimales."
+    total = values.get("similar_contracts_amount")
+    parts = [v for f in accounts.SIMILAR_BY_CATEGORY.values() if isinstance(v := values.get(f), Decimal)]
+    if isinstance(total, Decimal) and any(part > total for part in parts):
+        errors["similar_contracts_amount"] = "El total no puede ser menor que el monto de uno de sus objetos."
     years = form.get("experience_years", "").strip()
     if message := profile_fields.experience_error(years):
         values["experience_years"] = years

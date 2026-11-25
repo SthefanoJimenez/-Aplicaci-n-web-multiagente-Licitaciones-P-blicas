@@ -232,6 +232,15 @@ def tender_sheet(code):
         raise TendersUnavailable("sin_conexion") from e
 
 
+def facts_of(code):
+    """Requisitos analizados de la convocatoria (services/bases_facts.py) o None. 23/11/2026."""
+    try:
+        with _session_factory()() as session:
+            return session.scalar(select(db.Tender.bases_facts).where(db.Tender.code == str(code)))
+    except (SQLAlchemyError, TendersUnavailable):
+        return None
+
+
 def rubro_names():
     """{rubro: "1510 · Combustibles y lubricantes"} con el nombre del catálogo, sin conteos.
 

@@ -614,6 +614,9 @@ def tender_bases(code):
 # Asistente de postulación (HU-010 / HU-014)
 # ---------------------------------------------------------------------------
 ASSISTANT_MAX_QUERY = 1000
+# Preguntas por el listado («¿a cuáles puedo postular?», «¿qué otras convocatorias hay?»): no se atan a la
+# convocatoria de la que se habló antes. Las de seguimiento («¿qué me falta?») sí la conservan (23/11/2026).
+LIST_QUESTION = re.compile(r"\b(cu[aá]les|convocatorias|licitaciones|procesos|otras|todas|listado|lista)\b", re.I)
 
 
 def _assistant_reply(text, status="ok", code=200, detail="", detail_count=0):
@@ -650,6 +653,8 @@ def assistant_message():
     if not query:
         return _assistant_reply("", status="empty", code=400)
     history, chat_context = _chat_state()
+    if LIST_QUESTION.search(query) and not eligibility_chat._code(query):
+        chat_context.pop("selected_tender_code", None)
     if chat_context.get("selected_tender_code") and not eligibility_chat._code(query):
         query_for_engine = query + " · Convocatoria " + chat_context["selected_tender_code"]
     else:

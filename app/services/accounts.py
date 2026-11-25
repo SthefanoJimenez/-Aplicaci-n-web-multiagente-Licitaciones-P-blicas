@@ -56,6 +56,11 @@ class CompanyProfile(AccountBase):
     rnp_registers: Mapped[str | None] = mapped_column(String(80), nullable=True)   # RNP_REGISTERS, separados por espacio
     # 20/11/2026: dato de la empresa, no de cada convocatoria (antes se pedía en cada ficha)
     is_mype: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # 23/11/2026: cuánto del monto facturado en contratos similares es de cada objeto. Las bases piden
+    # experiencia en bienes, servicios u obras «iguales o similares»: un solo total no distingue.
+    similar_amount_bienes: Mapped[Decimal | None] = mapped_column(Numeric(16, 2), nullable=True)
+    similar_amount_servicios: Mapped[Decimal | None] = mapped_column(Numeric(16, 2), nullable=True)
+    similar_amount_obras: Mapped[Decimal | None] = mapped_column(Numeric(16, 2), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
@@ -68,7 +73,27 @@ CATEGORY_LABELS = {"bienes": "Bienes", "servicios": "Servicios", "obras": "Obras
 RNP_REGISTERS = {"bienes": "Proveedor de bienes", "servicios": "Proveedor de servicios",
                  "ejecutor_obras": "Ejecutor de obras", "consultor_obras": "Consultor de obras"}
 PROFILE_EXTRA_COLUMNS = {"supplier_type": "VARCHAR(20)", "categories": "VARCHAR(40)", "rnp_registers": "VARCHAR(80)",
-                         "is_mype": "BOOLEAN"}
+                         "is_mype": "BOOLEAN", "similar_amount_bienes": "NUMERIC(16, 2)",
+                         "similar_amount_servicios": "NUMERIC(16, 2)", "similar_amount_obras": "NUMERIC(16, 2)"}
+# Campo del monto por objeto (opcional) en Mi empresa
+SIMILAR_BY_CATEGORY = {"bienes": "similar_amount_bienes", "servicios": "similar_amount_servicios",
+                       "obras": "similar_amount_obras"}
+
+
+def similar_for_category(total, by_category, offered, category):
+    """(monto facturado en contratos similares para un objeto, ¿cómo se obtuvo?).
+
+    Cómo: "declarado" si Mi empresa lo indicó; "resto" si es el único objeto que ofrece sin monto y los demás sí
+    lo tienen (total menos lo declarado en los otros, 23/11/2026); "total" si ofrece solo ese objeto o no dijo
+    qué ofrece; "sin separar" si ofrece varios y no lo separó (el total no confirma ese objeto).
+    """
+    if by_category.get(category) is not None:
+        return by_category[category], "declarado"
+    others = [c for c in offered if c != category]
+    if total is not None and others and category in offered and all(by_category.get(c) is not None for c in others):
+        declared = sum((v for c, v in by_category.items() if c != category and v is not None), Decimal("0"))
+        return max(total - declared, Decimal("0")), "resto"
+    return total, "sin separar" if len(offered) > 1 else "total"
 
 
 def split_choices(text, allowed):
@@ -353,6 +378,8 @@ def get_profile(factory, user_id):
             values["categories"] = split_choices(profile.categories, CATEGORY_LABELS)
             values["rnp_registers"] = split_choices(profile.rnp_registers, RNP_REGISTERS)
             values["is_mype"] = bool(profile.is_mype)
+            for field in SIMILAR_BY_CATEGORY.values():
+                values[field] = getattr(profile, field)
         return values
 
 
@@ -479,6 +506,9 @@ def save_profile(factory, user_id, values, *, ruc_lookup_enabled=False, ruc_deta
                 profile.rnp_registers = " ".join(split_choices(" ".join(values["rnp_registers"]), RNP_REGISTERS)) or None
             if "is_mype" in values:
                 profile.is_mype = bool(values["is_mype"])
+            for field in SIMILAR_BY_CATEGORY.values():
+                if field in values:
+                    setattr(profile, field, values[field])
     except IntegrityError as error:
         if "ruc" in str(error.orig).lower():
             raise RucTaken("Este RUC ya está asociado a otra cuenta.") from error

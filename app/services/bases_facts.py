@@ -18,7 +18,8 @@ import unicodedata
 import config
 
 ANALYSIS_MAX_TOKENS = 8000     # la respuesta JSON de unas bases ocupa unos 1 500 tokens
-VERSION = 1                      # si cambia el formato, --analizar-requisitos vuelve a analizar las anteriores
+VERSION = 2                      # 2 (24/11/2026): capacitación del personal clave (tema y horas por cargo)
+TRAINING_VERSION = 2             # desde esta versión el análisis trae la capacitación; --actualizar-capacitaciones
 SECTION_CHARS = 24000            # la sección de requisitos casi nunca pasa de 15 000 caracteres
 KINDS = ("rnp", "experiencia", "experiencia_anios", "personal", "equipamiento", "habilitacion", "ventas",
          "documento", "otro")
@@ -39,11 +40,12 @@ Devuelve un JSON con esta forma exacta:
   {{"tipo": "rnp" | "experiencia" | "experiencia_anios" | "personal" | "equipamiento" | "habilitacion" |
             "ventas" | "documento" | "otro",
     "descripcion": "qué se pide, en una frase corta y sencilla",
-    "monto_minimo": número o null, "moneda": "PEN" | "USD" | null,
+    "monto_minimo": número o null, "monto_minimo_mype": número o null, "moneda": "PEN" | "USD" | null,
     "veces_valor_estimado": número o null,
     "anios": número o null,
     "cargo": texto o null, "profesion": texto o null, "experiencia_meses": número o null,
     "colegiado": true | false | null, "cantidad": número o null,
+    "capacitacion_tema": texto o null, "capacitacion_horas": número o null,
     "momento": "oferta" | "contrato" | null,
     "registro_rnp": "bienes" | "servicios" | "ejecutor_obras" | "consultor_obras" | null,
     "documento": texto o null,
@@ -65,6 +67,12 @@ Reglas:
   certificaciones (con "documento" = su nombre). "rnp": inscripción en el Registro Nacional de Proveedores, con
   registro_rnp. "documento": declaraciones juradas, anexos, cartas o formatos que se llenan al presentar la
   oferta. "otro": lo demás.
+- capacitacion_tema y capacitacion_horas (solo en "personal"): si las bases piden capacitación para ese cargo
+  (por ejemplo, en «Capacitación del personal clave»), el tema y las horas lectivas o académicas que pide. Si
+  pide varios temas, júntalos en el texto y usa el total de horas solo si lo dicen. No es la capacitación que el
+  postor debe dar al personal de la entidad (eso es un factor de evaluación: no lo pongas aquí).
+- monto_minimo_mype: si las bases fijan otro monto de experiencia para micro y pequeña empresa (MYPE), ese
+  monto; monto_minimo es el general. Es un solo requisito, no dos.
 - Los números van sin separadores de miles: 320960.00, no "320,960.00". La moneda es la que dicen las bases.
 - "pagina": el número que aparece en la marca [página N] más cercana antes del texto.
 - No inventes requisitos. Si la sección no trae requisitos, "requisitos": [].
@@ -197,10 +205,12 @@ def clean(raw, source, pages=None):
         if not isinstance(item, dict) or item.get("tipo") not in KINDS:
             continue
         minimum = _number(item.get("monto_minimo"))
+        mype = _number(item.get("monto_minimo_mype"))
         times = _number(item.get("veces_valor_estimado"))
         years = _number(item.get("anios"))
         months = _number(item.get("experiencia_meses"))
         count = _number(item.get("cantidad"))
+        hours = _number(item.get("capacitacion_horas"))
         # Los meses pueden venir de «2 años» (24 meses): valen si están escritos los meses o los años
         months_ok = months is not None and (_written(months, written) or
                                             (months % 12 == 0 and _written(months / 12, written)))
@@ -208,6 +218,7 @@ def clean(raw, source, pages=None):
             "tipo": item["tipo"],
             "descripcion": _text(item.get("descripcion"), 300) or _text(item.get("cita"), 300) or "Requisito de las bases",
             "monto_minimo": float(minimum) if minimum and _written(minimum, written) else None,
+            "monto_minimo_mype": float(mype) if mype and _written(mype, written) else None,
             "moneda": item.get("moneda") if item.get("moneda") in ("PEN", "USD") else None,
             "veces_valor_estimado": float(times) if times and _written(times, written) else None,
             "anios": int(years) if years and years == int(years) and _written(years, written) else None,
@@ -216,6 +227,9 @@ def clean(raw, source, pages=None):
             "experiencia_meses": int(months) if months_ok and months == int(months) else None,
             "colegiado": _bool(item.get("colegiado")),
             "cantidad": int(count) if count and count == int(count) and _written(count, written) else None,
+            "capacitacion_tema": _text(item.get("capacitacion_tema"), 160) if item["tipo"] == "personal" else None,
+            "capacitacion_horas": (int(hours) if item["tipo"] == "personal" and hours and hours == int(hours)
+                                   and _written(hours, written) else None),
             "momento": item.get("momento") if item.get("momento") in ("oferta", "contrato") else None,
             "registro_rnp": item.get("registro_rnp") if item.get("registro_rnp") in RNP_REGISTERS else None,
             "documento": _text(item.get("documento"), 200),
@@ -223,10 +237,27 @@ def clean(raw, source, pages=None):
             "pagina": page(item.get("pagina")),
             "cita": _text(item.get("cita"), 400),
         }
+        if clean_item["tipo"] == "experiencia" and clean_item["monto_minimo"] and not clean_item["monto_minimo_mype"]:
+            clean_item["monto_minimo_mype"] = mype_amount(source, clean_item["monto_minimo"])
         if clean_item["monto_minimo"] is None:
             clean_item["moneda"] = None
         facts["requisitos"].append(clean_item)
     return facts
+
+
+MYPE_AMOUNT = re.compile(r"(?:micro\s+y\s+pequena\s+empresa|\bmype\b)[\s\S]{0,350}?s\s*/\s*\.?\s*(\d[\d.,\s]*\d)")
+
+
+def mype_amount(text, general):
+    """Monto de experiencia para MYPE escrito en las bases (en la base 1250704: S/ 1,400,000.00 en general y
+    S/ 320,000.00 para MYPE). Solo si es menor que el general; si no, None. 23/11/2026."""
+    general = Decimal(str(general))
+    for match in MYPE_AMOUNT.finditer(plain(text)):
+        raw = re.sub(r"\s(?=\d{3}\b)", "", match.group(1)).strip(" .,")
+        amount = _number(raw)
+        if amount and 0 < amount < general:
+            return float(amount)
+    return None
 
 
 def analyze(section, context="", category=None, pages=None, generate=None):

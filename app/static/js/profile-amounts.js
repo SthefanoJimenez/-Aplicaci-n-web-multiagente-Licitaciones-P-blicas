@@ -54,7 +54,8 @@
         }
 
         function validate(show = touched) {
-            const message = reason(field.value);
+            // Los montos opcionales (por objeto) pueden quedar vacíos
+            const message = !field.required && !field.value ? "" : reason(field.value);
             field.setCustomValidity(message);
             feedback.textContent = show ? message : "";
             feedback.hidden = !feedback.textContent;

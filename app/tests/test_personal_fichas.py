@@ -6,6 +6,7 @@ modelos de lenguaje) para ver si mencionan la profesión declarada y, en la cons
 vigencia. El semáforo pide el sustento de quien cubre cada cargo de las bases.
 """
 import io
+from pathlib import Path
 from datetime import date
 
 import pytest
@@ -184,3 +185,28 @@ def test_la_migracion_agrega_las_columnas_del_personal_a_documentos(tmp_path):
     columns = {c["name"] for c in inspect(engine).get_columns("documentos_empresa")}
     assert set(company_documents.STAFF_COLUMNS) <= columns
     engine.dispose()
+
+def test_al_agregar_una_persona_se_abre_su_seccion_para_subir_documentos(account_client, account_factory):
+    uid = signed_in(account_client, account_factory)
+    html = account_client.get("/perfil/personal").get_data(as_text=True)
+    assert "Primero registre sus datos" in html and 'id="profession" name="profession" type="text"' in html
+    response = account_client.post("/perfil/personal", data={"name": "Juan Pérez", "profession": "Ingeniero civil",
+                                                             "years": "3", "months": "0"})
+    member_id = staff.list_staff(account_factory, uid)[0]["id"]
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"?nueva={member_id}#persona-{member_id}")
+    html = account_client.get(f"/perfil/personal?nueva={member_id}").get_data(as_text=True)
+    assert html.count('<details class="staff-upload" open>') == 1
+    assert account_client.get("/perfil/personal").get_data(as_text=True).count('<details class="staff-upload" open>') == 0
+
+
+def test_la_lista_de_profesiones_muestra_los_nombres_completos(account_client, account_factory):
+    """En Safari la lista nativa cortaba «Ingeniero de telecomunicaciones» (24/11/2026): se usa una lista propia,
+    y sin JavaScript queda la nativa."""
+    signed_in(account_client, account_factory)
+    html = account_client.get("/perfil/personal").get_data(as_text=True)
+    assert 'list="profession-options" data-combobox' in html
+    assert '<option value="Ingeniero de telecomunicaciones">' in html
+    assert "js/profession-combobox.js" in html
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "styles.css").read_text(encoding="utf-8")
+    assert ".combo-option" in css and "white-space: normal" in css

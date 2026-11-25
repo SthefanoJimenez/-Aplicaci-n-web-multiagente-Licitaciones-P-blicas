@@ -175,6 +175,10 @@ def evidence(documents):
     """Qué sustentos vigentes tiene una persona y qué documentos no coinciden con lo declarado."""
     current = [d for d in documents if d["state"] == "current"]
     return {"kinds": sorted({d["staff_kind"] for d in current if d["staff_kind"]}),
+            # Certificados de capacitación vigentes con su tema y horas (24/11/2026)
+            "trainings": [{"topic": d.get("training_topic") or "", "hours": d.get("training_hours") or 0,
+                           "filename": d["filename"]}
+                          for d in current if d["staff_kind"] == "capacitacion" and d.get("training_hours")],
             "mismatch": [d["read_detail"] for d in current if d["read_status"] == "no_coincide" and d["read_detail"]],
             "expired": sorted({d["staff_kind"] for d in documents if d["state"] == "expired" and d["staff_kind"]})}
 
@@ -202,6 +206,7 @@ def missing_support(need, member):
 LICENSE_NUMBER = re.compile(r"\b(?:c\.?\s?i\.?\s?p|c\.?\s?a\.?\s?p|colegiatura|registro\s+(?:del\s+)?colegio)\b"
                             r"[^0-9\n]{0,20}(\d{3,7})")
 ENABLED = re.compile(r"\bhabilitad[oa]|\bhabil\b|constancia\s+de\s+habilidad|certificado\s+de\s+habilidad")
+TRAINING_HOURS = re.compile(r"\b(\d{1,4})\s*(?:\(\w+\)\s*)?horas?\b")
 VALID_UNTIL = re.compile(r"(?:hasta|vigencia|vigente|vence|vencimiento)[^0-9\n]{0,40}(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})")
 
 
@@ -234,6 +239,10 @@ def read_document(text, kind, declared_profession):
         else:
             status = "sin_profesion"
             notes.append(f"No se encontró «{label}» en el documento.")
+    if kind == "capacitacion":
+        hours = sorted({int(h) for h in TRAINING_HOURS.findall(normalized) if 0 < int(h) <= 5000})
+        if hours:
+            notes.append(f"El certificado dice {' o '.join(str(h) for h in hours)} horas.")
     if kind == "colegiatura":
         number = LICENSE_NUMBER.search(normalized)
         if number:
@@ -250,25 +259,55 @@ def read_document(text, kind, declared_profession):
     return {"status": status, "detail": " ".join(notes)[:300] or "Documento guardado.", "until": until}
 
 
-def add_member_document(factory, user_id, member_id, kind, expires_on, pdf):
+def validate_training(form):
+    """(tema, horas) de un certificado de capacitación (24/11/2026). Las horas pueden quedar en blanco: se toman
+    del certificado si las dice. Lanza StaffError con un mensaje para la empresa."""
+    topic = " ".join((form.get("training_topic") or "").split())
+    raw = (form.get("training_hours") or "").strip()
+    if len(topic) < 3 or len(topic) > 160:
+        raise StaffError("Escriba el tema de la capacitación, como figura en el certificado (hasta 160 caracteres).")
+    if raw and not (raw.isdigit() and 0 < int(raw) <= 5000):
+        raise StaffError("Escriba las horas del certificado como un número entero (por ejemplo, 120).")
+    return topic, int(raw) if raw else None
+
+
+def add_member_document(factory, user_id, member_id, kind, expires_on, pdf, training=None):
     """Guarda un documento de una persona de la propia empresa. Devuelve lo leído del documento.
 
-    pdf: lo que devolvió company_documents.read_pdf (ya validado). Lanza StaffError o DocumentError.
+    pdf: lo que devolvió company_documents.read_pdf (ya validado). training: (tema, horas) si es un certificado
+    de capacitación (validate_training). Lanza StaffError o DocumentError.
     """
     if kind not in company_documents.STAFF_DOC_KINDS:
         raise StaffError("Elija qué documento es.")
+    if kind == "capacitacion" and not training:
+        raise StaffError("Escriba el tema y las horas del certificado de capacitación.")
     with factory() as db:
         company_id = _company_id(db, user_id)
         member = db.get(StaffMember, member_id)
         if member is None or member.company_id != company_id:
             raise StaffError("La persona no es de su empresa.")
         profession = member.profession
-    reading = read_document(company_documents.read_text(pdf["content"]), kind, profession)
+    text = company_documents.read_text(pdf["content"])
+    reading = read_document(text, kind, profession)
     if kind == "colegiatura" and expires_on is None:
         expires_on = reading["until"]            # la vigencia escrita en la constancia, si no se indicó
     metadata = {"document_type": "personal", "valid_from": None, "expires_on": expires_on}
     staff_fields = {"staff_id": member_id, "staff_kind": kind, "read_status": reading["status"],
                     "read_detail": reading["detail"]}
+    if kind == "capacitacion":
+        topic, hours = training
+        written = sorted({int(h) for h in TRAINING_HOURS.findall(plain(text)) if 0 < int(h) <= 5000})
+        if hours is None:
+            if len(written) != 1:
+                raise StaffError("No se pudo leer las horas del certificado: escríbalas.")
+            hours = written[0]
+            reading["detail"] = f"Horas tomadas del certificado: {hours}."
+        elif written and hours not in written:
+            reading["status"] = "no_coincide"
+            reading["detail"] = (f"Declaró {hours} horas; el certificado dice {' o '.join(map(str, written))}. "
+                                 "Revise cuál es la correcta.")
+        staff_fields.update(training_topic=topic, training_hours=hours, read_status=reading["status"],
+                            read_detail=reading["detail"])
     company_documents.add_document(factory, user_id, metadata, pdf, staff=staff_fields)
     return reading
 

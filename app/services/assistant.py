@@ -693,7 +693,8 @@ def _documents_answer(state):
     """Resumen de los documentos de la empresa: cuáles están vigentes, vencidos o faltan."""
     rows = state.get("document_rows") or []
     documents = state.get("documents") or {}
-    labels = {"rnp": "RNP", "experiencia": "Experiencia", "personal": "Personal", "otro": "Otros"}
+    labels = {"rnp": "RNP", "experiencia": "Experiencia", "personal": "Personal", "habilitacion": "Habilitaciones",
+              "otro": "Otros"}
     lines = ["### Los documentos de su empresa", ""]
     pending = []
     for kind, label in labels.items():
@@ -710,6 +711,9 @@ def _documents_answer(state):
             pending.append(label)
         elif status == "future":
             lines.append(f"- **{label}:** cargado, pero todavía no está vigente según la fecha declarada.")
+        elif kind == "habilitacion":
+            # No todas las empresas las necesitan: solo si sus convocatorias las piden (24/11/2026)
+            lines.append(f"- **{label}:** ninguna cargada. Súbalas si las convocatorias que le interesan las piden.")
         else:
             lines.append(f"- **{label}:** no cargado.")
             pending.append(label)
