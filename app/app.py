@@ -27,6 +27,12 @@ consortium.init_app(app)
 staff_views.init_app(app)
 
 
+@app.get("/healthz")
+def healthz():
+    """Health check ultra-ligero para Render sin cargar consultas ni templates."""
+    return "ok", 200
+
+
 @app.context_processor
 def common_context():
     return {"app_name": config.APP_NAME, "max_length": config.MAX_DESCRIPTION_LENGTH,

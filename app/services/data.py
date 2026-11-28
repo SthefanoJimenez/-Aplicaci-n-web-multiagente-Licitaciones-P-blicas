@@ -33,8 +33,15 @@ AWARDS = pd.read_csv(
 # vienen como "Persona natural".
 AWARDS_DETAIL = pd.read_csv(
     DATA_DIR / "awards_detail.csv",
-    dtype={"n_postores": "Int64", "proceso": "string", "proveedor": "string",
-           "entidad": "string", "provincia_entrega": "string", "departamento_entrega": "string"},
+    dtype={
+        "anio": "int16",
+        "n_postores": "Int16",
+        "proceso": "category",
+        "proveedor": "category",
+        "entidad": "category",
+        "provincia_entrega": "category",
+        "departamento_entrega": "category",
+    },
 )
 
 # Período de los datos (20/11/2026: se agregó 2026, con las buenas pro publicadas hasta mediados de
