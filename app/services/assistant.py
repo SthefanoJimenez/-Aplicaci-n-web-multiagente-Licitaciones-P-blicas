@@ -263,7 +263,12 @@ def load_profile_node(state: AssistantState) -> dict:
 
 
 def resolve_rubros_node(state: AssistantState) -> dict:
-    """Rubros del catálogo que corresponden al perfil o a la consulta. Sin listas fijas."""
+    """Rubros del catálogo que corresponden a la consulta o al perfil.
+    
+    Se prioriza lo que el usuario escribe en el mensaje actual ('query') antes que
+    lo que esté guardado en el perfil, para que si un usuario con perfil de 'calzado'
+    pregunta por 'cemento', el bot busque convocatorias de cemento y no de calzado.
+    """
     profile, context = state["profile"], state["context"]
     try:
         names_map = tenders.rubro_names()
@@ -271,13 +276,24 @@ def resolve_rubros_node(state: AssistantState) -> dict:
         names_map = {}
     found: List[dict] = []
     seen = set()
-    for text in (profile.get("rubros"), profile.get("business_activity"), state.get("query")):
-        for item in rubros.match(text or "", names_map):
-            if item["code"] not in seen:
-                seen.add(item["code"])
-                found.append(item)
+
+    # 1. Primero se evalúa la consulta actual del usuario
+    query_text = state.get("query") or ""
+    for item in rubros.match(query_text, names_map):
+        if item["code"] not in seen:
+            seen.add(item["code"])
+            found.append(item)
+
+    # 2. Si la consulta actual no especificó un rubro, se usan los del perfil guardado
     if not found:
-        # Rubro resuelto en un turno anterior de la misma conversación.
+        for text in (profile.get("rubros"), profile.get("business_activity")):
+            for item in rubros.match(text or "", names_map):
+                if item["code"] not in seen:
+                    seen.add(item["code"])
+                    found.append(item)
+
+    # 3. Rubro resuelto en un turno anterior de la misma conversación
+    if not found:
         for item in context.get("remembered_rubros") or []:
             code = str(item.get("code") or "")
             if code in names_map and code not in seen:
@@ -328,6 +344,7 @@ def search_tenders_node(state: AssistantState) -> dict:
         if not selected_code and codes and not (codes & set(tender.rubros or [])):
             continue
         deadline = _as_datetime(tender.deadline_at)
+        # Solo se descarta si hay una fecha límite explícita y es estrictamente anterior a hoy
         if deadline and deadline.date() < today:
             continue
         candidates.append(tender)
