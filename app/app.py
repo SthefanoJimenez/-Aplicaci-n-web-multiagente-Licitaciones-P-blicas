@@ -415,6 +415,8 @@ def tenders_list():
 
     tenders_state = tenders.availability()
     items = []
+    total_items = 0
+    page_number = max(1, request.args.get("pagina", 1, type=int) or 1)
     rubro_info = None
     category_counts, methods = {}, []
     match = None
@@ -431,8 +433,10 @@ def tenders_list():
             if for_me:
                 match = matching.candidates(auth.store(), g.current_user["id"], raw_tenders)
                 raw_tenders = [t for t, _ in match["rows"]]
+            total_items = len(raw_tenders)
+            start = (page_number - 1) * 50
             now_utc = datetime.now(timezone.utc)
-            for t in raw_tenders:
+            for t in raw_tenders[start:start + 50]:
                 item_dict = {
                     "ocid": t.ocid,
                     "code": t.code,
@@ -458,9 +462,6 @@ def tenders_list():
             tenders_state = dict(tenders_state, ok=False, reason="sin_conexion")
             match = None
 
-    total_items = len(items)
-    page_number = max(1, request.args.get("pagina", 1, type=int) or 1)
-    items = items[(page_number - 1) * 50:page_number * 50]
     eligibility_results, eligibility_error = {}, None
     if match:
         eligibility_results = {str(t.code): r for t, r in match["rows"]}
