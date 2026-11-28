@@ -239,6 +239,36 @@ def test_links_to_historical_catalog_price_sheet_when_good_in_catalog(client, se
     assert "/panorama/bien/65078" in html
 
 
+def test_catalog_lookup_only_processes_rows_on_requested_page(client, test_db, monkeypatch):
+    now = datetime.now(timezone.utc)
+    with test_db.begin() as session:
+        run = db.IngestionRun(started_at=now, finished_at=now, status="ok")
+        session.add(run)
+        session.flush()
+        for index in range(52):
+            session.add(db.Tender(
+                ocid=f"paginacion-{index}", code=str(5100 + index), title=f"Compra de diesel {index:02d}",
+                rubros="1510", state="vigente", category="bienes", department="LA LIBERTAD",
+                published_at=now - timedelta(minutes=index), first_run_id=run.id, last_run_id=run.id,
+            ))
+
+    calls = []
+
+    def lookup(title):
+        calls.append(title)
+        return 233280
+
+    monkeypatch.setattr(tenders, "match_catalog_item", lookup)
+    response = client.get("/convocatorias?pagina=2&rubro=1510&departamento=LA+LIBERTAD")
+
+    assert response.status_code == 200
+    assert calls == ["Compra de diesel 50", "Compra de diesel 51"]
+    assert "Página 2 de 2" in response.text
+    assert "/convocatorias/5150" in response.text and "/convocatorias/5151" in response.text
+    assert "/convocatorias/5149" not in response.text
+    assert "/panorama/bien/233280" in response.text
+
+
 def test_verdict_offers_open_tenders_for_pilot_rubro_without_altering_session(client):
     """Criterio: Durante el veredicto, si el código elegido pertenece a un rubro piloto,
 

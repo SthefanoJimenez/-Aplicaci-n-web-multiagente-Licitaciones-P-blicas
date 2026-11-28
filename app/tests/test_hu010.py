@@ -191,16 +191,24 @@ def test_missing_or_incompatible_estimate_input_does_not_invent_amount(price_sam
     assert eligibility.historical_estimate([item])[0] is None
 
 
-def test_missing_amount_is_information_not_a_failure(account_factory,business,public_db):
-    """20/11/2026: si la entidad no publica el monto, no se le pide al cliente ni cambia el color."""
+@pytest.mark.parametrize("items", [
+    [],
+    [{"quantity": 276250, "classifications": [{"scheme": "CUBSO", "id": "1399"}],
+      "unit": {"name": "Kilogramo"}}],
+], ids=["sin-items", "unidad-incompatible"])
+def test_missing_goods_amount_needs_review(account_factory, business, public_db, items):
     with public_db.begin() as session:
-        row=session.scalar(select(db.Tender));row.estimated_value=None;row.items=[]
-    context=eligibility.load_tenders(["9001"])["9001"]
-    result=evaluate_for(account_factory,business,prepared(context))
-    checks={c["key"]:c for c in result["checks"]}
-    assert result["amount"] is None and checks["monto"]["status"]=="info" and checks["garantia"]["status"]=="info"
-    assert "10 % del monto del contrato" in checks["garantia"]["reason"]
-    assert "monto" not in result["reason"].lower()
+        row = session.scalar(select(db.Tender))
+        row.estimated_value = None
+        row.items = items
+    context = eligibility.load_tenders(["9001"])["9001"]
+    inputs = prepared(context)
+    result = evaluate_for(account_factory, business, inputs)
+    checks = {check["key"]: check for check in result["checks"]}
+    assert result["amount"] is None and result["color"] == "amarillo"
+    assert checks["monto"]["status"] == "pending" and result["reason"].startswith("Falta el monto:")
+    assert checks["garantia"]["status"] == "info" and "10 % del monto del contrato" in checks["garantia"]["reason"]
+    assert evaluate_for(account_factory, business, inputs | {"rnp": "no"})["color"] == "rojo"
 
 
 def test_ingested_items_allow_automatic_estimation(account_factory,business,public_db,price_sample):
@@ -285,6 +293,30 @@ def test_real_forms_show_same_color_in_sheet_list_and_assistant(account_client,a
     assert "300,000.00" in detail and "30,000.00" in detail
     with account_client.session_transaction() as session:
         assert "assistant_history" not in session and "supplier_profile" not in session
+
+
+def test_missing_goods_amount_shows_yellow_in_sheet_list_and_assistant(account_client, account_factory, business, public_db):
+    with public_db.begin() as session:
+        row = session.scalar(select(db.Tender))
+        row.estimated_value = None
+        row.items = []
+    login(account_client, account_factory, business)
+    context = eligibility.load_tenders(["9001"])["9001"]
+    eligibility_store.save_inputs(account_factory, business, "9001", prepared(context))
+
+    sheet = account_client.get("/convocatorias/9001")
+    assert sheet.status_code == 200
+    assert 'data-eligibility-color="amarillo"' in sheet.text and "Falta el monto:" in sheet.text
+
+    listing = account_client.get("/convocatorias")
+    assert listing.status_code == 200
+    assert "Amarillo · Requiere atención" in listing.text and "Falta el monto:" in listing.text
+
+    account_client.get("/asistente?convocatoria=9001")
+    response = account_client.post("/asistente/mensaje", data={"query": "Evalúa esta convocatoria"})
+    assert response.status_code == 200
+    detail = response.get_json()["detail"]
+    assert "Requiere atención" in detail and "9001" in detail and "Falta el monto:" in detail
 
 
 def test_sheet_keeps_main_schedule_and_consortium_with_eligibility(account_client, account_factory, business, public_db):
