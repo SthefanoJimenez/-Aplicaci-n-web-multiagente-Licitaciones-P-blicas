@@ -189,16 +189,39 @@ def test_ruc_is_optional_and_validated(account_client, account_factory):
     assert 'name="ruc"' in account_client.get("/perfil").text
 
 
+def test_one_ruc_cannot_be_saved_by_two_companies(account_client, account_factory):
+    register(account_client)
+    assert account_client.post("/perfil", data=PROFILE).status_code == 302
+    account_client.post("/salir")
+    register(account_client, email="otra-ruc@example.test")
+    response = account_client.post("/perfil", data=PROFILE | {"company_name": "Empresa distinta"})
+    assert response.status_code == 400 and 'data-error-field="ruc"' in response.text
+    assert accounts.get_profile(account_factory, 1)["ruc"] == PROFILE["ruc"]
+    assert accounts.get_profile(account_factory, 2)["ruc"] == ""
+
+
 @pytest.mark.parametrize("field,value", [("monthly_sales", "-1"), ("monthly_sales", "NaN"),
                                         ("monthly_sales", "Infinity"), ("similar_contracts_amount", "1e30"),
                                         ("monthly_sales", "12.345"), ("experience_years", "-2"),
-                                        ("experience_years", "abc"), ("business_activity", ""), ("rubros", "x" * 501)])
+                                        ("experience_years", "abc"), ("experience_years", "1.5"),
+                                        ("experience_years", "201"), ("ruc", "20123456abc"),
+                                        ("business_activity", ""), ("rubros", "x" * 501),
+                                        ("rubros", "-----"), ("rubros", "1.1"), ("rubros", "Cemento, 1.1"),
+                                        ("rubros", "3011.5151"), ("supplier_type", "otra")])
 def test_invalid_profile_is_rejected_without_partial_save(account_client, account_factory, field, value):
     register(account_client)
     account_client.post("/perfil", data=PROFILE)
     response = account_client.post("/perfil", data=PROFILE | {field: value, "company_name": "No guardar"})
     assert response.status_code == 400 and 'role="alert"' in response.text
+    assert f'data-error-field="{field}"' in response.text
     assert accounts.get_profile(account_factory, 1)["company_name"] == PROFILE["company_name"]
+
+
+@pytest.mark.parametrize("rubros", ["3011", "Acero A-36, 3011"])
+def test_profile_preserves_rubro_names_and_family_codes(account_client, account_factory, rubros):
+    register(account_client)
+    assert account_client.post("/perfil", data=PROFILE | {"rubros": rubros}).status_code == 302
+    assert accounts.get_profile(account_factory, 1)["rubros"] == rubros
 
 
 def test_csrf_and_logout_require_post(account_client):

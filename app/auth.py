@@ -1,6 +1,7 @@
 """HU-008: registro, sesiones y perfil. Los datos privados permanecen en la base,
 fuera de la cookie de Flask, del modelo de lenguaje y de las trazas de LangSmith.
 """
+from dataclasses import asdict
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import os
@@ -8,11 +9,12 @@ import re
 import secrets
 from urllib.parse import unquote, urlsplit
 
-from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
+from itsdangerous import BadData, URLSafeTimedSerializer
 from sqlalchemy.exc import SQLAlchemyError
 
 import config
-from services import accounts, db, password_recovery
+from services import accounts, db, password_recovery, profile_fields, ruc_lookup
 
 
 bp = Blueprint("auth", __name__)
@@ -45,6 +47,14 @@ def password_management_enabled():
     return current_app.config.get("PASSWORD_MANAGEMENT_ENABLED", config.PASSWORD_MANAGEMENT_ENABLED) is True
 
 
+def _ruc_lookup_token():
+    return current_app.config.get("MIAPI_RUC_TOKEN", config.MIAPI_RUC_TOKEN)
+
+
+def _ruc_lookup_enabled():
+    return bool(_ruc_lookup_token() or current_app.config.get("RUC_LOOKUP_CLIENT"))
+
+
 def store():
     """Motor compartido por proceso. En local usa un SQLite persistente si no hay Neon."""
     factory = current_app.config.get("ACCOUNTS_SESSION_FACTORY")
@@ -59,7 +69,8 @@ def store():
             Path(current_app.instance_path).mkdir(parents=True, exist_ok=True)
             url = "sqlite:///" + str(Path(current_app.instance_path) / "cuentas.sqlite3")
         engine = db.make_engine(url)
-        accounts.initialize_schema(engine, password_management=password_management_enabled())
+        accounts.initialize_schema(engine, password_management=password_management_enabled(),
+                                   ruc_lookup_enabled=_ruc_lookup_enabled())
         factory = db.make_session_factory(engine)
         current_app.extensions["accounts_factory"] = factory
     return factory
@@ -330,12 +341,14 @@ def validate_profile(form):
         if not value or len(value) > maximum:
             errors[key] = f"Complete este campo (máximo {maximum} caracteres)."
         values[key] = value
+    if message := profile_fields.rubros_error(values["rubros"]):
+        errors["rubros"] = message
     if len(values["company_name"]) < 2:
         errors["company_name"] = "Escriba la razón social (de 2 a 200 caracteres)."
     for key in ("monthly_sales", "similar_contracts_amount"):
         raw = form.get(key, "").strip()
         try:
-            if not re.fullmatch(r"\d{1,14}([.,]\d{1,2})?", raw):
+            if not re.fullmatch(r"[0-9]{1,14}([.,][0-9]{1,2})?", raw):
                 raise InvalidOperation
             values[key] = Decimal(raw.replace(",", "."))
         except InvalidOperation:
@@ -346,8 +359,13 @@ def validate_profile(form):
     if supplier_type and supplier_type not in accounts.SUPPLIER_TYPES:
         errors["supplier_type"] = "Elija si postula como empresa o como persona natural."
     values["supplier_type"] = supplier_type if supplier_type in accounts.SUPPLIER_TYPES else ""
-    values["categories"] = [c for c in accounts.CATEGORY_LABELS if c in form.getlist("categories")]
-    values["rnp_registers"] = [r for r in accounts.RNP_REGISTERS if r in form.getlist("rnp_registers")]
+    # Como en main, los valores ajenos al catálogo se descartan sin perder las casillas válidas.
+    for key, allowed in (
+        ("categories", accounts.CATEGORY_LABELS),
+        ("rnp_registers", accounts.RNP_REGISTERS),
+    ):
+        selected = set(form.getlist(key))
+        values[key] = [option for option in allowed if option in selected]
     values["is_mype"] = form.get("is_mype") == "1"
     # 23/11/2026: monto facturado en contratos similares de cada objeto (opcional; vacío = no lo indica)
     for field in accounts.SIMILAR_BY_CATEGORY.values():
@@ -364,32 +382,98 @@ def validate_profile(form):
     if isinstance(total, Decimal) and any(part > total for part in parts):
         errors["similar_contracts_amount"] = "El total no puede ser menor que el monto de uno de sus objetos."
     years = form.get("experience_years", "").strip()
-    if not re.fullmatch(r"\d{1,3}", years) or int(years) > 200:
+    if message := profile_fields.experience_error(years):
         values["experience_years"] = years
-        errors["experience_years"] = "Escriba los años completos de experiencia, de 0 a 200."
+        errors["experience_years"] = message
     else:
         values["experience_years"] = int(years)
     return values, errors
+
+
+def _ruc_serializer():
+    return URLSafeTimedSerializer(current_app.secret_key, salt="licitafacil-ruc-lookup")
+
+
+def _ruc_proof(details):
+    return _ruc_serializer().dumps({"login": accounts.digest(session["auth_token"]), "result": asdict(details)})
+
+
+def _read_ruc_proof(proof, ruc):
+    if not proof or len(proof) > 4096:
+        return None
+    try:
+        data = _ruc_serializer().loads(proof, max_age=30 * 60)
+        if data["login"] == accounts.digest(session["auth_token"]) and data["result"]["ruc"] == ruc:
+            return ruc_lookup.RucDetails(**data["result"])
+    except (BadData, KeyError, TypeError, ValueError):
+        pass
+    return None
+
+
+@bp.post("/perfil/ruc/consultar")
+def consult_ruc():
+    if not _ruc_lookup_enabled():
+        abort(404)
+    ruc = request.form.get("ruc", "").strip()
+    if not accounts.valid_ruc(ruc):
+        return jsonify(message="Escriba los 11 dígitos del RUC."), 400
+    try:
+        daily_limit = int(current_app.config.get("MIAPI_RUC_DAILY_LIMIT", config.MIAPI_RUC_DAILY_LIMIT))
+        if daily_limit < 1:
+            raise ValueError
+        if not accounts.reserve_ruc_lookup(store(), g.current_user["id"], daily_limit):
+            return jsonify(message="Se alcanzó el límite de consultas de hoy. Puede completar la razón social a mano."), 429
+        client = current_app.config.get("RUC_LOOKUP_CLIENT")
+        detail = client(ruc) if client else ruc_lookup.lookup(_ruc_lookup_token(), ruc)
+    except ruc_lookup.LookupError as error:
+        return jsonify(message=str(error)), error.status
+    except (SQLAlchemyError, ValueError):
+        return jsonify(message="La consulta de RUC no está disponible en este momento."), 503
+    return jsonify(**asdict(detail), proof=_ruc_proof(detail))
 
 
 @bp.route("/perfil", methods=["GET", "POST"])
 def profile():
     errors = {}
     target = safe_next(request.values.get("next"))
+    enabled = _ruc_lookup_enabled()
+    proof = ""
+    detail = None
     try:
+        factory, user_id = store(), g.current_user["id"]
+        saved = accounts.get_saved_ruc_details(factory, user_id) if enabled else None
         if request.method == "POST":
-            values, errors = validate_profile(request.form)
+            # Mutable para la razón social consultada; conserva todos los valores de las casillas.
+            form = request.form.copy()
+            ruc = form.get("ruc", "").strip()
+            received_proof = form.get("ruc_lookup_proof", "") if enabled else ""
+            detail = _read_ruc_proof(received_proof, ruc)
+            if detail:
+                proof = received_proof
+            elif saved and saved.ruc == ruc:
+                detail = saved
+            if detail:
+                form["company_name"] = detail.company_name
+            values, errors = validate_profile(form)
+            if received_proof and not proof and not detail:
+                errors["ruc"] = "Vuelva a consultar el RUC o complete y guarde la razón social a mano."
             if not errors:
                 try:
-                    accounts.save_profile(store(), g.current_user["id"], values)
+                    accounts.save_profile(factory, user_id, values, ruc_lookup_enabled=enabled, ruc_details=detail)
                     flash("Perfil guardado. Puede actualizarlo cuando lo necesite.", "success")
                     return redirect(target or url_for("auth.profile"))
                 except accounts.RucTaken as error:
                     errors["ruc"] = str(error)
         else:
-            values = accounts.get_profile(store(), g.current_user["id"])
+            values = accounts.get_profile(factory, user_id)
+            if saved and saved.ruc == values["ruc"] and saved.company_name == values["company_name"]:
+                detail = saved
     except SQLAlchemyError:
         return _service_unavailable()
-    return render_template("auth/profile.html", errors=errors, values=values, next_url=target,
-                           supplier_types=accounts.SUPPLIER_TYPES, category_labels=accounts.CATEGORY_LABELS,
-                           rnp_registers=accounts.RNP_REGISTERS), (400 if errors else 200)
+    return render_template(
+        "auth/profile.html", errors=errors, values=values, next_url=target, ruc_detail=detail, ruc_proof=proof,
+        ruc_endpoint=url_for("auth.consult_ruc") if enabled else "",
+        ruc_source=current_app.config.get("RUC_LOOKUP_SOURCE", "MiAPI Cloud"),
+        supplier_types=accounts.SUPPLIER_TYPES, category_labels=accounts.CATEGORY_LABELS,
+        rnp_registers=accounts.RNP_REGISTERS,
+    ), (400 if errors else 200)

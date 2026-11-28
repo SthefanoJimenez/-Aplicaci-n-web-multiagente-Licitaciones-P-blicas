@@ -8,12 +8,15 @@
   </button>
 {% endmacro %}
 
-{% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none, required=true) %}
+{% macro input(name, label, values, errors, type='text', autocomplete='off', hint='', maximum=200, minimum=none, required=true, ruc_endpoint='', readonly=false) %}
 <div class="field">
   <label class="label" for="{{ name }}">{{ label }}</label>
   {% set is_amount = name in ['monthly_sales', 'similar_contracts_amount', 'similar_amount_bienes', 'similar_amount_servicios', 'similar_amount_obras'] %}
+  {% set digits_only = name in ['ruc', 'experience_years'] %}
+  {% set live = digits_only or name in ['company_name', 'business_activity', 'rubros'] %}
   {% if is_amount %}<div class="amount-input" data-amount-input>{% endif %}
   {% if type == 'password' %}<div class="password-input" data-password-wrapper>{% endif %}
+  {% if ruc_endpoint %}<div class="ruc-input">{% endif %}
   <input id="{{ name }}" name="{{ name }}" type="{{ type }}" {% if required %}required{% endif %}
          autocomplete="{{ autocomplete }}" maxlength="{{ maximum }}"
          {% if minimum is not none %}minlength="{{ minimum }}"{% endif %}
@@ -21,10 +24,18 @@
          {% if is_amount %}inputmode="decimal" placeholder="0.00" data-amount-field
          pattern="[0-9]{1,14}([.,][0-9]{1,2})?"
          title="Use hasta 14 cifras enteras y dos decimales, con un solo punto o coma y sin separadores de miles."{% endif %}
-         {% if name == 'experience_years' %}inputmode="numeric"{% endif %}
-         {% if name == 'ruc' %}inputmode="numeric" pattern="[0-9]{11}" title="Escriba exactamente 11 dígitos, sin espacios ni guiones."{% endif %}
+         {% if digits_only %}inputmode="numeric" data-profile-digits{% endif %}
+         {% if name == 'experience_years' %}pattern="[0-9]{1,2}|[01][0-9]{2}|200"
+         title="Escriba un número entero entre 0 y 200."{% endif %}
+         {% if name == 'ruc' %}pattern="[0-9]{11}" title="Escriba exactamente 11 dígitos, sin espacios ni guiones."{% endif %}
+         {% if readonly %}readonly{% endif %}
          {% if errors.get(name) %}aria-invalid="true"{% endif %}
-         {% if hint or errors.get(name) %}aria-describedby="{{ name }}-hint{% if errors.get(name) %} {{ name }}-error{% endif %}"{% endif %}>
+         {% if hint or errors.get(name) or live %}aria-describedby="{% if hint or errors.get(name) %}{{ name }}-hint{% endif %}{% if errors.get(name) %} {{ name }}-error{% endif %}{% if live %} {{ name }}-entry-feedback{% endif %}"{% endif %}>
+  {% if ruc_endpoint %}
+    <button class="ruc-consult" type="button" data-ruc-endpoint="{{ ruc_endpoint }}"
+            aria-label="Consultar RUC" disabled hidden>Consultar</button>
+  </div>
+  {% endif %}
   {% if type == 'password' %}
     {{ password_toggle(name, 'contraseña repetida' if name == 'password_confirm' else 'contraseña') }}
   </div>
@@ -34,6 +45,10 @@
   </div>
   {% endif %}
   {% if hint or errors.get(name) %}<p class="hint" id="{{ name }}-hint">{{ hint }}</p>{% endif %}
+  {% if live %}
+  <p class="field-feedback field-feedback-error profile-entry-feedback" id="{{ name }}-entry-feedback"
+     role="status" aria-atomic="true"></p>
+  {% endif %}
   {% if errors.get(name) %}<p class="error" id="{{ name }}-error">{{ errors[name] }}</p>{% endif %}
 </div>
 {% endmacro %}
