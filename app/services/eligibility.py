@@ -744,9 +744,8 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None, m
         amount, details, reason = historical_estimate(items)
         if amount is None:
             amount_source = "no publicado"
-            reason = ("La entidad no publicó el valor estimado y las cantidades de la fuente no alcanzan para estimarlo "
-                      "con precios históricos. Lo que dependa del monto se indica como porcentaje." + _ask_hint(tender, instant))
-        checks.append(_check("monto", "Monto de la convocatoria", "pass" if amount is not None else "info", reason))
+            reason += " Lo que dependa del monto se indica como porcentaje." + _ask_hint(tender, instant)
+        checks.append(_check("monto", "Monto de la convocatoria", "pass" if amount is not None else "pending", reason))
     else:
         checks.append(_check("monto", "Monto de la convocatoria", "pass", "Se usa el valor publicado por la fuente."))
     if amount is not None and tender.get("currency") not in (None, "PEN"):
@@ -893,7 +892,7 @@ def evaluate(tender, profile, documents, values=None, today=None, policy=None, m
             status, reason = "pending", "Revise este requisito y confirme su cumplimiento frente a sus documentos; el tipo de PDF no prueba su contenido."
         checks.append(_check(key, "Requisito de las bases", status, reason, text=text, page=req["page"],
                              file_name=req["file_name"], review=review))
-    # «info»: dato que la entidad no publicó (monto). Se muestra, pero no cambia el color (20/11/2026).
+    # «info»: datos informativos como el monto reservado. Un bien cuyo monto no se puede estimar queda «pending».
     # «assumed»: se da por cumplido con lo que dicen las bases (un anexo que se llena, un equipo que se puede
     # alquilar); tampoco cambia el color, pero se dice qué se supuso.
     color = ("rojo" if any(c["status"] == "fail" for c in checks)
